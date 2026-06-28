@@ -37,7 +37,7 @@
    - `docker compose up --build`
 3. 服务包括：
    - `api`
-   - `scanner`
+   - `scheduler`
    - `postgres`
    - `redis`
 
@@ -47,6 +47,9 @@
 
 ### 运行 scheduler once
 - `python scripts/run_scheduler_once.py`
+
+### 运行 Docker smoke test
+- `python scripts/docker_smoke_test.py`
 
 ### 启动 scheduler
 - `python -m app.jobs.scheduler`
@@ -58,17 +61,50 @@
 
 在接入真实 BUFF API 之前，必须先补全 [docs/BUFF_API_NOTES.md](docs/BUFF_API_NOTES.md) 中的 TODO。
 
-## 当前骨架说明
-当前阶段仅包含：
-- 最小 FastAPI app
-- `/health` endpoint
-- 配置加载
-- 数据库/调度占位结构
-- 外部 client 占位模块
-- metadata normalize / trade-up / EV / risk filter / mock pipeline / alert / scheduler 基础逻辑
+## Planned V1.1: SteamDT Data Source
+
+- SteamDT 将作为估值和历史价格数据源。
+- SteamDT 不替代 BUFF listing scanner。
+- BUFF 仍负责可购买 listing / material scanning。
+- SteamDT 主要用于 output price estimation / historical sanity check / metadata fallback / wear support。
+- 当前仍处于设计阶段。
+- 当前没有真实请求 SteamDT。
+- `STEAMDT_API_KEY` 不应 commit。
+- 后续将在 `feature/steamdt-data-source` 分支开发。
+- 当前 V1 dry-run baseline 可通过 `v1-dry-run-baseline` tag 回滚。
+
+## Docker dry-run
+1. `cp .env.example .env`
+2. `docker compose build`
+3. `docker compose up scheduler`
+4. `docker compose up api`
+5. `curl http://localhost:8000/health`
+
+## Safety guarantees in V1
+- `DRY_RUN=true` by default
+- no real BUFF API requests
+- no real Discord sending
+- no auto-buying
+- no login automation
+- no cookie scraping
+- no captcha bypass
+- no browser automation
+
+## Before enabling real BUFF / Discord
+- complete [docs/BUFF_API_NOTES.md](docs/BUFF_API_NOTES.md) TODOs
+- confirm official endpoint / auth / fields
+- set `DRY_RUN=false` only after review
+- never commit `.env`
+
+## Current skeleton status
+当前阶段已具备：
+- metadata normalize / trade-up / EV / risk filter
+- mock pipeline / alert / scheduler
+- Docker / 24h dry-run deployment hardening
 
 当前阶段**不**包含：
 - 真实 BUFF API mapping
+- 真实 SteamDT integration implementation
 - 自动购买相关能力
 - 真实 Discord Webhook 发送
 - 数据库持久化调度状态
