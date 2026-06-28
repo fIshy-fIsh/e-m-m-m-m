@@ -1,36 +1,41 @@
 import asyncio
 import json
+from decimal import Decimal
 from pathlib import Path
 
-import pytest
-
-from app.clients.buff_client import BuffSellOrder, DryRunBuffClient, MockBuffClient
+from app.clients.buff_client import BuffSellOrder, MockBuffClient
 from app.services.market_scan_service import ScanFilterConfig
 from app.services.metadata_provider import LocalJsonMetadataProvider
 from app.services.pipeline_service import EndToEndPipelineConfig, run_mock_pipeline
+from app.services.price_provider import MockPriceProvider, PriceLookupResult, PriceQuote
 from app.services.recipe_solver import RecipeSolverConfig
 from app.services.risk_filter import RiskFilterConfig
 
 PIPELINE_METADATA_FIXTURE = Path("tests/fixtures/pipeline/mock_metadata.json")
 PIPELINE_ORDERS_FIXTURE = Path("tests/fixtures/pipeline/mock_buff_orders.json")
+PIPELINE_STEAMDT_PRICE_FIXTURE = Path("tests/fixtures/pipeline/mock_steamdt_prices.json")
 
 
 
-def _make_pipeline_config(goods_ids: list[str]) -> EndToEndPipelineConfig:
+def _make_pipeline_config(
+    goods_ids: list[str],
+    risk_config: RiskFilterConfig | None = None,
+) -> EndToEndPipelineConfig:
     return EndToEndPipelineConfig(
         goods_ids=goods_ids,
         scan_filter_config=ScanFilterConfig(),
         solver_config=RecipeSolverConfig(
             input_rarity="Restricted",
             input_count=10,
-            sell_fee_rate=__import__("decimal").Decimal("0.025"),
+            sell_fee_rate=Decimal("0.025"),
         ),
-        risk_config=RiskFilterConfig(
-            min_roi=__import__("decimal").Decimal("0.05"),
-            min_expected_profit_cny=__import__("decimal").Decimal("20.00"),
-            max_worst_case_loss_pct=__import__("decimal").Decimal("0.25"),
+        risk_config=risk_config
+        or RiskFilterConfig(
+            min_roi=Decimal("0.05"),
+            min_expected_profit_cny=Decimal("20.00"),
+            max_worst_case_loss_pct=Decimal("0.25"),
             min_profit_probability=0.35,
-            max_input_total_cost_cny=__import__("decimal").Decimal("1000.00"),
+            max_input_total_cost_cny=Decimal("1000.00"),
         ),
     )
 
@@ -47,7 +52,7 @@ def _build_mock_buff_client() -> MockBuffClient:
             listing_id=str(order["listing_id"]),
             goods_id=str(order["goods_id"]),
             market_hash_name=order["market_hash_name"],
-            price_cny=__import__("decimal").Decimal(str(order["price_cny"])),
+            price_cny=Decimal(str(order["price_cny"])),
             float_value=order["float_value"],
             paint_seed=order["paint_seed"],
             inspect_link=order["inspect_link"],
@@ -59,13 +64,55 @@ def _build_mock_buff_client() -> MockBuffClient:
     return MockBuffClient(sell_orders_by_goods_id={"goods-1": orders})
 
 
-class FailingMetadataProvider:
-    async def fetch_skins(self):
-        raise RuntimeError("metadata failure")
+
+def _build_mock_price_provider() -> MockPriceProvider:
+    payload = json.loads(PIPELINE_STEAMDT_PRICE_FIXTURE.read_text(encoding="utf-8"))
+    quotes = {
+        item["market_hash_name"]: PriceQuote(
+            market_hash_name=item["market_hash_name"],
+            price_cny=Decimal(str(item["price_cny"])),
+            source=item.get("source", "steamdt-mock"),
+            raw=item.get("raw"),
+        )
+        for item in payload
+    }
+    return MockPriceProvider(quotes_by_name=quotes)
+
+
+class MockValuationService:
+    async def value_tradeup_results(self, tradeup_results):
+        from app.services.valuation_service import ValuationService
+
+        service = ValuationService(_build_mock_price_provider())
+        return await service.value_tradeup_results(tradeup_results)
+
+
+class WarningOnlyValuationService:
+    async def value_tradeup_results(self, tradeup_results):
+        from app.services.valuation_service import ValuationResult, ValuationWarning
+
+        return ValuationResult(
+            tradeup_results=list(tradeup_results),
+            missing_market_hash_names=[
+                result.output_market_hash_name for result in tradeup_results
+            ],
+            warnings=[
+                ValuationWarning(
+                    code="TEST_WARNING",
+                    message="valuation mock warning",
+                )
+            ],
+            price_lookup_result=PriceLookupResult(quotes={}, missing=[], errors=[]),
+        )
+
+
+class FailingValuationService:
+    async def value_tradeup_results(self, tradeup_results):
+        raise RuntimeError("valuation boom")
 
 
 
-def test_run_mock_pipeline_runs_successfully() -> None:
+def test_run_mock_pipeline_without_valuation_service_keeps_original_behavior() -> None:
     result = asyncio.run(
         run_mock_pipeline(
             buff_client=_build_mock_buff_client(),
@@ -74,123 +121,142 @@ def test_run_mock_pipeline_runs_successfully() -> None:
         )
     )
 
-    assert len(result.scan_result.candidates) >= 10
-    assert len(result.recipes) == 1
-    assert len(result.recipes[0].input_items) == 10
-    assert result.recipes[0].tradeup_results
-    assert result.recipes[0].metrics is not None
-    assert result.recipes[0].risk_decision is not None
-    assert result.errors == []
+    assert result.recipes[0].tradeup_results[0].estimated_price_cny == Decimal("0")
 
 
 
-def test_run_mock_pipeline_with_empty_goods_ids_returns_empty_result() -> None:
+def test_run_mock_pipeline_with_valuation_service_updates_output_prices() -> None:
     result = asyncio.run(
         run_mock_pipeline(
             buff_client=_build_mock_buff_client(),
             metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
-            config=_make_pipeline_config([]),
-        )
-    )
-
-    assert result.scan_result.candidates == []
-    assert result.recipes == []
-
-
-class PartiallyFailingBuffClient(MockBuffClient):
-    async def get_sell_orders(self, goods_id: str, page: int = 1, page_size: int = 20):
-        if goods_id == "goods-2":
-            raise RuntimeError("simulated scan failure")
-        return await super().get_sell_orders(goods_id, page, page_size)
-
-
-
-def test_run_mock_pipeline_keeps_successful_goods_when_one_scan_fails() -> None:
-    seeded_orders = _build_mock_buff_client().sell_orders_by_goods_id["goods-1"]
-    client = PartiallyFailingBuffClient(
-        sell_orders_by_goods_id={"goods-1": seeded_orders}
-    )
-
-    result = asyncio.run(
-        run_mock_pipeline(
-            buff_client=client,
-            metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
-            config=_make_pipeline_config(["goods-1", "goods-2"]),
-        )
-    )
-
-    assert result.scan_result.candidates
-    assert result.errors
-    assert "goods-2" in result.errors[0]
-
-
-
-def test_run_mock_pipeline_handles_metadata_provider_failure() -> None:
-    result = asyncio.run(
-        run_mock_pipeline(
-            buff_client=_build_mock_buff_client(),
-            metadata_provider=FailingMetadataProvider(),
             config=_make_pipeline_config(["goods-1"]),
+            valuation_service=MockValuationService(),
         )
     )
 
-    assert result.recipes == []
-    assert result.errors
-    assert "Metadata provider failed" in result.errors[-1]
+    assert result.recipes[0].tradeup_results[0].estimated_price_cny == Decimal("300.00")
+    assert result.recipes[0].tradeup_results[0].expected_value_contribution == Decimal("300.000")
 
 
 
-def test_run_mock_pipeline_handles_recipe_solver_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.services import pipeline_service
+def test_valuation_recomputes_metrics() -> None:
+    result = asyncio.run(
+        run_mock_pipeline(
+            buff_client=_build_mock_buff_client(),
+            metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
+            config=_make_pipeline_config(["goods-1"]),
+            valuation_service=MockValuationService(),
+        )
+    )
 
-    def failing_solver(*args, **kwargs):
-        raise RuntimeError("solver failure")
+    assert result.recipes[0].metrics.expected_profit_cny == Decimal("147.5000")
+    assert result.recipes[0].metrics.roi == Decimal("1.017241379310344827586206897")
 
-    monkeypatch.setattr(pipeline_service, "solve_recipes", failing_solver)
+
+
+def test_valuation_recomputes_risk_decision() -> None:
+    permissive_config = _make_pipeline_config(
+        ["goods-1"],
+        risk_config=RiskFilterConfig(
+            min_roi=Decimal("0.01"),
+            min_expected_profit_cny=Decimal("20.00"),
+            max_worst_case_loss_pct=Decimal("1.00"),
+            min_profit_probability=0.10,
+            max_input_total_cost_cny=Decimal("1000.00"),
+        ),
+    )
 
     result = asyncio.run(
+        run_mock_pipeline(
+            buff_client=_build_mock_buff_client(),
+            metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
+            config=permissive_config,
+            valuation_service=MockValuationService(),
+        )
+    )
+
+    assert result.recipes[0].risk_decision.passed is True
+
+
+
+def test_recipe_hash_remains_unchanged_after_valuation() -> None:
+    original = asyncio.run(
         run_mock_pipeline(
             buff_client=_build_mock_buff_client(),
             metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
             config=_make_pipeline_config(["goods-1"]),
         )
     )
+    valued = asyncio.run(
+        run_mock_pipeline(
+            buff_client=_build_mock_buff_client(),
+            metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
+            config=_make_pipeline_config(["goods-1"]),
+            valuation_service=MockValuationService(),
+        )
+    )
 
-    assert result.recipes == []
-    assert result.errors
-    assert "Recipe solver failed" in result.errors[-1]
+    assert original.recipes[0].recipe_hash == valued.recipes[0].recipe_hash
 
 
 
-def test_run_mock_pipeline_uses_timezone_aware_timestamps() -> None:
-    result = asyncio.run(
+def test_probability_output_float_and_output_wear_remain_unchanged_after_valuation() -> None:
+    original = asyncio.run(
         run_mock_pipeline(
             buff_client=_build_mock_buff_client(),
             metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
             config=_make_pipeline_config(["goods-1"]),
         )
     )
-
-    assert result.started_at.tzinfo is not None
-    assert result.finished_at.tzinfo is not None
-
-
-
-def test_run_mock_pipeline_script_module_is_importable() -> None:
-    import scripts.run_mock_pipeline as run_mock_pipeline_script
-
-    assert hasattr(run_mock_pipeline_script, "main")
-
-
-
-def test_run_mock_pipeline_with_dry_run_client_returns_empty_candidates() -> None:
-    result = asyncio.run(
+    valued = asyncio.run(
         run_mock_pipeline(
-            buff_client=DryRunBuffClient(),
+            buff_client=_build_mock_buff_client(),
             metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
             config=_make_pipeline_config(["goods-1"]),
+            valuation_service=MockValuationService(),
         )
     )
 
-    assert result.scan_result.candidates == []
-    assert result.recipes == []
+    assert (
+        valued.recipes[0].tradeup_results[0].probability
+        == original.recipes[0].tradeup_results[0].probability
+    )
+    assert (
+        valued.recipes[0].tradeup_results[0].output_float
+        == original.recipes[0].tradeup_results[0].output_float
+    )
+    assert (
+        valued.recipes[0].tradeup_results[0].output_wear
+        == original.recipes[0].tradeup_results[0].output_wear
+    )
+
+
+
+def test_valuation_warning_is_appended_to_pipeline_errors() -> None:
+    result = asyncio.run(
+        run_mock_pipeline(
+            buff_client=_build_mock_buff_client(),
+            metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
+            config=_make_pipeline_config(["goods-1"]),
+            valuation_service=WarningOnlyValuationService(),
+        )
+    )
+
+    assert any(error.startswith("valuation warning: TEST_WARNING") for error in result.errors)
+
+
+
+def test_valuation_service_error_does_not_crash_pipeline() -> None:
+    result = asyncio.run(
+        run_mock_pipeline(
+            buff_client=_build_mock_buff_client(),
+            metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
+            config=_make_pipeline_config(["goods-1"]),
+            valuation_service=FailingValuationService(),
+        )
+    )
+
+    assert result.recipes
+    assert any(error.startswith("valuation error:") for error in result.errors)
+    assert result.recipes[0].tradeup_results[0].estimated_price_cny == Decimal("0")

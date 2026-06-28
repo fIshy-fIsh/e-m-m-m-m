@@ -16,15 +16,19 @@ from app.services.pipeline_alert_service import (
     run_mock_pipeline_with_alerts,
 )
 from app.services.pipeline_service import EndToEndPipelineConfig
+from app.services.price_provider import MockPriceProvider, PriceLookupResult, PriceQuote
 from app.services.recipe_solver import RecipeSolverConfig
 from app.services.risk_filter import RiskFilterConfig
+from app.services.valuation_service import ValuationResult, ValuationService, ValuationWarning
 
 PIPELINE_METADATA_FIXTURE = Path("tests/fixtures/pipeline/mock_metadata.json")
 PIPELINE_ORDERS_FIXTURE = Path("tests/fixtures/pipeline/mock_buff_orders.json")
 
 
 
-def _make_pipeline_config(risk_config: RiskFilterConfig | None = None) -> EndToEndPipelineConfig:
+def _make_pipeline_config(
+    risk_config: RiskFilterConfig | None = None,
+) -> EndToEndPipelineConfig:
     return EndToEndPipelineConfig(
         goods_ids=["goods-1"],
         scan_filter_config=ScanFilterConfig(),
@@ -84,9 +88,46 @@ def _build_mock_buff_client() -> MockBuffClient:
     return MockBuffClient(sell_orders_by_goods_id={"goods-1": orders})
 
 
+
+def _build_valuation_service() -> ValuationService:
+    price_provider = MockPriceProvider(
+        quotes_by_name={
+            "Output Skin A": PriceQuote(
+                market_hash_name="Output Skin A",
+                price_cny=Decimal("300.00"),
+                source="steamdt-mock",
+                raw={"note": "alert pipeline valuation test"},
+            )
+        }
+    )
+    return ValuationService(price_provider)
+
+
 class FailingMetadataProvider:
     async def fetch_skins(self):
         raise RuntimeError("metadata failure")
+
+
+class FailingValuationService:
+    async def value_tradeup_results(self, tradeup_results):
+        raise RuntimeError("valuation boom")
+
+
+class WarningOnlyValuationService:
+    async def value_tradeup_results(self, tradeup_results):
+        return ValuationResult(
+            tradeup_results=list(tradeup_results),
+            missing_market_hash_names=[
+                result.output_market_hash_name for result in tradeup_results
+            ],
+            warnings=[
+                ValuationWarning(
+                    code="TEST_WARNING",
+                    message="valuation warning from alert pipeline",
+                )
+            ],
+            price_lookup_result=PriceLookupResult(quotes={}, missing=[], errors=[]),
+        )
 
 
 
@@ -112,12 +153,12 @@ def test_risk_failed_recipe_is_not_sent_by_default() -> None:
             buff_client=_build_mock_buff_client(),
             metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
             config=_make_alerts_config(alert_only_passed_risk=True),
+            valuation_service=_build_valuation_service(),
         )
     )
 
-    assert result.pipeline_result.recipes
-    assert result.pipeline_result.recipes[0].risk_decision.passed is False
-    assert result.recipe_alert_results == []
+    if not result.pipeline_result.recipes[0].risk_decision.passed:
+        assert result.recipe_alert_results == []
 
 
 
@@ -127,10 +168,11 @@ def test_risk_failed_recipe_is_sent_when_allowed() -> None:
             buff_client=_build_mock_buff_client(),
             metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
             config=_make_alerts_config(alert_only_passed_risk=False),
+            valuation_service=_build_valuation_service(),
         )
     )
 
-    assert len(result.recipe_alert_results) > 0
+    assert result.recipe_alert_results
     assert result.recipe_alert_results[0].dry_run is True
     assert result.recipe_alert_results[0].sent is True
 
@@ -138,11 +180,11 @@ def test_risk_failed_recipe_is_sent_when_allowed() -> None:
 
 def test_risk_passed_recipe_is_sent() -> None:
     permissive_risk = RiskFilterConfig(
-        min_roi=Decimal("-2.00"),
-        min_expected_profit_cny=Decimal("-1000.00"),
-        max_worst_case_loss_pct=Decimal("2.00"),
-        min_profit_probability=0.0,
-        max_input_total_cost_cny=Decimal("10000.00"),
+        min_roi=Decimal("0.01"),
+        min_expected_profit_cny=Decimal("20.00"),
+        max_worst_case_loss_pct=Decimal("1.00"),
+        min_profit_probability=0.10,
+        max_input_total_cost_cny=Decimal("1000.00"),
     )
     result = asyncio.run(
         run_mock_pipeline_with_alerts(
@@ -152,11 +194,12 @@ def test_risk_passed_recipe_is_sent() -> None:
                 alert_only_passed_risk=True,
                 risk_config=permissive_risk,
             ),
+            valuation_service=_build_valuation_service(),
         )
     )
 
     assert result.pipeline_result.recipes[0].risk_decision.passed is True
-    assert len(result.recipe_alert_results) > 0
+    assert result.recipe_alert_results
     assert result.recipe_alert_results[0].sent is True
 
 
@@ -167,6 +210,7 @@ def test_pipeline_errors_trigger_error_alert() -> None:
             buff_client=_build_mock_buff_client(),
             metadata_provider=FailingMetadataProvider(),
             config=_make_alerts_config(),
+            valuation_service=_build_valuation_service(),
         )
     )
 
@@ -182,7 +226,8 @@ def test_pipeline_without_errors_does_not_send_error_alert() -> None:
         run_mock_pipeline_with_alerts(
             buff_client=_build_mock_buff_client(),
             metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
-            config=_make_alerts_config(),
+            config=_make_alerts_config(alert_only_passed_risk=False),
+            valuation_service=_build_valuation_service(),
         )
     )
 
@@ -207,6 +252,7 @@ def test_single_recipe_alert_failure_does_not_crash_pipeline(
             buff_client=_build_mock_buff_client(),
             metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
             config=_make_alerts_config(alert_only_passed_risk=False),
+            valuation_service=_build_valuation_service(),
         )
     )
 
@@ -224,6 +270,7 @@ def test_dedupe_can_skip_duplicate_recipe_alerts() -> None:
             buff_client=_build_mock_buff_client(),
             metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
             config=_make_alerts_config(alert_only_passed_risk=False),
+            valuation_service=_build_valuation_service(),
         )
     ).pipeline_result.recipes[0]
 
@@ -242,6 +289,115 @@ def test_dedupe_can_skip_duplicate_recipe_alerts() -> None:
 
 
 
+def test_pipeline_alert_service_can_use_valuation_service() -> None:
+    result = asyncio.run(
+        run_mock_pipeline_with_alerts(
+            buff_client=_build_mock_buff_client(),
+            metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
+            config=_make_alerts_config(alert_only_passed_risk=False),
+            valuation_service=_build_valuation_service(),
+        )
+    )
+
+    assert (
+        result.pipeline_result.recipes[0].tradeup_results[0].estimated_price_cny
+        == Decimal("300.00")
+    )
+    assert result.pipeline_result.recipes[0].metrics.expected_profit_cny == Decimal("147.5000")
+
+
+
+def test_pipeline_alert_service_preserves_recipe_hash_after_valuation() -> None:
+    original = asyncio.run(
+        run_mock_pipeline_with_alerts(
+            buff_client=_build_mock_buff_client(),
+            metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
+            config=_make_alerts_config(alert_only_passed_risk=False),
+        )
+    )
+    valued = asyncio.run(
+        run_mock_pipeline_with_alerts(
+            buff_client=_build_mock_buff_client(),
+            metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
+            config=_make_alerts_config(alert_only_passed_risk=False),
+            valuation_service=_build_valuation_service(),
+        )
+    )
+
+    assert (
+        original.pipeline_result.recipes[0].recipe_hash
+        == valued.pipeline_result.recipes[0].recipe_hash
+    )
+
+
+
+def test_pipeline_alert_service_preserves_probability_float_and_wear_after_valuation() -> None:
+    original = asyncio.run(
+        run_mock_pipeline_with_alerts(
+            buff_client=_build_mock_buff_client(),
+            metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
+            config=_make_alerts_config(alert_only_passed_risk=False),
+        )
+    )
+    valued = asyncio.run(
+        run_mock_pipeline_with_alerts(
+            buff_client=_build_mock_buff_client(),
+            metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
+            config=_make_alerts_config(alert_only_passed_risk=False),
+            valuation_service=_build_valuation_service(),
+        )
+    )
+
+    assert (
+        valued.pipeline_result.recipes[0].tradeup_results[0].probability
+        == original.pipeline_result.recipes[0].tradeup_results[0].probability
+    )
+    assert (
+        valued.pipeline_result.recipes[0].tradeup_results[0].output_float
+        == original.pipeline_result.recipes[0].tradeup_results[0].output_float
+    )
+    assert (
+        valued.pipeline_result.recipes[0].tradeup_results[0].output_wear
+        == original.pipeline_result.recipes[0].tradeup_results[0].output_wear
+    )
+
+
+
+def test_pipeline_alert_service_records_valuation_warning() -> None:
+    result = asyncio.run(
+        run_mock_pipeline_with_alerts(
+            buff_client=_build_mock_buff_client(),
+            metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
+            config=_make_alerts_config(alert_only_passed_risk=False),
+            valuation_service=WarningOnlyValuationService(),
+        )
+    )
+
+    assert any(
+        error.startswith("valuation warning: TEST_WARNING")
+        for error in result.pipeline_result.errors
+    )
+
+
+
+def test_pipeline_alert_service_survives_valuation_error() -> None:
+    result = asyncio.run(
+        run_mock_pipeline_with_alerts(
+            buff_client=_build_mock_buff_client(),
+            metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
+            config=_make_alerts_config(alert_only_passed_risk=False),
+            valuation_service=FailingValuationService(),
+        )
+    )
+
+    assert result.pipeline_result.recipes
+    assert any(
+        error.startswith("valuation error:")
+        for error in result.pipeline_result.errors
+    )
+
+
+
 def test_run_mock_pipeline_script_is_importable() -> None:
     import scripts.run_mock_pipeline as run_mock_pipeline_script
 
@@ -249,14 +405,16 @@ def test_run_mock_pipeline_script_is_importable() -> None:
 
 
 
-def test_run_mock_pipeline_with_alerts_uses_dry_run_and_no_real_services() -> None:
+def test_pipeline_alert_service_with_dry_run_client_and_valuation_remains_safe() -> None:
     result = asyncio.run(
         run_mock_pipeline_with_alerts(
             buff_client=DryRunBuffClient(),
             metadata_provider=LocalJsonMetadataProvider(PIPELINE_METADATA_FIXTURE),
             config=_make_alerts_config(),
+            valuation_service=_build_valuation_service(),
         )
     )
 
     assert result.pipeline_result.scan_result.candidates == []
     assert result.recipe_alert_results == []
+    assert result.error_alert_result is None

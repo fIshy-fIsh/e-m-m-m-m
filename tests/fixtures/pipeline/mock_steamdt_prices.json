@@ -1,0 +1,10 @@
+[
+  {
+    "market_hash_name": "Output Skin A",
+    "price_cny": "300.00",
+    "source": "steamdt-mock",
+    "raw": {
+      "note": "Mock valuation fixture, not real SteamDT response"
+    }
+  }
+]

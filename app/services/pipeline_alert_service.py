@@ -14,6 +14,7 @@ from app.services.pipeline_service import (
     EndToEndPipelineResult,
     run_mock_pipeline,
 )
+from app.services.valuation_service import ValuationService
 
 
 @dataclass(frozen=True)
@@ -54,6 +55,8 @@ async def run_mock_pipeline_with_alerts(
     buff_client: BuffClient,
     metadata_provider: MetadataProvider,
     config: PipelineWithAlertsConfig,
+    *,
+    valuation_service: ValuationService | None = None,
 ) -> PipelineWithAlertsResult:
     """Run the mock pipeline and dispatch recipe/error alerts via Discord webhook client."""
 
@@ -62,6 +65,7 @@ async def run_mock_pipeline_with_alerts(
         buff_client=buff_client,
         metadata_provider=metadata_provider,
         config=config.pipeline_config,
+        valuation_service=valuation_service,
     )
 
     discord_client = DiscordWebhookClient(config.discord_config)

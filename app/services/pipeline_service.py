@@ -1,13 +1,15 @@
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 
 from app.clients.buff_client import BuffClient
+from app.services.ev_service import calculate_opportunity_metrics
 from app.services.market_scan_service import ScanFilterConfig, ScanRunResult, scan_watchlist
 from app.services.metadata_provider import MetadataProvider
 from app.services.recipe_solver import RecipeCandidate, RecipeSolverConfig, solve_recipes
-from app.services.risk_filter import RiskFilterConfig
+from app.services.risk_filter import RiskFilterConfig, evaluate_opportunity
+from app.services.valuation_service import ValuationService
 
 
 @dataclass(frozen=True)
@@ -55,6 +57,8 @@ async def run_mock_pipeline(
     buff_client: BuffClient,
     metadata_provider: MetadataProvider,
     config: EndToEndPipelineConfig,
+    *,
+    valuation_service: ValuationService | None = None,
 ) -> EndToEndPipelineResult:
     """Run the mock scan -> metadata -> recipe pipeline without external side effects."""
 
@@ -98,6 +102,46 @@ async def run_mock_pipeline(
             started_at=started_at,
             finished_at=finished_at,
         )
+
+    if valuation_service is not None and recipes:
+        valued_recipes: list[RecipeCandidate] = []
+        for recipe in recipes:
+            try:
+                valuation_result = await valuation_service.value_tradeup_results(
+                    recipe.tradeup_results
+                )
+            except Exception as exc:
+                errors.append(f"valuation error: {exc}")
+                valued_recipes.append(recipe)
+                continue
+
+            for warning in valuation_result.warnings:
+                errors.append(
+                    f"valuation warning: {warning.code}: {warning.message}"
+                )
+
+            new_metrics = calculate_opportunity_metrics(
+                input_items=recipe.input_items,
+                tradeup_results=valuation_result.tradeup_results,
+                sell_fee_rate=config.solver_config.sell_fee_rate,
+            )
+            new_risk_decision = evaluate_opportunity(
+                metrics=new_metrics,
+                input_items=recipe.input_items,
+                config=config.risk_config,
+                liquidity_score=config.liquidity_score,
+                paint_seeds=None,
+            )
+            valued_recipes.append(
+                replace(
+                    recipe,
+                    tradeup_results=valuation_result.tradeup_results,
+                    metrics=new_metrics,
+                    risk_decision=new_risk_decision,
+                )
+            )
+
+        recipes = valued_recipes
 
     finished_at = datetime.now(UTC)
     return EndToEndPipelineResult(

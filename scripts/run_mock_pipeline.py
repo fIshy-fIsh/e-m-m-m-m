@@ -13,12 +13,15 @@ from app.services.pipeline_alert_service import (
     run_mock_pipeline_with_alerts,
 )
 from app.services.pipeline_service import EndToEndPipelineConfig
+from app.services.price_provider import MockPriceProvider, PriceQuote
 from app.services.recipe_solver import RecipeSolverConfig
 from app.services.risk_filter import RiskFilterConfig
+from app.services.valuation_service import ValuationService
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 ORDERS_FIXTURE = BASE_DIR / "tests" / "fixtures" / "pipeline" / "mock_buff_orders.json"
 METADATA_FIXTURE = BASE_DIR / "tests" / "fixtures" / "pipeline" / "mock_metadata.json"
+STEAMDT_PRICE_FIXTURE = BASE_DIR / "tests" / "fixtures" / "pipeline" / "mock_steamdt_prices.json"
 
 
 
@@ -41,9 +44,25 @@ def _build_mock_buff_client() -> MockBuffClient:
     return MockBuffClient(sell_orders_by_goods_id={"goods-1": orders})
 
 
+
+def _build_mock_price_provider() -> MockPriceProvider:
+    payload = json.loads(STEAMDT_PRICE_FIXTURE.read_text(encoding="utf-8"))
+    quotes = {
+        item["market_hash_name"]: PriceQuote(
+            market_hash_name=item["market_hash_name"],
+            price_cny=Decimal(str(item["price_cny"])),
+            source=item.get("source", "steamdt-mock"),
+            raw=item.get("raw"),
+        )
+        for item in payload
+    }
+    return MockPriceProvider(quotes_by_name=quotes)
+
+
 async def _run() -> None:
     buff_client = _build_mock_buff_client()
     metadata_provider = LocalJsonMetadataProvider(METADATA_FIXTURE)
+    valuation_service = ValuationService(_build_mock_price_provider())
     pipeline_config = EndToEndPipelineConfig(
         goods_ids=["goods-1"],
         scan_filter_config=ScanFilterConfig(),
@@ -71,9 +90,15 @@ async def _run() -> None:
         discord_config=DiscordWebhookConfig(webhook_url=None, dry_run=True),
     )
 
-    result = await run_mock_pipeline_with_alerts(buff_client, metadata_provider, alert_config)
+    result = await run_mock_pipeline_with_alerts(
+        buff_client,
+        metadata_provider,
+        alert_config,
+        valuation_service=valuation_service,
+    )
     pipeline_result = result.pipeline_result
 
+    print("valuation enabled: True")
     print(f"scanned candidates count: {len(pipeline_result.scan_result.candidates)}")
     print(f"recipe count: {len(pipeline_result.recipes)}")
 
@@ -81,21 +106,26 @@ async def _run() -> None:
         recipe = pipeline_result.recipes[0]
         print(f"first recipe hash: {recipe.recipe_hash}")
         print(f"input total cost: {recipe.metrics.input_total_cost_cny}")
-        print(f"expected profit: {recipe.metrics.expected_profit_cny}")
-        print(f"ROI: {recipe.metrics.roi}")
-        print(f"risk passed: {recipe.risk_decision.passed}")
+        print(f"expected profit after valuation: {recipe.metrics.expected_profit_cny}")
+        print(f"ROI after valuation: {recipe.metrics.roi}")
+        print(f"risk passed after valuation: {recipe.risk_decision.passed}")
         print(f"risk reason codes: {recipe.risk_decision.reason_codes}")
+        print(
+            "output estimated prices: "
+            f"{[str(result.estimated_price_cny) for result in recipe.tradeup_results]}"
+        )
         if not recipe.risk_decision.passed:
             print("note: risk failed recipes are not alerted by default.")
     else:
         print("first recipe hash: None")
         print("input total cost: None")
-        print("expected profit: None")
-        print("ROI: None")
-        print("risk passed: None")
+        print("expected profit after valuation: None")
+        print("ROI after valuation: None")
+        print("risk passed after valuation: None")
         print("risk reason codes: []")
+        print("output estimated prices: []")
 
-    print(f"pipeline errors: {pipeline_result.errors}")
+    print(f"valuation warnings / pipeline errors: {pipeline_result.errors}")
     print(f"recipe alert count: {len(result.recipe_alert_results)}")
     print(f"recipe alert dispatch results: {result.recipe_alert_results}")
     print(f"error alert result: {result.error_alert_result}")
