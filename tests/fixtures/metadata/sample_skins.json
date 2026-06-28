@@ -1,0 +1,115 @@
+[
+  {
+    "market_hash_name": "AK-47 | Crimson Web (Field-Tested)",
+    "name": "AK-47 | Crimson Web (Field-Tested)",
+    "weapon": "AK-47",
+    "rarity": "Restricted",
+    "category": "Rifle",
+    "collection_name": "Collection Alpha",
+    "min_float": 0.06,
+    "max_float": 0.80,
+    "paint_index": 12
+  },
+  {
+    "market_hash_name": "M4A4 | Royal Paladin (Field-Tested)",
+    "name": "M4A4 | Royal Paladin (Field-Tested)",
+    "weapon": "M4A4",
+    "rarity": "Restricted",
+    "category": "Rifle",
+    "collection_name": "Collection Alpha",
+    "min_float": 0.00,
+    "max_float": 0.70,
+    "paint_index": 512
+  },
+  {
+    "market_hash_name": "AWP | Lightning Strike (Factory New)",
+    "name": "AWP | Lightning Strike (Factory New)",
+    "weapon": "AWP",
+    "rarity": "Classified",
+    "category": "Sniper Rifle",
+    "collection_name": "Collection Alpha",
+    "min_float": 0.00,
+    "max_float": 0.12,
+    "paint_index": 51
+  },
+  {
+    "market_hash_name": "Desert Eagle | Hypnotic (Factory New)",
+    "name": "Desert Eagle | Hypnotic (Factory New)",
+    "weapon": "Desert Eagle",
+    "rarity": "Classified",
+    "category": "Pistol",
+    "collection_name": "Collection Alpha",
+    "min_float": 0.00,
+    "max_float": 0.08,
+    "paint_index": 61
+  },
+  {
+    "market_hash_name": "Galil AR | Eco (Field-Tested)",
+    "name": "Galil AR | Eco (Field-Tested)",
+    "weapon": "Galil AR",
+    "rarity": "Restricted",
+    "category": "Rifle",
+    "collection_name": "Collection Beta",
+    "min_float": 0.00,
+    "max_float": 0.85,
+    "paint_index": 75
+  },
+  {
+    "market_hash_name": "P250 | Mehndi (Factory New)",
+    "name": "P250 | Mehndi (Factory New)",
+    "weapon": "P250",
+    "rarity": "Classified",
+    "category": "Pistol",
+    "collection_name": "Collection Beta",
+    "min_float": 0.00,
+    "max_float": 0.10,
+    "paint_index": 258
+  },
+  {
+    "market_hash_name": "UMP-45 | Scaffold (Field-Tested)",
+    "name": "UMP-45 | Scaffold (Field-Tested)",
+    "weapon": "UMP-45",
+    "rarity": "Restricted",
+    "category": "SMG",
+    "collection": {
+      "name": "Collection Gamma"
+    },
+    "min_float": 0.00,
+    "max_float": 0.90,
+    "paint_index": 652
+  },
+  {
+    "market_hash_name": "USP-S | Kill Confirmed (Field-Tested)",
+    "name": "USP-S | Kill Confirmed (Field-Tested)",
+    "weapon": "USP-S",
+    "rarity": "Classified",
+    "category": "Pistol",
+    "collection": {
+      "name": "Collection Gamma"
+    },
+    "min_float": 0.06,
+    "max_float": 0.80,
+    "paint_index": 504
+  },
+  {
+    "name": "FAMAS | Pulse (Field-Tested)",
+    "weapon": "FAMAS",
+    "rarity": "Restricted",
+    "category": "Rifle",
+    "collection_name": "Collection Fallback",
+    "min_float": 0.10,
+    "max_float": 0.65,
+    "paint_index": 260
+  },
+  {
+    "market_hash_name": "P90 | Asiimov (Field-Tested)",
+    "name": "P90 | Asiimov (Field-Tested)",
+    "weapon": "P90",
+    "rarity": "Classified",
+    "category": "SMG",
+    "collection_name": null,
+    "min_float": 0.05,
+    "max_float": 0.75,
+    "paint_index": 359
+  }
+]

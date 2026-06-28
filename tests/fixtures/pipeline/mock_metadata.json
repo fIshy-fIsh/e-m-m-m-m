@@ -1,0 +1,112 @@
+[
+  {
+    "market_hash_name": "Input Skin 0",
+    "name": "Input Skin 0",
+    "weapon": "AK-47",
+    "rarity": "Restricted",
+    "category": "Rifle",
+    "collection_name": "Collection Alpha",
+    "min_float": 0.00,
+    "max_float": 1.00
+  },
+  {
+    "market_hash_name": "Input Skin 1",
+    "name": "Input Skin 1",
+    "weapon": "M4A4",
+    "rarity": "Restricted",
+    "category": "Rifle",
+    "collection_name": "Collection Alpha",
+    "min_float": 0.00,
+    "max_float": 1.00
+  },
+  {
+    "market_hash_name": "Input Skin 2",
+    "name": "Input Skin 2",
+    "weapon": "FAMAS",
+    "rarity": "Restricted",
+    "category": "Rifle",
+    "collection_name": "Collection Alpha",
+    "min_float": 0.00,
+    "max_float": 1.00
+  },
+  {
+    "market_hash_name": "Input Skin 3",
+    "name": "Input Skin 3",
+    "weapon": "Galil AR",
+    "rarity": "Restricted",
+    "category": "Rifle",
+    "collection_name": "Collection Alpha",
+    "min_float": 0.00,
+    "max_float": 1.00
+  },
+  {
+    "market_hash_name": "Input Skin 4",
+    "name": "Input Skin 4",
+    "weapon": "UMP-45",
+    "rarity": "Restricted",
+    "category": "SMG",
+    "collection_name": "Collection Alpha",
+    "min_float": 0.00,
+    "max_float": 1.00
+  },
+  {
+    "market_hash_name": "Input Skin 5",
+    "name": "Input Skin 5",
+    "weapon": "MP7",
+    "rarity": "Restricted",
+    "category": "SMG",
+    "collection_name": "Collection Alpha",
+    "min_float": 0.00,
+    "max_float": 1.00
+  },
+  {
+    "market_hash_name": "Input Skin 6",
+    "name": "Input Skin 6",
+    "weapon": "P250",
+    "rarity": "Restricted",
+    "category": "Pistol",
+    "collection_name": "Collection Alpha",
+    "min_float": 0.00,
+    "max_float": 1.00
+  },
+  {
+    "market_hash_name": "Input Skin 7",
+    "name": "Input Skin 7",
+    "weapon": "USP-S",
+    "rarity": "Restricted",
+    "category": "Pistol",
+    "collection_name": "Collection Alpha",
+    "min_float": 0.00,
+    "max_float": 1.00
+  },
+  {
+    "market_hash_name": "Input Skin 8",
+    "name": "Input Skin 8",
+    "weapon": "Desert Eagle",
+    "rarity": "Restricted",
+    "category": "Pistol",
+    "collection_name": "Collection Alpha",
+    "min_float": 0.00,
+    "max_float": 1.00
+  },
+  {
+    "market_hash_name": "Input Skin 9",
+    "name": "Input Skin 9",
+    "weapon": "Five-SeveN",
+    "rarity": "Restricted",
+    "category": "Pistol",
+    "collection_name": "Collection Alpha",
+    "min_float": 0.00,
+    "max_float": 1.00
+  },
+  {
+    "market_hash_name": "Output Skin A",
+    "name": "Output Skin A",
+    "weapon": "AWP",
+    "rarity": "Classified",
+    "category": "Sniper Rifle",
+    "collection_name": "Collection Alpha",
+    "min_float": 0.00,
+    "max_float": 0.80
+  }
+]
