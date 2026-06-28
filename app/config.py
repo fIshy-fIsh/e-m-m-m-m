@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     discord_mention_user_id: str = ""
     discord_mention_role_id: str = ""
 
+    steamdt_base_url: str = "https://open.steamdt.com"
+    steamdt_api_key: str = ""
+    steamdt_dry_run: bool = True
+    steamdt_rate_limit_per_minute: int = 60
+
     scan_high_priority_interval_seconds: int = 60
     scan_normal_interval_seconds: int = 300
     scheduler_heartbeat_interval_seconds: int = 86400
