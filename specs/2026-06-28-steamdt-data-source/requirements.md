@@ -27,6 +27,7 @@
 - rate limit
 - dry-run guard
 - safe error handling
+- public methods may still remain `NotImplementedError` until parser implementation phase if endpoint/field mapping is not fully reviewed
 
 ### 4. MockSteamDTClient
 要求：
@@ -47,6 +48,7 @@
 要求：
 - uses SteamDTClient
 - returns `Decimal price_cny`
+- can first be implemented with `MockSteamDTClient` and `SteamDTPriceProvider` in mock-only mode before real parser implementation
 
 ### 8. ValuationService
 要求：
@@ -92,6 +94,37 @@
 - 时间必须 timezone-aware
 - 所有网络 client 必须可 mock
 
+## Confirmed Endpoint Coverage for Future Phases
+
+当前已确认的未来接口覆盖范围：
+- `GET /open/cs2/v1/price/single`
+- `POST /open/cs2/v1/price/batch`
+- `GET /open/cs2/v1/base`
+- `GET /open/cs2/v1/price/avg`
+- `POST /open/cs2/item/v1/kline`
+- `POST /open/cs2/v1/wear`
+
+但需要明确：
+- 本阶段不要实现 parser。
+- 本阶段不要实现真实 endpoint mapping。
+- 后续 parser implementation 应在单独阶段完成，并在 review 后接入真实 HTTP public methods。
+
+## Future Parser Requirements
+
+未来应单独实现以下 parser：
+1. `parse_price_single_response`
+2. `parse_price_batch_response`
+3. `parse_avg_price_response`
+4. `parse_base_info_response`
+5. `parse_wear_response`
+6. `parse_kline_response`
+
+这些 parser 未来需要：
+- 将 SteamDT raw response 映射到内部模型
+- 保留 raw payload
+- 处理缺失字段和空列表
+- 严格遵守 Decimal / timezone-aware 规则
+
 ## Fallback Strategy
 
 当 SteamDT price 缺失时，可选策略包括：
@@ -109,16 +142,12 @@
 - 如果 output price 大量缺失，risk filter 应保持保守
 - 不因为单个 price 缺失导致整个 pipeline 崩溃
 
-## Phase 1 Boundary Constraint
+## Phase Boundary Constraint
 
-当前 Phase 1 是 **design-only** 阶段：
-- 不实现 `SteamDTHttpClient`
-- 不实现 `MockSteamDTClient`
-- 不实现 `DryRunSteamDTClient`
-- 不实现 `PriceProvider`
-- 不实现 `ValuationService`
-- 不修改 Recipe Solver
-- 不修改 Pipeline
+当前阶段只同步文档事实，不进入真实 parser / pipeline 接入实现：
+- 不实现真实 SteamDT endpoint parser
+- 不实现真实 SteamDTHttpClient public endpoint mapping
+- 不接入 PriceProvider 到 Pipeline
+- 不接入 ValuationService 到 Recipe Solver
 - 不真实请求 SteamDT
-- 不真实请求 BUFF
 - 不真实发送 Discord

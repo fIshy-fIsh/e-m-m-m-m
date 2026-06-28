@@ -71,6 +71,31 @@
 8. Decimal precision preserved
 9. no real SteamDT request
 
+## Future Parser Validation
+
+### Price endpoint parser future tests
+- single price response parses platform price records
+- batch price response parses `marketHashName` and `dataList`
+- missing / empty data handled safely
+- `sellPrice` / `biddingPrice` Decimal conversion
+- `updateTime` timestamp handling only after unit confirmed
+- no API key leakage
+
+### Wear endpoint parser future tests
+- `floatWear` string converts to float
+- `paintseed` maps to `paint_seed`
+- `sync=false` handled safely
+- `taskId` preserved in raw
+- raw response preserved
+
+### Base endpoint parser future tests
+- `marketHashName` maps correctly
+- `platformList` preserved
+- daily once limit documented
+
+### Kline parser future tests
+- do not implement until fields confirmed
+
 ## Future Pipeline Validation
 
 测试要求：
