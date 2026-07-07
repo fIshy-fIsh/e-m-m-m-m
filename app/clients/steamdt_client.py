@@ -10,6 +10,9 @@ UNCONFIRMED_MAPPING_ERROR = (
     "SteamDT API endpoint/field mapping is not fully confirmed. "
     "See docs/STEAMDT_API_NOTES.md."
 )
+KLINE_MAPPING_UNCONFIRMED_ERROR = (
+    "SteamDT kline point mapping is not confirmed. See docs/STEAMDT_API_NOTES.md."
+)
 
 
 @dataclass(frozen=True, repr=False)
@@ -124,6 +127,66 @@ class SteamDTWearInfo:
             raise ValueError("paint_seed must be greater than or equal to 0")
 
 
+@dataclass(frozen=True)
+class SteamDTPlatformPrice:
+    """Normalized platform-level price record parsed from SteamDT price responses."""
+
+    platform: str
+    platform_item_id: str | None = None
+    sell_price_cny: Decimal | None = None
+    sell_count: int | None = None
+    bidding_price_cny: Decimal | None = None
+    bidding_count: int | None = None
+    update_time: int | str | None = None
+    raw: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        if not self.platform.strip():
+            raise ValueError("platform cannot be empty")
+        if self.sell_price_cny is not None and self.sell_price_cny < 0:
+            raise ValueError("sell_price_cny must be greater than or equal to 0")
+        if self.bidding_price_cny is not None and self.bidding_price_cny < 0:
+            raise ValueError("bidding_price_cny must be greater than or equal to 0")
+        if self.sell_count is not None and self.sell_count < 0:
+            raise ValueError("sell_count must be greater than or equal to 0")
+        if self.bidding_count is not None and self.bidding_count < 0:
+            raise ValueError("bidding_count must be greater than or equal to 0")
+
+
+@dataclass(frozen=True)
+class SteamDTAvgPrice:
+    """Normalized average-price view for one market hash name."""
+
+    market_hash_name: str
+    avg_price_cny: Decimal | None = None
+    platform_avg_prices: dict[str, Decimal] | None = None
+    raw: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        if not self.market_hash_name.strip():
+            raise ValueError("market_hash_name cannot be empty")
+        if self.avg_price_cny is not None and self.avg_price_cny < 0:
+            raise ValueError("avg_price_cny must be greater than or equal to 0")
+        if self.platform_avg_prices is not None:
+            for value in self.platform_avg_prices.values():
+                if value < 0:
+                    raise ValueError(
+                        "platform_avg_prices values must be greater than or equal to 0"
+                    )
+
+
+@dataclass(frozen=True)
+class SteamDTWearParseResult:
+    """Structured parse result for SteamDT wear endpoint responses."""
+
+    inspect_link: str | None
+    wear_info: SteamDTWearInfo
+    sync: bool | None = None
+    success: bool | None = None
+    task_id: str | None = None
+    raw: dict[str, Any] | None = None
+
+
 class SteamDTClient(Protocol):
     """Protocol for SteamDT client abstractions used in future V1.1 phases."""
 
@@ -185,7 +248,9 @@ class MockSteamDTClient:
             for name in market_hash_names
             if name in self.price_quotes_by_name
         }
-        missing = [name for name in market_hash_names if name not in self.price_quotes_by_name]
+        missing = [
+            name for name in market_hash_names if name not in self.price_quotes_by_name
+        ]
         return SteamDTBatchPriceResult(quotes=quotes, missing=missing, raw=None)
 
     async def get_base_item_info(self, market_hash_name: str) -> SteamDTBaseItemInfo:
@@ -195,7 +260,8 @@ class MockSteamDTClient:
             return self.base_info_by_name[market_hash_name]
         except KeyError as exc:
             raise RuntimeError(
-                f"missing mock SteamDT base item info for market_hash_name: {market_hash_name}"
+                "missing mock SteamDT base item info for market_hash_name: "
+                f"{market_hash_name}"
             ) from exc
 
     async def get_kline(
@@ -260,6 +326,262 @@ class DryRunSteamDTClient:
         raise RuntimeError(
             "dry-run mode enabled and no real SteamDT request is made for get_wear_info"
         )
+
+
+
+def _require_response_wrapper(payload: dict[str, Any]) -> Any:
+    """Validate the common SteamDT wrapper and return the inner `data` payload."""
+
+    if not isinstance(payload, dict):
+        raise RuntimeError("SteamDT response payload must be a dict")
+
+    if payload.get("success") is False:
+        error_code = payload.get("errorCode")
+        error_msg = payload.get("errorMsg")
+        error_code_str = payload.get("errorCodeStr")
+        raise RuntimeError(
+            "SteamDT response indicated failure: "
+            f"errorCode={error_code}, errorMsg={error_msg}, errorCodeStr={error_code_str}"
+        )
+
+    if "data" not in payload:
+        raise RuntimeError("SteamDT response is missing data field")
+
+    return payload["data"]
+
+
+
+def _to_decimal_or_none(value: Any) -> Decimal | None:
+    """Convert a raw value into Decimal or return None for empty values."""
+
+    if value is None or value == "":
+        return None
+    try:
+        return Decimal(str(value))
+    except Exception as exc:
+        raise ValueError(f"cannot convert value to Decimal: {value!r}") from exc
+
+
+
+def _to_int_or_none(value: Any) -> int | None:
+    """Convert a raw value into int or return None for empty values."""
+
+    if value is None or value == "":
+        return None
+    if isinstance(value, float) and not value.is_integer():
+        raise ValueError(f"cannot convert non-integer float to int: {value!r}")
+    try:
+        return int(value)
+    except Exception as exc:
+        raise ValueError(f"cannot convert value to int: {value!r}") from exc
+
+
+
+def parse_price_single_response(
+    market_hash_name: str,
+    payload: dict[str, Any],
+) -> list[SteamDTPlatformPrice]:
+    """Parse SteamDT single-price response data into platform-level price records."""
+
+    if not market_hash_name.strip():
+        raise ValueError("market_hash_name cannot be empty")
+
+    data = _require_response_wrapper(payload)
+    if not isinstance(data, list):
+        raise ValueError("SteamDT single price response data must be a list")
+
+    results: list[SteamDTPlatformPrice] = []
+    for item in data:
+        if not isinstance(item, dict):
+            raise ValueError("SteamDT single price item must be a dict")
+        platform = item.get("platform")
+        if platform is None or str(platform).strip() == "":
+            raise ValueError("SteamDT platform field is required")
+        results.append(
+            SteamDTPlatformPrice(
+                platform=str(platform),
+                platform_item_id=(
+                    None
+                    if item.get("platformItemId") in (None, "")
+                    else str(item.get("platformItemId"))
+                ),
+                sell_price_cny=_to_decimal_or_none(item.get("sellPrice")),
+                sell_count=_to_int_or_none(item.get("sellCount")),
+                bidding_price_cny=_to_decimal_or_none(item.get("biddingPrice")),
+                bidding_count=_to_int_or_none(item.get("biddingCount")),
+                update_time=item.get("updateTime"),
+                raw=dict(item),
+            )
+        )
+    return results
+
+
+
+def parse_price_batch_response(
+    requested_market_hash_names: list[str],
+    payload: dict[str, Any],
+) -> dict[str, list[SteamDTPlatformPrice]]:
+    """Parse SteamDT batch-price response data into grouped platform-level price records."""
+
+    data = _require_response_wrapper(payload)
+    if not isinstance(data, list):
+        raise ValueError("SteamDT batch price response data must be a list")
+
+    parsed: dict[str, list[SteamDTPlatformPrice]] = {}
+    for batch_item in data:
+        if not isinstance(batch_item, dict):
+            raise ValueError("SteamDT batch price item must be a dict")
+        market_hash_name = batch_item.get("marketHashName")
+        if market_hash_name is None or str(market_hash_name).strip() == "":
+            raise ValueError("SteamDT batch item marketHashName is required")
+        data_list = batch_item.get("dataList")
+        if data_list is None:
+            parsed[str(market_hash_name)] = []
+            continue
+        if not isinstance(data_list, list):
+            raise ValueError("SteamDT batch item dataList must be a list")
+        parsed[str(market_hash_name)] = parse_price_single_response(
+            str(market_hash_name),
+            {"success": True, "data": data_list},
+        )
+    return parsed
+
+
+
+def parse_avg_price_response(
+    market_hash_name: str,
+    payload: dict[str, Any],
+) -> SteamDTAvgPrice:
+    """Parse SteamDT 7-day average price response into a normalized avg-price model."""
+
+    if not market_hash_name.strip():
+        raise ValueError("market_hash_name cannot be empty")
+
+    data = _require_response_wrapper(payload)
+    if not isinstance(data, dict):
+        raise ValueError("SteamDT avg price response data must be a dict")
+
+    response_market_hash_name = data.get("marketHashName")
+    if response_market_hash_name not in (None, market_hash_name):
+        raise ValueError("response marketHashName does not match requested market_hash_name")
+
+    data_list = data.get("dataList")
+    if data_list is None:
+        platform_avg_prices: dict[str, Decimal] = {}
+    else:
+        if not isinstance(data_list, list):
+            raise ValueError("SteamDT avg price dataList must be a list")
+        platform_avg_prices = {}
+        for item in data_list:
+            if not isinstance(item, dict):
+                raise ValueError("SteamDT avg price platform item must be a dict")
+            platform = item.get("platform")
+            if platform is None or str(platform).strip() == "":
+                raise ValueError("SteamDT avg price platform is required")
+            avg_price = _to_decimal_or_none(item.get("avgPrice"))
+            if avg_price is None:
+                raise ValueError("SteamDT avg price platform avgPrice is required")
+            platform_avg_prices[str(platform)] = avg_price
+
+    return SteamDTAvgPrice(
+        market_hash_name=market_hash_name,
+        avg_price_cny=_to_decimal_or_none(data.get("avgPrice")),
+        platform_avg_prices=platform_avg_prices,
+        raw=dict(data),
+    )
+
+
+
+def parse_base_item_info_response(
+    payload: dict[str, Any],
+) -> list[SteamDTBaseItemInfo]:
+    """Parse SteamDT base-item response data into normalized base item info models."""
+
+    data = _require_response_wrapper(payload)
+    if not isinstance(data, list):
+        raise ValueError("SteamDT base item response data must be a list")
+
+    parsed: list[SteamDTBaseItemInfo] = []
+    for item in data:
+        if not isinstance(item, dict):
+            raise ValueError("SteamDT base item entry must be a dict")
+        market_hash_name = item.get("marketHashName")
+        if market_hash_name is None or str(market_hash_name).strip() == "":
+            raise ValueError("SteamDT base item marketHashName is required")
+        parsed.append(
+            SteamDTBaseItemInfo(
+                market_hash_name=str(market_hash_name),
+                raw=dict(item),
+            )
+        )
+    return parsed
+
+
+
+def parse_wear_response(
+    inspect_link: str,
+    payload: dict[str, Any],
+) -> SteamDTWearParseResult:
+    """Parse SteamDT wear response into normalized wear information and metadata."""
+
+    data = _require_response_wrapper(payload)
+    if not isinstance(data, dict):
+        raise ValueError("SteamDT wear response data must be a dict")
+
+    item_preview_data = data.get("itemPreviewData")
+    if item_preview_data is None:
+        wear_info = SteamDTWearInfo(
+            inspect_link=inspect_link or None,
+            float_value=None,
+            paint_seed=None,
+            raw=dict(data),
+        )
+        return SteamDTWearParseResult(
+            inspect_link=inspect_link or None,
+            wear_info=wear_info,
+            sync=data.get("sync"),
+            success=data.get("success"),
+            task_id=(
+                None if data.get("taskId") in (None, "") else str(data.get("taskId"))
+            ),
+            raw=dict(data),
+        )
+
+    if not isinstance(item_preview_data, dict):
+        raise ValueError("SteamDT itemPreviewData must be a dict when present")
+
+    float_wear = item_preview_data.get("floatWear")
+    parsed_float = None
+    if float_wear not in (None, ""):
+        parsed_float = float(str(float_wear))
+    paint_seed = _to_int_or_none(item_preview_data.get("paintseed"))
+    wear_info = SteamDTWearInfo(
+        inspect_link=inspect_link or None,
+        float_value=parsed_float,
+        paint_seed=paint_seed,
+        raw=dict(item_preview_data),
+    )
+    return SteamDTWearParseResult(
+        inspect_link=inspect_link or None,
+        wear_info=wear_info,
+        sync=data.get("sync"),
+        success=data.get("success"),
+        task_id=(None if data.get("taskId") in (None, "") else str(data.get("taskId"))),
+        raw=dict(data),
+    )
+
+
+
+def parse_kline_response(
+    market_hash_name: str,
+    payload: dict[str, Any],
+) -> list[SteamDTHistoricalPricePoint]:
+    """Validate wrapper shape and refuse to parse kline points until mapping is confirmed."""
+
+    if not market_hash_name.strip():
+        raise ValueError("market_hash_name cannot be empty")
+    _require_response_wrapper(payload)
+    raise NotImplementedError(KLINE_MAPPING_UNCONFIRMED_ERROR)
 
 
 class SteamDTHttpClient:

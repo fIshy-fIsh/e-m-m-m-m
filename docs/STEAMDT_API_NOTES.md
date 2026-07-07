@@ -490,6 +490,24 @@ Potential future mapping:
 - `raw`
   - preserve full raw payload
 
+## Parser Status
+
+当前已新增 parser skeleton：
+- `parse_price_single_response`
+- `parse_price_batch_response`
+- `parse_avg_price_response`
+- `parse_base_item_info_response`
+- `parse_wear_response`
+- `parse_kline_response` placeholder
+
+说明：
+- parser 当前只覆盖文档中已经确认的字段。
+- `kline` point-level field mapping 仍然是 TODO。
+- `SteamDTHttpClient` public methods 仍然保持 `NotImplementedError`。
+- 当前仍然不真实请求 SteamDT。
+- parser 尚未接入 production HTTP flow。
+- price selection strategy 仍留给后续 provider/parser integration phase。
+
 ## Safety Notes
 
 - Do not implement auto-buying.
