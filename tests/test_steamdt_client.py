@@ -58,9 +58,18 @@ def _make_wear_info() -> SteamDTWearInfo:
 
 
 
+def _response_with_request(status_code: int, payload) -> httpx.Response:
+    response = httpx.Response(status_code, json=payload)
+    response.request = httpx.Request(
+        "GET",
+        "https://open.steamdt.com/open/cs2/v1/price/single",
+    )
+    return response
+
+
+
 def test_steamdt_client_config_creates_successfully() -> None:
     config = SteamDTClientConfig()
-
     assert config.base_url == "https://open.steamdt.com"
 
 
@@ -97,7 +106,6 @@ def test_steamdt_client_config_rejects_non_positive_rate_limit() -> None:
 
 def test_steamdt_client_config_repr_does_not_leak_api_key() -> None:
     config = SteamDTClientConfig(api_key="secret-key")
-
     assert "secret-key" not in repr(config)
     assert "[REDACTED]" in repr(config)
 
@@ -105,7 +113,6 @@ def test_steamdt_client_config_repr_does_not_leak_api_key() -> None:
 
 def test_steamdt_price_quote_creates_successfully() -> None:
     quote = _make_price_quote()
-
     assert quote.market_hash_name == "AK-47 | Redline"
 
 
@@ -124,7 +131,6 @@ def test_steamdt_price_quote_raises_when_price_negative() -> None:
 
 def test_steamdt_batch_price_result_creates_successfully() -> None:
     result = SteamDTBatchPriceResult(quotes={}, missing=[])
-
     assert result.quotes == {}
 
 
@@ -137,7 +143,6 @@ def test_steamdt_base_item_info_raises_when_market_hash_name_empty() -> None:
 
 def test_steamdt_historical_price_point_creates_successfully() -> None:
     point = _make_historical_price_point()
-
     assert point.timestamp.tzinfo is not None
 
 
@@ -182,16 +187,13 @@ def test_steamdt_wear_info_rejects_negative_paint_seed() -> None:
 
 def test_mock_steamdt_client_get_price_single_returns_quote() -> None:
     client = MockSteamDTClient(price_quotes_by_name={"AK-47 | Redline": _make_price_quote()})
-
     result = asyncio.run(client.get_price_single("AK-47 | Redline"))
-
     assert result.market_hash_name == "AK-47 | Redline"
 
 
 
 def test_mock_steamdt_client_get_price_single_raises_when_missing() -> None:
     client = MockSteamDTClient()
-
     with pytest.raises(RuntimeError, match="missing mock SteamDT single price"):
         asyncio.run(client.get_price_single("AK-47 | Redline"))
 
@@ -199,9 +201,7 @@ def test_mock_steamdt_client_get_price_single_raises_when_missing() -> None:
 
 def test_mock_steamdt_client_get_price_batch_returns_quotes_and_missing() -> None:
     client = MockSteamDTClient(price_quotes_by_name={"A": _make_price_quote("A")})
-
     result = asyncio.run(client.get_price_batch(["A", "B"]))
-
     assert "A" in result.quotes
     assert result.missing == ["B"]
 
@@ -209,9 +209,7 @@ def test_mock_steamdt_client_get_price_batch_returns_quotes_and_missing() -> Non
 
 def test_mock_steamdt_client_get_base_item_info_returns_data() -> None:
     client = MockSteamDTClient(base_info_by_name={"A": _make_base_item_info("A")})
-
     result = asyncio.run(client.get_base_item_info("A"))
-
     assert result.market_hash_name == "A"
 
 
@@ -219,7 +217,6 @@ def test_mock_steamdt_client_get_base_item_info_returns_data() -> None:
 def test_mock_steamdt_client_get_kline_returns_data_or_empty() -> None:
     point = _make_historical_price_point("A")
     client = MockSteamDTClient(kline_by_name={"A": [point]})
-
     assert asyncio.run(client.get_kline("A")) == [point]
     assert asyncio.run(client.get_kline("B")) == []
 
@@ -228,16 +225,13 @@ def test_mock_steamdt_client_get_kline_returns_data_or_empty() -> None:
 def test_mock_steamdt_client_get_wear_info_returns_data() -> None:
     wear = _make_wear_info()
     client = MockSteamDTClient(wear_info_by_inspect_link={"steam://inspect/test": wear})
-
     result = asyncio.run(client.get_wear_info("steam://inspect/test"))
-
     assert result == wear
 
 
 
 def test_dry_run_steamdt_client_get_price_single_raises() -> None:
     client = DryRunSteamDTClient()
-
     with pytest.raises(RuntimeError, match="dry-run mode enabled"):
         asyncio.run(client.get_price_single("AK-47 | Redline"))
 
@@ -245,9 +239,7 @@ def test_dry_run_steamdt_client_get_price_single_raises() -> None:
 
 def test_dry_run_steamdt_client_get_price_batch_returns_empty_quotes_and_missing() -> None:
     client = DryRunSteamDTClient()
-
     result = asyncio.run(client.get_price_batch(["A", "B"]))
-
     assert result.quotes == {}
     assert result.missing == ["A", "B"]
 
@@ -255,14 +247,12 @@ def test_dry_run_steamdt_client_get_price_batch_returns_empty_quotes_and_missing
 
 def test_dry_run_steamdt_client_get_kline_returns_empty_list() -> None:
     client = DryRunSteamDTClient()
-
     assert asyncio.run(client.get_kline("AK-47 | Redline")) == []
 
 
 
 def test_dry_run_steamdt_client_get_wear_info_raises() -> None:
     client = DryRunSteamDTClient()
-
     with pytest.raises(RuntimeError, match="dry-run mode enabled"):
         asyncio.run(client.get_wear_info("steam://inspect/test"))
 
@@ -270,16 +260,14 @@ def test_dry_run_steamdt_client_get_wear_info_raises() -> None:
 
 def test_steamdt_http_client_request_json_rejects_real_http_in_dry_run() -> None:
     client = SteamDTHttpClient(SteamDTClientConfig(dry_run=True))
-
     with pytest.raises(RuntimeError, match="dry-run mode"):
         asyncio.run(client._request_json("GET", "/path"))
 
 
 
-def test_steamdt_http_client_public_methods_raise_not_implemented() -> None:
+def test_steamdt_http_client_public_methods_keep_other_endpoints_not_implemented() -> None:
     client = SteamDTHttpClient(SteamDTClientConfig())
-
-    with pytest.raises(NotImplementedError, match="docs/STEAMDT_API_NOTES.md"):
+    with pytest.raises(RuntimeError, match="dry-run mode"):
         asyncio.run(client.get_price_single("AK-47 | Redline"))
     with pytest.raises(NotImplementedError, match="docs/STEAMDT_API_NOTES.md"):
         asyncio.run(client.get_price_batch(["AK-47 | Redline"]))
@@ -294,12 +282,127 @@ def test_steamdt_http_client_public_methods_raise_not_implemented() -> None:
 
 def test_steamdt_http_client_does_not_require_real_api_key_in_dry_run() -> None:
     client = SteamDTHttpClient(SteamDTClientConfig(api_key=None, dry_run=True))
-
     assert client.config.api_key is None
 
 
 
-def test_steamdt_http_client_error_does_not_leak_api_key() -> None:
+def test_steamdt_http_client_get_price_single_uses_official_single_path_and_query_param() -> None:
+    payload = {
+        "success": True,
+        "data": [
+            {
+                "platform": "steam",
+                "sellPrice": "12.34",
+                "sellCount": 2,
+                "biddingPrice": "11.11",
+                "biddingCount": 1,
+                "updateTime": 123456,
+            }
+        ],
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = _response_with_request(200, payload)
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    result = asyncio.run(client.get_price_single("AK-47 | Redline"))
+
+    assert result.market_hash_name == "AK-47 | Redline"
+    assert result.price_cny == Decimal("12.34")
+    mock_http_client.request.assert_awaited_once()
+    _, kwargs = mock_http_client.request.call_args
+    assert kwargs["url"] == "/open/cs2/v1/price/single"
+    assert kwargs["params"] == {"marketHashName": "AK-47 | Redline"}
+    assert kwargs["headers"]["Authorization"] == "Bearer secret-key"
+
+
+
+def test_steamdt_http_client_get_price_single_selects_lowest_positive_sell_price() -> None:
+    payload = {
+        "success": True,
+        "data": [
+            {"platform": "steam", "sellPrice": "12.34"},
+            {"platform": "buff", "sellPrice": "11.00"},
+            {"platform": "other", "sellPrice": "0"},
+        ],
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = _response_with_request(200, payload)
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    result = asyncio.run(client.get_price_single("A"))
+
+    assert result.price_cny == Decimal("11.00")
+    assert result.raw["selected_strategy"] == "lowest_positive_sell_price"
+
+
+
+def test_steamdt_http_client_get_price_single_rejects_when_no_positive_sell_price_exists() -> None:
+    payload = {
+        "success": True,
+        "data": [
+            {"platform": "steam", "sellPrice": None},
+            {"platform": "buff", "sellPrice": "0"},
+        ],
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = _response_with_request(200, payload)
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    with pytest.raises(RuntimeError, match="positive sellPrice"):
+        asyncio.run(client.get_price_single("A"))
+
+
+
+def test_steamdt_http_client_get_price_single_propagates_wrapper_failure() -> None:
+    payload = {
+        "success": False,
+        "errorCode": 1,
+        "errorMsg": "boom",
+        "errorCodeStr": "ERR",
+        "data": None,
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = _response_with_request(200, payload)
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        asyncio.run(client.get_price_single("A"))
+
+
+
+def test_steamdt_http_client_get_price_single_rejects_non_2xx_response() -> None:
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = _response_with_request(500, {"success": False})
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    with pytest.raises(RuntimeError, match="SteamDT HTTP request failed"):
+        asyncio.run(client.get_price_single("A"))
+
+
+
+def test_steamdt_http_client_get_price_single_rejects_non_dict_json_payload() -> None:
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = _response_with_request(200, [])
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    with pytest.raises(RuntimeError, match="SteamDT HTTP request failed"):
+        asyncio.run(client.get_price_single("A"))
+
+
+
+def test_steamdt_http_client_get_price_single_error_does_not_leak_api_key() -> None:
     config = SteamDTClientConfig(
         api_key="super-secret-steamdt-key",
         dry_run=False,
@@ -310,6 +413,6 @@ def test_steamdt_http_client_error_does_not_leak_api_key() -> None:
     client = SteamDTHttpClient(config, http_client=mock_http_client)
 
     with pytest.raises(RuntimeError) as exc_info:
-        asyncio.run(client._request_json("GET", "/path"))
+        asyncio.run(client.get_price_single("A"))
 
     assert "super-secret-steamdt-key" not in str(exc_info.value)

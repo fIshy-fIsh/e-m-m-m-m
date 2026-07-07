@@ -508,6 +508,34 @@ Potential future mapping:
 - parser 尚未接入 production HTTP flow。
 - price selection strategy 仍留给后续 provider/parser integration phase。
 
+## Phase 6A Official Read-only Smoke Test
+
+- Only `get_price_single` supports an official read-only smoke request at this stage.
+- Default remains `DRY_RUN=true`, which prevents real SteamDT requests.
+- Real requests are only allowed when `STEAMDT_DRY_RUN=false` and `STEAMDT_API_KEY` is explicitly provided.
+- The only enabled official endpoint is:
+  - `GET /open/cs2/v1/price/single`
+- No non-official evasion techniques are used.
+- No cookie scraping.
+- No browser automation.
+- No captcha bypass.
+- No risk-control bypass.
+- No hidden endpoints.
+- No automated purchase.
+- No automated login.
+- Current temporary selection strategy is `lowest_positive_sell_price`.
+- Parser skeleton already covers confirmed fields for:
+  - `parse_price_single_response`
+  - `parse_price_batch_response`
+  - `parse_avg_price_response`
+  - `parse_base_item_info_response`
+  - `parse_wear_response`
+  - `parse_kline_response` placeholder
+- `kline` point mapping is still TODO.
+- `SteamDTHttpClient` public methods other than `get_price_single` remain `NotImplementedError`.
+- Parser is still not connected to production HTTP flow beyond the single official smoke request.
+- Final price selection strategy remains a later provider/parser integration concern.
+
 ## Safety Notes
 
 - Do not implement auto-buying.

@@ -602,9 +602,39 @@ class SteamDTHttpClient:
         self._last_request_monotonic = 0.0
 
     async def get_price_single(self, market_hash_name: str) -> SteamDTPriceQuote:
-        """Raise until SteamDT single-price endpoint mapping is fully confirmed."""
+        """Fetch one official read-only SteamDT price quote via the single-price endpoint."""
 
-        raise NotImplementedError(UNCONFIRMED_MAPPING_ERROR)
+        if not market_hash_name.strip():
+            raise ValueError("market_hash_name cannot be empty")
+        if self.config.dry_run:
+            raise RuntimeError("real SteamDT HTTP requests are disabled in dry-run mode")
+
+        payload = await self._request_json(
+            "GET",
+            "/open/cs2/v1/price/single",
+            params={"marketHashName": market_hash_name},
+        )
+        platform_prices = parse_price_single_response(market_hash_name, payload)
+        positive_sell_prices = [
+            price.sell_price_cny
+            for price in platform_prices
+            if price.sell_price_cny is not None and price.sell_price_cny > 0
+        ]
+        if not positive_sell_prices:
+            raise RuntimeError(
+                "SteamDT single price response did not contain any positive sellPrice values"
+            )
+        selected_price = min(positive_sell_prices)
+        return SteamDTPriceQuote(
+            market_hash_name=market_hash_name,
+            price_cny=selected_price,
+            source="steamdt",
+            raw={
+                "selected_strategy": "lowest_positive_sell_price",
+                "platform_prices": [price.raw for price in platform_prices],
+                "original_payload": payload,
+            },
+        )
 
     async def get_price_batch(
         self,
