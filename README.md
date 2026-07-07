@@ -73,14 +73,19 @@
 - 后续将在 `feature/steamdt-data-source` 分支开发。
 - 当前 V1 dry-run baseline 可通过 `v1-dry-run-baseline` tag 回滚。
 
-### SteamDT official read-only smoke script
-- `python scripts/steamdt_price_single_smoke.py`
+### SteamDT official read-only smoke scripts
+- Single price:
+  - `python scripts/steamdt_price_single_smoke.py`
+- Batch price:
+  - `python scripts/steamdt_price_batch_smoke.py`
 - 默认不会请求 SteamDT。
 - 必须手动设置：
   - `STEAMDT_DRY_RUN=false`
   - `STEAMDT_API_KEY`
-  - `STEAMDT_SMOKE_MARKET_HASH_NAME`
+  - `STEAMDT_SMOKE_MARKET_HASH_NAME`（single）
+  - `STEAMDT_SMOKE_MARKET_HASH_NAMES`（batch）
 - API key 不要提交到 git。
+- 这些 smoke script 不会接入 pipeline / scheduler / alerts。
 
 ## Docker dry-run
 1. `cp .env.example .env`

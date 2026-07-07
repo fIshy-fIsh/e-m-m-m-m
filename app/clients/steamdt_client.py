@@ -584,6 +584,40 @@ def parse_kline_response(
     raise NotImplementedError(KLINE_MAPPING_UNCONFIRMED_ERROR)
 
 
+
+
+def _select_lowest_positive_sell_price_quote(
+    market_hash_name: str,
+    platform_prices: list[SteamDTPlatformPrice],
+    *,
+    original_payload: dict[str, Any] | None = None,
+) -> SteamDTPriceQuote | None:
+    """Select the lowest positive sell price from parsed platform prices."""
+
+    positive_sell_prices = [
+        price
+        for price in platform_prices
+        if price.sell_price_cny is not None and price.sell_price_cny > 0
+    ]
+    if not positive_sell_prices:
+        return None
+
+    selected = min(
+        positive_sell_prices,
+        key=lambda price: price.sell_price_cny or Decimal("Infinity"),
+    )
+    return SteamDTPriceQuote(
+        market_hash_name=market_hash_name,
+        price_cny=selected.sell_price_cny or Decimal("0"),
+        source="steamdt",
+        raw={
+            "selected_strategy": "lowest_positive_sell_price",
+            "platform_prices": [price.raw for price in platform_prices],
+            "original_payload": original_payload,
+        },
+    )
+
+
 class SteamDTHttpClient:
     """HTTP client skeleton for future direct SteamDT REST access.
 
@@ -615,34 +649,63 @@ class SteamDTHttpClient:
             params={"marketHashName": market_hash_name},
         )
         platform_prices = parse_price_single_response(market_hash_name, payload)
-        positive_sell_prices = [
-            price.sell_price_cny
-            for price in platform_prices
-            if price.sell_price_cny is not None and price.sell_price_cny > 0
-        ]
-        if not positive_sell_prices:
+        selected_quote = _select_lowest_positive_sell_price_quote(
+            market_hash_name,
+            platform_prices,
+            original_payload=payload,
+        )
+        if selected_quote is None:
             raise RuntimeError(
                 "SteamDT single price response did not contain any positive sellPrice values"
             )
-        selected_price = min(positive_sell_prices)
-        return SteamDTPriceQuote(
-            market_hash_name=market_hash_name,
-            price_cny=selected_price,
-            source="steamdt",
-            raw={
-                "selected_strategy": "lowest_positive_sell_price",
-                "platform_prices": [price.raw for price in platform_prices],
-                "original_payload": payload,
-            },
-        )
+        return selected_quote
 
     async def get_price_batch(
         self,
         market_hash_names: list[str],
     ) -> SteamDTBatchPriceResult:
-        """Raise until SteamDT batch-price endpoint mapping is fully confirmed."""
+        """Fetch official read-only SteamDT batch price quotes via the batch-price endpoint."""
 
-        raise NotImplementedError(UNCONFIRMED_MAPPING_ERROR)
+        if not market_hash_names:
+            return SteamDTBatchPriceResult(quotes={}, missing=[], raw=None)
+
+        cleaned_names = list(
+            dict.fromkeys(name.strip() for name in market_hash_names if name.strip())
+        )
+        if not cleaned_names:
+            return SteamDTBatchPriceResult(quotes={}, missing=[], raw=None)
+        if self.config.dry_run:
+            return SteamDTBatchPriceResult(quotes={}, missing=cleaned_names, raw=None)
+
+        payload = await self._request_json(
+            "POST",
+            "/open/cs2/v1/price/batch",
+            json={"marketHashNames": cleaned_names},
+        )
+        parsed_batch = parse_price_batch_response(cleaned_names, payload)
+
+        quotes: dict[str, SteamDTPriceQuote] = {}
+        missing: list[str] = []
+        for name in cleaned_names:
+            platform_prices = parsed_batch.get(name)
+            if platform_prices is None:
+                missing.append(name)
+                continue
+            selected_quote = _select_lowest_positive_sell_price_quote(
+                name,
+                platform_prices,
+                original_payload=payload,
+            )
+            if selected_quote is None:
+                missing.append(name)
+                continue
+            quotes[name] = selected_quote
+
+        return SteamDTBatchPriceResult(
+            quotes=quotes,
+            missing=missing,
+            raw=payload,
+        )
 
     async def get_base_item_info(self, market_hash_name: str) -> SteamDTBaseItemInfo:
         """Raise until SteamDT base-item endpoint mapping is fully confirmed."""

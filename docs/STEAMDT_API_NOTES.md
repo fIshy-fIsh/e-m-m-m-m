@@ -536,6 +536,25 @@ Potential future mapping:
 - Parser is still not connected to production HTTP flow beyond the single official smoke request.
 - Final price selection strategy remains a later provider/parser integration concern.
 
+## Phase 6B Official Batch Price Smoke Test
+
+- `get_price_batch` supports an official read-only smoke request at this stage.
+- Endpoint: `POST /open/cs2/v1/price/batch`
+- Request body: `marketHashNames`
+- Default remains `DRY_RUN=true`, which prevents real SteamDT requests.
+- Real requests are only allowed when `STEAMDT_DRY_RUN=false` and `STEAMDT_API_KEY` is explicitly provided.
+- Current temporary selection strategy is `lowest_positive_sell_price` per requested `marketHashName`.
+- Missing names do not raise; they are returned in `missing`.
+- This smoke path does not integrate with pipeline / scheduler / alerts.
+- No non-official evasion techniques are used.
+- No cookie scraping.
+- No browser automation.
+- No captcha bypass.
+- No risk-control bypass.
+- No hidden endpoints.
+- No automated purchase.
+- No automated login.
+
 ## Safety Notes
 
 - Do not implement auto-buying.

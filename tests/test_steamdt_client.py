@@ -269,8 +269,9 @@ def test_steamdt_http_client_public_methods_keep_other_endpoints_not_implemented
     client = SteamDTHttpClient(SteamDTClientConfig())
     with pytest.raises(RuntimeError, match="dry-run mode"):
         asyncio.run(client.get_price_single("AK-47 | Redline"))
-    with pytest.raises(NotImplementedError, match="docs/STEAMDT_API_NOTES.md"):
-        asyncio.run(client.get_price_batch(["AK-47 | Redline"]))
+    result = asyncio.run(client.get_price_batch(["A"]))
+    assert result.quotes == {}
+    assert result.missing == ["A"]
     with pytest.raises(NotImplementedError, match="docs/STEAMDT_API_NOTES.md"):
         asyncio.run(client.get_base_item_info("AK-47 | Redline"))
     with pytest.raises(NotImplementedError, match="docs/STEAMDT_API_NOTES.md"):
@@ -416,3 +417,217 @@ def test_steamdt_http_client_get_price_single_error_does_not_leak_api_key() -> N
         asyncio.run(client.get_price_single("A"))
 
     assert "super-secret-steamdt-key" not in str(exc_info.value)
+
+
+
+def test_steamdt_http_client_get_price_batch_empty_list_returns_empty_result() -> None:
+    client = SteamDTHttpClient(SteamDTClientConfig())
+
+    result = asyncio.run(client.get_price_batch([]))
+
+    assert result.quotes == {}
+    assert result.missing == []
+    assert result.raw is None
+
+
+
+def test_steamdt_http_client_get_price_batch_strips_empty_names_and_deduplicates_in_order() -> None:
+    payload = {
+        "success": True,
+        "data": [
+            {
+                "marketHashName": "A",
+                "dataList": [{"platform": "steam", "sellPrice": "10.00"}],
+            },
+            {
+                "marketHashName": "B",
+                "dataList": [{"platform": "steam", "sellPrice": "20.00"}],
+            },
+        ],
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = httpx.Response(200, json=payload)
+    response.request = httpx.Request(
+        "POST",
+        "https://open.steamdt.com/open/cs2/v1/price/batch",
+        json={"marketHashNames": ["A", "B"]},
+    )
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    result = asyncio.run(client.get_price_batch(["A", "", "B", "A", "  "]))
+
+    assert list(result.quotes.keys()) == ["A", "B"]
+    _, kwargs = mock_http_client.request.call_args
+    assert kwargs["url"] == "/open/cs2/v1/price/batch"
+    assert kwargs["json"] == {"marketHashNames": ["A", "B"]}
+    assert kwargs["headers"]["Authorization"] == "Bearer secret-key"
+
+
+
+def test_steamdt_http_client_get_price_batch_dry_run_returns_missing_without_request() -> None:
+    client = SteamDTHttpClient(SteamDTClientConfig(dry_run=True))
+
+    result = asyncio.run(client.get_price_batch(["A", "B"]))
+
+    assert result.quotes == {}
+    assert result.missing == ["A", "B"]
+
+
+
+def test_steamdt_http_client_get_price_batch_selects_lowest_positive_sell_price_per_name() -> None:
+    payload = {
+        "success": True,
+        "data": [
+            {
+                "marketHashName": "A",
+                "dataList": [
+                    {"platform": "steam", "sellPrice": "12.00"},
+                    {"platform": "buff", "sellPrice": "10.00"},
+                ],
+            },
+            {
+                "marketHashName": "B",
+                "dataList": [
+                    {"platform": "steam", "sellPrice": "8.00"},
+                    {"platform": "buff", "sellPrice": "9.00"},
+                ],
+            },
+        ],
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = httpx.Response(200, json=payload)
+    response.request = httpx.Request("POST", "https://open.steamdt.com/open/cs2/v1/price/batch")
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    result = asyncio.run(client.get_price_batch(["A", "B"]))
+
+    assert result.quotes["A"].price_cny == Decimal("10.00")
+    assert result.quotes["B"].price_cny == Decimal("8.00")
+
+
+
+def test_steamdt_http_client_get_price_batch_marks_name_missing_when_no_positive_sell_price(
+) -> None:
+    payload = {
+        "success": True,
+        "data": [
+            {
+                "marketHashName": "A",
+                "dataList": [{"platform": "steam", "sellPrice": "0"}],
+            }
+        ],
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = httpx.Response(200, json=payload)
+    response.request = httpx.Request("POST", "https://open.steamdt.com/open/cs2/v1/price/batch")
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    result = asyncio.run(client.get_price_batch(["A"]))
+
+    assert result.quotes == {}
+    assert result.missing == ["A"]
+
+
+
+def test_steamdt_http_client_get_price_batch_marks_requested_name_missing_if_response_omits_it(
+) -> None:
+    payload = {
+        "success": True,
+        "data": [
+            {
+                "marketHashName": "A",
+                "dataList": [{"platform": "steam", "sellPrice": "10.00"}],
+            }
+        ],
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = httpx.Response(200, json=payload)
+    response.request = httpx.Request("POST", "https://open.steamdt.com/open/cs2/v1/price/batch")
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    result = asyncio.run(client.get_price_batch(["A", "B"]))
+
+    assert "A" in result.quotes
+    assert result.missing == ["B"]
+
+
+
+def test_steamdt_http_client_get_price_batch_ignores_unrequested_extra_name() -> None:
+    payload = {
+        "success": True,
+        "data": [
+            {
+                "marketHashName": "A",
+                "dataList": [{"platform": "steam", "sellPrice": "10.00"}],
+            },
+            {
+                "marketHashName": "EXTRA",
+                "dataList": [{"platform": "steam", "sellPrice": "99.00"}],
+            },
+        ],
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = httpx.Response(200, json=payload)
+    response.request = httpx.Request("POST", "https://open.steamdt.com/open/cs2/v1/price/batch")
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    result = asyncio.run(client.get_price_batch(["A"]))
+
+    assert list(result.quotes.keys()) == ["A"]
+    assert "EXTRA" not in result.quotes
+
+
+
+def test_steamdt_http_client_get_price_batch_propagates_wrapper_failure() -> None:
+    payload = {
+        "success": False,
+        "errorCode": 1,
+        "errorMsg": "boom",
+        "errorCodeStr": "ERR",
+        "data": None,
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = httpx.Response(200, json=payload)
+    response.request = httpx.Request("POST", "https://open.steamdt.com/open/cs2/v1/price/batch")
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        asyncio.run(client.get_price_batch(["A"]))
+
+
+
+def test_steamdt_http_client_get_price_batch_rejects_non_2xx_response() -> None:
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = httpx.Response(500)
+    response.request = httpx.Request("POST", "https://open.steamdt.com/open/cs2/v1/price/batch")
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    with pytest.raises(RuntimeError, match="SteamDT HTTP request failed"):
+        asyncio.run(client.get_price_batch(["A"]))
+
+
+
+def test_steamdt_http_client_get_price_batch_rejects_non_dict_json_payload() -> None:
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = httpx.Response(200, json=[])
+    response.request = httpx.Request("POST", "https://open.steamdt.com/open/cs2/v1/price/batch")
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    with pytest.raises(RuntimeError, match="SteamDT HTTP request failed"):
+        asyncio.run(client.get_price_batch(["A"]))
