@@ -555,6 +555,23 @@ Potential future mapping:
 - No automated purchase.
 - No automated login.
 
+## Phase 7 Liquidity-aware Price Selection
+
+- Price selection strategy has been extracted from `SteamDTHttpClient` into a dedicated selector module.
+- Supported strategies:
+  - `lowest_positive_sell_price`
+  - `liquidity_aware_sell_price`
+- The liquidity-aware strategy can consider:
+  - `sellPrice`
+  - `sellCount`
+  - `biddingPrice`
+  - `biddingCount`
+  - optional sell/bid spread
+  - optional avg sanity check
+- `avg` sanity check only consumes a provided `avg_price_cny`; it does not request the avg endpoint by itself.
+- Current selector work is still isolated from pipeline / scheduler / alerts.
+- Current implementation continues to avoid non-official evasion techniques.
+
 ## Safety Notes
 
 - Do not implement auto-buying.

@@ -39,7 +39,19 @@ async def _run() -> None:
     print(f"selected price_cny: {quote.price_cny}")
     print(f"source: {quote.source}")
     print(f"selected_strategy: {raw.get('selected_strategy')}")
-    print(f"platform count: {len(platform_prices)}")
+    print(f"reason_codes: {raw.get('reason_codes')}")
+    selected_platform = None
+    if platform_prices:
+        selected_platform = min(
+            (
+                item.get("platform")
+                for item in platform_prices
+                if isinstance(item, dict) and item.get("platform") is not None
+            ),
+            default=None,
+        )
+    print(f"selected_platform: {selected_platform}")
+    print(f"candidate count: {len(platform_prices)}")
 
 
 

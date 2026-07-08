@@ -355,7 +355,7 @@ def test_steamdt_http_client_get_price_single_rejects_when_no_positive_sell_pric
     mock_http_client.request.return_value = response
     client = SteamDTHttpClient(config, http_client=mock_http_client)
 
-    with pytest.raises(RuntimeError, match="positive sellPrice"):
+    with pytest.raises(RuntimeError, match="acceptable sellPrice"):
         asyncio.run(client.get_price_single("A"))
 
 

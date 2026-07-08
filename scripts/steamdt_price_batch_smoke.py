@@ -46,11 +46,25 @@ async def _run() -> None:
     print(f"missing count: {len(result.missing)}")
     for quote in result.quotes.values():
         raw = quote.raw or {}
+        platform_prices = raw.get("platform_prices", [])
+        selected_platform = None
+        if platform_prices:
+            selected_platform = min(
+                (
+                    item.get("platform")
+                    for item in platform_prices
+                    if isinstance(item, dict) and item.get("platform") is not None
+                ),
+                default=None,
+            )
         print(
             f"quote: market_hash_name={quote.market_hash_name}, "
             f"price_cny={quote.price_cny}, "
             f"source={quote.source}, "
-            f"selected_strategy={raw.get('selected_strategy')}"
+            f"selected_strategy={raw.get('selected_strategy')}, "
+            f"reason_codes={raw.get('reason_codes')}, "
+            f"selected_platform={selected_platform}, "
+            f"candidate_count={len(platform_prices)}"
         )
     print(f"missing names: {result.missing}")
 

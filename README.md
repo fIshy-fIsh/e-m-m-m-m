@@ -78,7 +78,7 @@
   - `python scripts/steamdt_price_single_smoke.py`
 - Batch price:
   - `python scripts/steamdt_price_batch_smoke.py`
-- 默认不会请求 SteamDT。
+- 当前 smoke request 的价格选择策略已升级为 liquidity-aware，但默认仍然不会真实请求 SteamDT。
 - 必须手动设置：
   - `STEAMDT_DRY_RUN=false`
   - `STEAMDT_API_KEY`

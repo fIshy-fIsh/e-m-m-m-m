@@ -6,6 +6,11 @@ from typing import Any, Protocol
 
 import httpx
 
+from app.clients.steamdt_price_selection import (
+    SteamDTPriceSelectionConfig,
+    select_steamdt_price_quote,
+)
+
 UNCONFIRMED_MAPPING_ERROR = (
     "SteamDT API endpoint/field mapping is not fully confirmed. "
     "See docs/STEAMDT_API_NOTES.md."
@@ -649,16 +654,17 @@ class SteamDTHttpClient:
             params={"marketHashName": market_hash_name},
         )
         platform_prices = parse_price_single_response(market_hash_name, payload)
-        selected_quote = _select_lowest_positive_sell_price_quote(
+        selected_result = select_steamdt_price_quote(
             market_hash_name,
             platform_prices,
+            config=SteamDTPriceSelectionConfig(),
             original_payload=payload,
         )
-        if selected_quote is None:
+        if selected_result.quote is None:
             raise RuntimeError(
-                "SteamDT single price response did not contain any positive sellPrice values"
+                "SteamDT single price response did not contain any acceptable sellPrice values"
             )
-        return selected_quote
+        return selected_result.quote
 
     async def get_price_batch(
         self,
@@ -691,15 +697,16 @@ class SteamDTHttpClient:
             if platform_prices is None:
                 missing.append(name)
                 continue
-            selected_quote = _select_lowest_positive_sell_price_quote(
+            selection_result = select_steamdt_price_quote(
                 name,
                 platform_prices,
+                config=SteamDTPriceSelectionConfig(),
                 original_payload=payload,
             )
-            if selected_quote is None:
+            if selection_result.quote is None:
                 missing.append(name)
                 continue
-            quotes[name] = selected_quote
+            quotes[name] = selection_result.quote
 
         return SteamDTBatchPriceResult(
             quotes=quotes,
