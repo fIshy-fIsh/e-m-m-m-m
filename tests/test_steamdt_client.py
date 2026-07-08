@@ -631,3 +631,115 @@ def test_steamdt_http_client_get_price_batch_rejects_non_dict_json_payload() -> 
 
     with pytest.raises(RuntimeError, match="SteamDT HTTP request failed"):
         asyncio.run(client.get_price_batch(["A"]))
+
+
+
+def test_steamdt_http_client_get_avg_price_rejects_real_http_in_dry_run() -> None:
+    client = SteamDTHttpClient(SteamDTClientConfig(dry_run=True))
+
+    with pytest.raises(RuntimeError, match="dry-run mode"):
+        asyncio.run(client.get_avg_price("AK-47 | Redline"))
+
+
+
+def test_steamdt_http_client_get_avg_price_uses_official_path_and_query_param() -> None:
+    payload = {
+        "success": True,
+        "data": {
+            "marketHashName": "AK-47 | Redline",
+            "avgPrice": "123.45",
+            "dataList": [{"platform": "steam", "avgPrice": "122.00"}],
+        },
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = httpx.Response(200, json=payload)
+    response.request = httpx.Request(
+        "GET",
+        "https://open.steamdt.com/open/cs2/v1/price/avg",
+    )
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    result = asyncio.run(client.get_avg_price("AK-47 | Redline"))
+
+    assert result.market_hash_name == "AK-47 | Redline"
+    assert result.avg_price_cny == Decimal("123.45")
+    assert result.platform_avg_prices["steam"] == Decimal("122.00")
+    _, kwargs = mock_http_client.request.call_args
+    assert kwargs["url"] == "/open/cs2/v1/price/avg"
+    assert kwargs["params"] == {"marketHashName": "AK-47 | Redline"}
+    assert kwargs["headers"]["Authorization"] == "Bearer secret-key"
+
+
+
+def test_steamdt_http_client_get_avg_price_rejects_market_hash_name_mismatch() -> None:
+    payload = {
+        "success": True,
+        "data": {
+            "marketHashName": "Other Name",
+            "avgPrice": "123.45",
+            "dataList": [{"platform": "steam", "avgPrice": "122.00"}],
+        },
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = httpx.Response(200, json=payload)
+    response.request = httpx.Request(
+        "GET",
+        "https://open.steamdt.com/open/cs2/v1/price/avg",
+    )
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    with pytest.raises(ValueError, match="does not match"):
+        asyncio.run(client.get_avg_price("AK-47 | Redline"))
+
+
+
+def test_steamdt_http_client_get_avg_price_propagates_wrapper_failure() -> None:
+    payload = {
+        "success": False,
+        "errorCode": 1,
+        "errorMsg": "boom",
+        "errorCodeStr": "ERR",
+        "data": None,
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = httpx.Response(200, json=payload)
+    response.request = httpx.Request(
+        "GET",
+        "https://open.steamdt.com/open/cs2/v1/price/avg",
+    )
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        asyncio.run(client.get_avg_price("AK-47 | Redline"))
+
+
+
+def test_steamdt_http_client_get_avg_price_rejects_non_2xx_response() -> None:
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = httpx.Response(500)
+    response.request = httpx.Request("GET", "https://open.steamdt.com/open/cs2/v1/price/avg")
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    with pytest.raises(RuntimeError, match="SteamDT HTTP request failed"):
+        asyncio.run(client.get_avg_price("AK-47 | Redline"))
+
+
+
+def test_steamdt_http_client_get_avg_price_rejects_non_dict_json_payload() -> None:
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = httpx.Response(200, json=[])
+    response.request = httpx.Request("GET", "https://open.steamdt.com/open/cs2/v1/price/avg")
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    with pytest.raises(RuntimeError, match="SteamDT HTTP request failed"):
+        asyncio.run(client.get_avg_price("AK-47 | Redline"))

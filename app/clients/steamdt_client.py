@@ -204,6 +204,9 @@ class SteamDTClient(Protocol):
     ) -> SteamDTBatchPriceResult:
         """Return SteamDT price quotes for multiple market hash names."""
 
+    async def get_avg_price(self, market_hash_name: str) -> SteamDTAvgPrice:
+        """Return SteamDT average price information for one market hash name."""
+
     async def get_base_item_info(self, market_hash_name: str) -> SteamDTBaseItemInfo:
         """Return SteamDT base item information for one market hash name."""
 
@@ -257,6 +260,17 @@ class MockSteamDTClient:
             name for name in market_hash_names if name not in self.price_quotes_by_name
         ]
         return SteamDTBatchPriceResult(quotes=quotes, missing=missing, raw=None)
+
+    async def get_avg_price(self, market_hash_name: str) -> SteamDTAvgPrice:
+        """Return deterministic avg price info by reusing single price quotes when available."""
+
+        quote = await self.get_price_single(market_hash_name)
+        return SteamDTAvgPrice(
+            market_hash_name=quote.market_hash_name,
+            avg_price_cny=quote.price_cny,
+            platform_avg_prices={},
+            raw=quote.raw,
+        )
 
     async def get_base_item_info(self, market_hash_name: str) -> SteamDTBaseItemInfo:
         """Return deterministic base item info or raise if missing."""
@@ -324,6 +338,13 @@ class DryRunSteamDTClient:
         """Return no historical price points in dry-run mode."""
 
         return []
+
+    async def get_avg_price(self, market_hash_name: str) -> SteamDTAvgPrice:
+        """Refuse to fetch avg price in dry-run mode."""
+
+        raise RuntimeError(
+            "real SteamDT HTTP requests are disabled in dry-run mode"
+        )
 
     async def get_wear_info(self, inspect_link: str) -> SteamDTWearInfo:
         """Refuse to fabricate wear info in dry-run mode."""
@@ -713,6 +734,21 @@ class SteamDTHttpClient:
             missing=missing,
             raw=payload,
         )
+
+    async def get_avg_price(self, market_hash_name: str) -> SteamDTAvgPrice:
+        """Fetch one official read-only SteamDT 7-day average price result."""
+
+        if not market_hash_name.strip():
+            raise ValueError("market_hash_name cannot be empty")
+        if self.config.dry_run:
+            raise RuntimeError("real SteamDT HTTP requests are disabled in dry-run mode")
+
+        payload = await self._request_json(
+            "GET",
+            "/open/cs2/v1/price/avg",
+            params={"marketHashName": market_hash_name},
+        )
+        return parse_avg_price_response(market_hash_name, payload)
 
     async def get_base_item_info(self, market_hash_name: str) -> SteamDTBaseItemInfo:
         """Raise until SteamDT base-item endpoint mapping is fully confirmed."""

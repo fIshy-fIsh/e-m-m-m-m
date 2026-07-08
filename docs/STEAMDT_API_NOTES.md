@@ -572,6 +572,25 @@ Potential future mapping:
 - Current selector work is still isolated from pipeline / scheduler / alerts.
 - Current implementation continues to avoid non-official evasion techniques.
 
+## Phase 8A Official Avg Price Smoke Test
+
+- `get_avg_price` supports an official read-only smoke request at this stage.
+- Endpoint: `GET /open/cs2/v1/price/avg`
+- Query param: `marketHashName`
+- Default remains `DRY_RUN=true`, which prevents real SteamDT requests.
+- Real requests are only allowed when `STEAMDT_DRY_RUN=false` and `STEAMDT_API_KEY` is explicitly provided.
+- `avgPrice` is treated only as a future sanity-check input.
+- It does not directly replace `sellPrice`-based valuation.
+- This smoke path does not integrate with pipeline / scheduler / alerts.
+- No non-official evasion techniques are used.
+- No cookie scraping.
+- No browser automation.
+- No captcha bypass.
+- No risk-control bypass.
+- No hidden endpoints.
+- No automated purchase.
+- No automated login.
+
 ## Safety Notes
 
 - Do not implement auto-buying.

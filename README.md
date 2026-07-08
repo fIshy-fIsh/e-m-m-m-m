@@ -78,11 +78,14 @@
   - `python scripts/steamdt_price_single_smoke.py`
 - Batch price:
   - `python scripts/steamdt_price_batch_smoke.py`
+- Avg price:
+  - `python scripts/steamdt_avg_price_smoke.py`
 - 当前 smoke request 的价格选择策略已升级为 liquidity-aware，但默认仍然不会真实请求 SteamDT。
+- `avg` smoke 只作为 sanity check input，不直接替代 valuation price。
 - 必须手动设置：
   - `STEAMDT_DRY_RUN=false`
   - `STEAMDT_API_KEY`
-  - `STEAMDT_SMOKE_MARKET_HASH_NAME`（single）
+  - `STEAMDT_SMOKE_MARKET_HASH_NAME`（single / avg）
   - `STEAMDT_SMOKE_MARKET_HASH_NAMES`（batch）
 - API key 不要提交到 git。
 - 这些 smoke script 不会接入 pipeline / scheduler / alerts。
