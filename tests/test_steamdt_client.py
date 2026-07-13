@@ -1020,3 +1020,216 @@ def test_steamdt_http_client_get_price_single_skips_avg_sanity_when_ratio_is_non
     )
 
     assert result.price_cny == Decimal("20.00")
+
+
+
+def _clear_steamdt_smoke_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in [
+        "STEAMDT_API_KEY",
+        "STEAMDT_DRY_RUN",
+        "STEAMDT_SMOKE_MARKET_HASH_NAME",
+        "STEAMDT_SMOKE_MARKET_HASH_NAMES",
+        "STEAMDT_ENABLE_AVG_SANITY_CHECK",
+        "STEAMDT_MAX_PRICE_TO_AVG_RATIO",
+        "STEAMDT_AVG_SANITY_FALLBACK_TO_LOWEST_POSITIVE",
+        "STEAMDT_PROVIDER_BATCH_MODE",
+        "STEAMDT_PROVIDER_MAX_AVG_REQUESTS_PER_BATCH",
+    ]:
+        monkeypatch.delenv(name, raising=False)
+
+
+
+def test_steamdt_single_smoke_default_dry_run_does_not_request(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts import steamdt_price_single_smoke
+
+    _clear_steamdt_smoke_env(monkeypatch)
+
+    asyncio.run(steamdt_price_single_smoke._run())
+
+    assert "STEAMDT_DRY_RUN is not false" in capsys.readouterr().out
+
+
+
+def test_steamdt_batch_smoke_default_dry_run_does_not_request(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts import steamdt_price_batch_smoke
+
+    _clear_steamdt_smoke_env(monkeypatch)
+
+    asyncio.run(steamdt_price_batch_smoke._run())
+
+    assert "STEAMDT_DRY_RUN is not false" in capsys.readouterr().out
+
+
+
+def test_steamdt_avg_smoke_default_dry_run_does_not_request(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts import steamdt_avg_price_smoke
+
+    _clear_steamdt_smoke_env(monkeypatch)
+
+    asyncio.run(steamdt_avg_price_smoke._run())
+
+    assert "STEAMDT_DRY_RUN is not false" in capsys.readouterr().out
+
+
+
+@pytest.mark.parametrize(
+    ("module_name", "expected_message"),
+    [
+        ("steamdt_price_single_smoke", "STEAMDT_API_KEY is missing"),
+        ("steamdt_price_batch_smoke", "STEAMDT_API_KEY is missing"),
+        ("steamdt_avg_price_smoke", "STEAMDT_API_KEY is missing"),
+    ],
+)
+def test_steamdt_smoke_scripts_missing_api_key_do_not_request(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    module_name: str,
+    expected_message: str,
+) -> None:
+    import importlib
+
+    _clear_steamdt_smoke_env(monkeypatch)
+    monkeypatch.setenv("STEAMDT_DRY_RUN", "false")
+    module = importlib.import_module(f"scripts.{module_name}")
+
+    asyncio.run(module._run())
+
+    assert expected_message in capsys.readouterr().out
+
+
+
+def test_steamdt_single_smoke_missing_market_hash_name_does_not_request(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts import steamdt_price_single_smoke
+
+    _clear_steamdt_smoke_env(monkeypatch)
+    monkeypatch.setenv("STEAMDT_DRY_RUN", "false")
+    monkeypatch.setenv("STEAMDT_API_KEY", "secret-key")
+
+    asyncio.run(steamdt_price_single_smoke._run())
+
+    assert "STEAMDT_SMOKE_MARKET_HASH_NAME is missing" in capsys.readouterr().out
+
+
+
+def test_steamdt_avg_smoke_missing_market_hash_name_does_not_request(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts import steamdt_avg_price_smoke
+
+    _clear_steamdt_smoke_env(monkeypatch)
+    monkeypatch.setenv("STEAMDT_DRY_RUN", "false")
+    monkeypatch.setenv("STEAMDT_API_KEY", "secret-key")
+
+    asyncio.run(steamdt_avg_price_smoke._run())
+
+    assert "STEAMDT_SMOKE_MARKET_HASH_NAME is missing" in capsys.readouterr().out
+
+
+
+def test_steamdt_batch_smoke_missing_market_hash_names_does_not_request(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts import steamdt_price_batch_smoke
+
+    _clear_steamdt_smoke_env(monkeypatch)
+    monkeypatch.setenv("STEAMDT_DRY_RUN", "false")
+    monkeypatch.setenv("STEAMDT_API_KEY", "secret-key")
+
+    asyncio.run(steamdt_price_batch_smoke._run())
+
+    assert "STEAMDT_SMOKE_MARKET_HASH_NAMES is missing" in capsys.readouterr().out
+
+
+
+def test_steamdt_batch_smoke_rejects_more_than_ten_names(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts import steamdt_price_batch_smoke
+
+    _clear_steamdt_smoke_env(monkeypatch)
+    monkeypatch.setenv("STEAMDT_DRY_RUN", "false")
+    monkeypatch.setenv("STEAMDT_API_KEY", "secret-key")
+    monkeypatch.setenv(
+        "STEAMDT_SMOKE_MARKET_HASH_NAMES",
+        ",".join(f"Item {index}" for index in range(11)),
+    )
+
+    asyncio.run(steamdt_price_batch_smoke._run())
+
+    assert "maximum 10 market hash names" in capsys.readouterr().out
+
+
+
+def test_steamdt_single_smoke_invalid_decimal_env_does_not_request(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts import steamdt_price_single_smoke
+
+    _clear_steamdt_smoke_env(monkeypatch)
+    monkeypatch.setenv("STEAMDT_DRY_RUN", "false")
+    monkeypatch.setenv("STEAMDT_API_KEY", "secret-key")
+    monkeypatch.setenv("STEAMDT_SMOKE_MARKET_HASH_NAME", "A")
+    monkeypatch.setenv("STEAMDT_ENABLE_AVG_SANITY_CHECK", "true")
+    monkeypatch.setenv("STEAMDT_MAX_PRICE_TO_AVG_RATIO", "not-a-decimal")
+
+    asyncio.run(steamdt_price_single_smoke._run())
+
+    assert "must be a valid decimal value" in capsys.readouterr().out
+
+
+
+def test_steamdt_smoke_utils_parse_and_redact_helpers() -> None:
+    from scripts.steamdt_smoke_utils import (
+        is_explicit_false,
+        parse_bool_env,
+        parse_decimal_env,
+        parse_market_hash_names,
+        redact_message,
+        summarize_quote_raw,
+    )
+
+    environ = {
+        "BOOL_TRUE": "true",
+        "BOOL_FALSE": "false",
+        "RATIO": "1.50",
+    }
+
+    assert parse_bool_env(environ, "BOOL_TRUE") is True
+    assert parse_bool_env(environ, "BOOL_FALSE") is False
+    assert is_explicit_false(environ, "BOOL_FALSE") is True
+    assert parse_decimal_env(environ, "RATIO", "1.0") == Decimal("1.50")
+    assert parse_market_hash_names(" A, B, A ,, ") == ["A", "B"]
+    assert "super-secret" not in redact_message(
+        "Authorization: Bearer super-secret-token",
+        api_key="super-secret-token",
+    )
+    assert summarize_quote_raw(
+        {
+            "selected_strategy": "liquidity_aware_sell_price",
+            "reason_codes": ["LIQUIDITY_ACCEPTED"],
+            "selected_platform": "steam",
+            "platform_prices": [{"full": "raw"}],
+            "original_payload": {"should": "not be printed"},
+        }
+    ) == {
+        "selected_strategy": "liquidity_aware_sell_price",
+        "reason_codes": ["LIQUIDITY_ACCEPTED"],
+        "selected_platform": "steam",
+        "candidate_count": 1,
+    }

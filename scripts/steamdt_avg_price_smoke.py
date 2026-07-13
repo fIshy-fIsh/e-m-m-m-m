@@ -1,22 +1,30 @@
 import os
 
 from app.clients.steamdt_client import SteamDTClientConfig, SteamDTHttpClient
+from scripts.steamdt_smoke_utils import (
+    is_explicit_false,
+    print_guard_exit,
+    safe_error_message,
+)
 
 
 async def _run() -> None:
-    base_url = os.getenv("STEAMDT_BASE_URL", "https://open.steamdt.com")
-    api_key = os.getenv("STEAMDT_API_KEY")
-    dry_run = os.getenv("STEAMDT_DRY_RUN", "true").lower() != "false"
-    market_hash_name = os.getenv("STEAMDT_SMOKE_MARKET_HASH_NAME")
+    environ = os.environ
+    base_url = environ.get("STEAMDT_BASE_URL", "https://open.steamdt.com")
+    api_key = environ.get("STEAMDT_API_KEY")
+    market_hash_name = environ.get("STEAMDT_SMOKE_MARKET_HASH_NAME")
 
-    if dry_run:
-        print("SteamDT avg smoke request skipped: STEAMDT_DRY_RUN is not false.")
+    if not is_explicit_false(environ, "STEAMDT_DRY_RUN"):
+        print_guard_exit(print, "SteamDT avg smoke request skipped: STEAMDT_DRY_RUN is not false.")
         return
     if not api_key:
-        print("SteamDT avg smoke request skipped: STEAMDT_API_KEY is missing.")
+        print_guard_exit(print, "SteamDT avg smoke request skipped: STEAMDT_API_KEY is missing.")
         return
-    if not market_hash_name:
-        print("SteamDT avg smoke request skipped: STEAMDT_SMOKE_MARKET_HASH_NAME is missing.")
+    if market_hash_name is None or not market_hash_name.strip():
+        print_guard_exit(
+            print,
+            "SteamDT avg smoke request skipped: STEAMDT_SMOKE_MARKET_HASH_NAME is missing.",
+        )
         return
 
     client = SteamDTHttpClient(
@@ -28,17 +36,18 @@ async def _run() -> None:
     )
 
     try:
-        result = await client.get_avg_price(market_hash_name)
+        result = await client.get_avg_price(market_hash_name.strip())
     except Exception as exc:
-        print(f"SteamDT avg smoke request failed: {exc}")
+        print(f"SteamDT avg smoke request failed: {safe_error_message(exc, api_key=api_key)}")
         return
 
+    print("smoke script: steamdt_avg_price_smoke")
+    print("smoke mode: avg")
     print(f"market_hash_name: {result.market_hash_name}")
     print(f"avg_price_cny: {result.avg_price_cny}")
     platform_avg_prices = result.platform_avg_prices or {}
     print(f"platform_avg_prices count: {len(platform_avg_prices)}")
     print(f"platform_avg_prices summary: {platform_avg_prices}")
-
 
 
 def main() -> None:

@@ -92,6 +92,28 @@
 - API key 不要提交到 git。
 - 这些 smoke script 不会接入 pipeline / scheduler / alerts。
 
+### SteamDT Manual Smoke Scripts
+
+所有 SteamDT manual smoke scripts 默认不会请求；必须显式设置 `STEAMDT_DRY_RUN=false` 和 `STEAMDT_API_KEY` 才允许官方只读请求。
+
+1. `scripts/steamdt_price_single_smoke.py`
+   - 用途：验证 single price endpoint 和 selector。
+   - 需要：`STEAMDT_SMOKE_MARKET_HASH_NAME`。
+   - 可选：`STEAMDT_ENABLE_AVG_SANITY_CHECK` / `STEAMDT_MAX_PRICE_TO_AVG_RATIO`。
+2. `scripts/steamdt_price_batch_smoke.py`
+   - 用途：验证 batch price endpoint 和 selector。
+   - 需要：`STEAMDT_SMOKE_MARKET_HASH_NAMES`，逗号分隔，最多 10 个。
+   - 可选：`STEAMDT_ENABLE_AVG_SANITY_CHECK` / `STEAMDT_MAX_PRICE_TO_AVG_RATIO`。
+3. `scripts/steamdt_avg_price_smoke.py`
+   - 用途：验证 avg price endpoint。
+   - 需要：`STEAMDT_SMOKE_MARKET_HASH_NAME`。
+4. `scripts/steamdt_provider_price_smoke.py`
+   - 用途：验证 `SteamDTPriceProvider` + injected `SteamDTHttpClient` flow。
+   - 支持 single / batch mode（`STEAMDT_PROVIDER_BATCH_MODE`）。
+   - 支持 optional avg sanity check。
+
+安全边界：这些脚本不接入 pipeline / scheduler / alerts，不自动购买，不自动登录，不提交 API key，不使用 non-official evasion techniques，不做 cookie scraping / browser automation / captcha bypass / risk-control bypass / hidden endpoints。
+
 ### SteamDT PriceProvider integration
 - `SteamDTPriceProvider` 支持注入 selector config，用于 liquidity-aware selection。
 - provider 层可以可选启用 avg sanity check，但默认关闭。

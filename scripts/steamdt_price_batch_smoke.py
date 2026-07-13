@@ -1,71 +1,67 @@
 import os
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from app.clients.steamdt_client import SteamDTClientConfig, SteamDTHttpClient
 from app.clients.steamdt_price_selection import SteamDTPriceSelectionConfig
-
-
-def _env_flag(name: str, *, default: bool = False) -> bool:
-    """Return true only when an env flag is explicitly set to true."""
-
-    raw_value = os.getenv(name)
-    if raw_value is None:
-        return default
-    return raw_value.strip().lower() == "true"
-
-
-def _parse_decimal_env(name: str, default: str) -> Decimal:
-    """Parse a Decimal env value for smoke-only configuration."""
-
-    raw_value = os.getenv(name, default).strip()
-    try:
-        return Decimal(raw_value)
-    except InvalidOperation as exc:
-        raise ValueError(f"{name} must be a valid decimal value") from exc
-
-
-def _safe_error_message(exc: Exception, *, api_key: str | None) -> str:
-    """Format an exception without leaking a configured API key."""
-
-    message = str(exc)
-    if api_key:
-        message = message.replace(api_key, "[REDACTED]")
-    return message
+from scripts.steamdt_smoke_utils import (
+    MAX_STEAMDT_SMOKE_BATCH_NAMES,
+    is_explicit_false,
+    parse_bool_env,
+    parse_decimal_env,
+    parse_market_hash_names,
+    print_guard_exit,
+    safe_error_message,
+    summarize_quote_raw,
+)
 
 
 async def _run() -> None:
-    base_url = os.getenv("STEAMDT_BASE_URL", "https://open.steamdt.com")
-    api_key = os.getenv("STEAMDT_API_KEY")
-    dry_run = os.getenv("STEAMDT_DRY_RUN", "true").lower() != "false"
-    market_hash_names_raw = os.getenv("STEAMDT_SMOKE_MARKET_HASH_NAMES")
-    avg_sanity_enabled = _env_flag("STEAMDT_ENABLE_AVG_SANITY_CHECK")
-    fallback_to_lowest_positive = _env_flag(
-        "STEAMDT_AVG_SANITY_FALLBACK_TO_LOWEST_POSITIVE"
+    environ = os.environ
+    base_url = environ.get("STEAMDT_BASE_URL", "https://open.steamdt.com")
+    api_key = environ.get("STEAMDT_API_KEY")
+    market_hash_names_raw = environ.get("STEAMDT_SMOKE_MARKET_HASH_NAMES")
+    avg_sanity_enabled = parse_bool_env(environ, "STEAMDT_ENABLE_AVG_SANITY_CHECK")
+    fallback_to_lowest_positive = parse_bool_env(
+        environ,
+        "STEAMDT_AVG_SANITY_FALLBACK_TO_LOWEST_POSITIVE",
     )
 
-    if dry_run:
-        print("SteamDT batch smoke request skipped: STEAMDT_DRY_RUN is not false.")
+    if not is_explicit_false(environ, "STEAMDT_DRY_RUN"):
+        print_guard_exit(
+            print,
+            "SteamDT batch smoke request skipped: STEAMDT_DRY_RUN is not false.",
+        )
         return
     if not api_key:
-        print("SteamDT batch smoke request skipped: STEAMDT_API_KEY is missing.")
+        print_guard_exit(print, "SteamDT batch smoke request skipped: STEAMDT_API_KEY is missing.")
         return
     if not market_hash_names_raw:
-        print("SteamDT batch smoke request skipped: STEAMDT_SMOKE_MARKET_HASH_NAMES is missing.")
+        print_guard_exit(
+            print,
+            "SteamDT batch smoke request skipped: STEAMDT_SMOKE_MARKET_HASH_NAMES is missing.",
+        )
         return
 
-    names = [name.strip() for name in market_hash_names_raw.split(",") if name.strip()]
+    names = parse_market_hash_names(market_hash_names_raw)
     if not names:
-        print("SteamDT batch smoke request skipped: no valid market hash names were provided.")
+        print_guard_exit(
+            print,
+            "SteamDT batch smoke request skipped: no valid market hash names were provided.",
+        )
         return
-    if len(names) > 10:
-        print("SteamDT batch smoke request skipped: maximum 10 market hash names are allowed.")
+    if len(names) > MAX_STEAMDT_SMOKE_BATCH_NAMES:
+        print_guard_exit(
+            print,
+            "SteamDT batch smoke request skipped: maximum 10 market hash names are allowed.",
+        )
         return
 
     max_price_to_avg_ratio: Decimal | None = None
     selection_config = None
     if avg_sanity_enabled:
         try:
-            max_price_to_avg_ratio = _parse_decimal_env(
+            max_price_to_avg_ratio = parse_decimal_env(
+                environ,
                 "STEAMDT_MAX_PRICE_TO_AVG_RATIO",
                 "1.50",
             )
@@ -74,7 +70,7 @@ async def _run() -> None:
                 fallback_to_lowest_positive=fallback_to_lowest_positive,
             )
         except ValueError as exc:
-            print(f"SteamDT batch smoke request skipped: {exc}")
+            print_guard_exit(print, f"SteamDT batch smoke request skipped: {exc}")
             return
 
     client = SteamDTHttpClient(
@@ -95,9 +91,9 @@ async def _run() -> None:
             except Exception as exc:
                 avg_price_failed_count += 1
                 print(
-                    "SteamDT avg sanity request failed; batch selection skipped: "
+                    "SteamDT batch avg sanity request failed; selection skipped: "
                     f"market_hash_name={name}, "
-                    f"error={_safe_error_message(exc, api_key=api_key)}"
+                    f"error={safe_error_message(exc, api_key=api_key)}"
                 )
                 print(f"avg price failed count: {avg_price_failed_count}")
                 return
@@ -113,10 +109,12 @@ async def _run() -> None:
     except Exception as exc:
         print(
             "SteamDT batch smoke request failed: "
-            f"{_safe_error_message(exc, api_key=api_key)}"
+            f"{safe_error_message(exc, api_key=api_key)}"
         )
         return
 
+    print("smoke script: steamdt_price_batch_smoke")
+    print("smoke mode: batch")
     print(f"requested count: {len(names)}")
     print(f"quote count: {len(result.quotes)}")
     print(f"missing count: {len(result.missing)}")
@@ -126,16 +124,15 @@ async def _run() -> None:
     print(f"max_price_to_avg_ratio: {max_price_to_avg_ratio}")
     print(f"fallback_to_lowest_positive: {fallback_to_lowest_positive}")
     for quote in result.quotes.values():
-        raw = quote.raw or {}
-        platform_prices = raw.get("platform_prices", [])
+        raw_summary = summarize_quote_raw(quote.raw)
         print(
             f"quote: market_hash_name={quote.market_hash_name}, "
             f"price_cny={quote.price_cny}, "
             f"source={quote.source}, "
-            f"selected_strategy={raw.get('selected_strategy')}, "
-            f"reason_codes={raw.get('reason_codes')}, "
-            f"selected_platform={raw.get('selected_platform')}, "
-            f"candidate_count={len(platform_prices)}"
+            f"selected_strategy={raw_summary['selected_strategy']}, "
+            f"reason_codes={raw_summary['reason_codes']}, "
+            f"selected_platform={raw_summary['selected_platform']}, "
+            f"candidate_count={raw_summary['candidate_count']}"
         )
     print(f"missing names: {result.missing}")
 

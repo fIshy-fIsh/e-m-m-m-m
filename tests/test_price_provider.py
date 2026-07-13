@@ -941,7 +941,7 @@ def test_provider_smoke_script_single_mode_constructs_provider_config() -> None:
     assert client_configs
     assert SmokeFakeProvider.captured_configs[0].enable_avg_sanity_check is False
     assert SmokeFakeProvider.captured_configs[0].selection_config is not None
-    assert "provider mode: single" in output
+    assert "smoke mode: provider_single" in output
 
 
 
@@ -959,7 +959,7 @@ def test_provider_smoke_script_batch_mode_constructs_provider_config() -> None:
     assert status == 0
     assert client_configs
     assert SmokeFakeProvider.captured_configs[0].max_avg_requests_per_batch == 10
-    assert "provider mode: batch" in output
+    assert "smoke mode: provider_batch" in output
     assert "requested count: 2" in output
 
 

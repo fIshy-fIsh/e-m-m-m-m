@@ -646,6 +646,34 @@ Potential future mapping:
 - No automated purchase.
 - No automated login.
 
+## Phase 10B SteamDT Real-smoke Readiness Checklist
+
+This checklist is for manual read-only smoke tests only. It is not a production trading workflow. It is not an automated purchase workflow. It does not bypass platform controls.
+
+Before running any real smoke request manually:
+
+1. Confirm working tree is clean.
+2. Confirm no real API key is committed.
+3. Confirm `STEAMDT_DRY_RUN=false` is intentionally set.
+4. Confirm only official endpoint is used.
+5. Confirm request is read-only.
+6. Confirm market hash names are manually selected.
+7. Confirm batch size is `<= 10`.
+8. Confirm output redacts API key and Authorization header.
+9. Confirm smoke script is not called by scheduler / pipeline.
+10. Confirm no non-official evasion techniques are used.
+
+Additional boundaries:
+- No cookie scraping.
+- No browser automation.
+- No captcha bypass.
+- No risk-control bypass.
+- No hidden endpoints.
+- No request replay from browser sessions.
+- No unofficial reverse-engineered endpoints.
+- No automated purchase.
+- No automated login.
+
 ## Safety Notes
 
 - Do not implement auto-buying.
