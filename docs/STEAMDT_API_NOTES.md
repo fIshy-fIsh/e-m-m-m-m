@@ -610,6 +610,25 @@ Potential future mapping:
 - No automated purchase.
 - No automated login.
 
+## Phase 9 SteamDTPriceProvider Selector Integration
+
+- `SteamDTPriceProvider` supports an injected `selection_config` for liquidity-aware price selection.
+- Optional avg sanity check is supported at the provider layer.
+- Avg sanity remains disabled by default.
+- When enabled, the provider requests avg price through the injected client only.
+- `avgPrice` is passed as sanity-check input and does not directly replace `sellPrice` valuation.
+- The provider does not create a SteamDT HTTP client.
+- The provider does not read environment variables.
+- The current provider integration remains isolated from pipeline / scheduler / alerts.
+- No non-official evasion techniques are used.
+- No cookie scraping.
+- No browser automation.
+- No captcha bypass.
+- No risk-control bypass.
+- No hidden endpoints.
+- No automated purchase.
+- No automated login.
+
 ## Safety Notes
 
 - Do not implement auto-buying.
