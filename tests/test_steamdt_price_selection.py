@@ -230,10 +230,15 @@ def test_liquidity_aware_enforces_avg_sanity_check() -> None:
     result = select_steamdt_price_quote(
         "A",
         [_make_platform_price(sell_price_cny="20.00", sell_count=2)],
-        config=SteamDTPriceSelectionConfig(max_price_to_avg_ratio=Decimal("1.5")),
+        config=SteamDTPriceSelectionConfig(
+            max_price_to_avg_ratio=Decimal("1.5"),
+            fallback_to_lowest_positive=False,
+        ),
         avg_price_cny=Decimal("10.00"),
     )
-    assert result.quote is None or result.selected_strategy.endswith("fallback")
+    assert result.quote is None
+    assert "NO_ACCEPTED_LIQUID_PRICE" in result.reason_codes
+    assert "PRICE_ABOVE_AVG_SANITY_LIMIT" in result.candidate_decisions[0].reason_codes
 
 
 
@@ -324,7 +329,47 @@ def test_fallback_disabled_returns_no_quote() -> None:
     result = select_steamdt_price_quote(
         "A",
         [_make_platform_price(sell_price_cny="10.00", sell_count=0)],
-        config=SteamDTPriceSelectionConfig(min_sell_count=1, fallback_to_lowest_positive=False),
+        config=SteamDTPriceSelectionConfig(
+            min_sell_count=1,
+            fallback_to_lowest_positive=False,
+        ),
     )
     assert result.quote is None
     assert "NO_ACCEPTED_LIQUID_PRICE" in result.reason_codes
+
+
+
+def test_avg_sanity_with_fallback_disabled_returns_no_quote() -> None:
+    result = select_steamdt_price_quote(
+        "A",
+        [_make_platform_price(sell_price_cny="20.00", sell_count=2)],
+        config=SteamDTPriceSelectionConfig(
+            max_price_to_avg_ratio=Decimal("1.5"),
+            fallback_to_lowest_positive=False,
+        ),
+        avg_price_cny=Decimal("10.00"),
+    )
+    assert result.quote is None
+    assert "NO_ACCEPTED_LIQUID_PRICE" in result.reason_codes
+
+
+
+def test_avg_sanity_is_skipped_when_avg_price_is_none() -> None:
+    result = select_steamdt_price_quote(
+        "A",
+        [_make_platform_price(sell_price_cny="20.00", sell_count=2)],
+        config=SteamDTPriceSelectionConfig(max_price_to_avg_ratio=Decimal("1.5")),
+        avg_price_cny=None,
+    )
+    assert result.quote is not None
+
+
+
+def test_avg_sanity_is_skipped_when_max_price_to_avg_ratio_is_none() -> None:
+    result = select_steamdt_price_quote(
+        "A",
+        [_make_platform_price(sell_price_cny="20.00", sell_count=2)],
+        config=SteamDTPriceSelectionConfig(max_price_to_avg_ratio=None),
+        avg_price_cny=Decimal("10.00"),
+    )
+    assert result.quote is not None

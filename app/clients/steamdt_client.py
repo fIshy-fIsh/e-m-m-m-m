@@ -661,8 +661,14 @@ class SteamDTHttpClient:
         self._minimum_interval_seconds = 60.0 / config.rate_limit_per_minute
         self._last_request_monotonic = 0.0
 
-    async def get_price_single(self, market_hash_name: str) -> SteamDTPriceQuote:
-        """Fetch one official read-only SteamDT price quote via the single-price endpoint."""
+    async def get_price_single_with_selection(
+        self,
+        market_hash_name: str,
+        *,
+        selection_config: SteamDTPriceSelectionConfig | None = None,
+        avg_price_cny: Decimal | None = None,
+    ) -> SteamDTPriceQuote:
+        """Fetch a single price quote and apply a caller-provided selection strategy."""
 
         if not market_hash_name.strip():
             raise ValueError("market_hash_name cannot be empty")
@@ -678,20 +684,30 @@ class SteamDTHttpClient:
         selected_result = select_steamdt_price_quote(
             market_hash_name,
             platform_prices,
-            config=SteamDTPriceSelectionConfig(),
+            config=selection_config or SteamDTPriceSelectionConfig(),
+            avg_price_cny=avg_price_cny,
             original_payload=payload,
         )
         if selected_result.quote is None:
             raise RuntimeError(
-                "SteamDT single price response did not contain any acceptable sellPrice values"
+                "SteamDT single price response did not contain any acceptable sellPrice "
+                f"values; reason_codes={selected_result.reason_codes}"
             )
         return selected_result.quote
 
-    async def get_price_batch(
+    async def get_price_single(self, market_hash_name: str) -> SteamDTPriceQuote:
+        """Fetch one official read-only SteamDT price quote via the single-price endpoint."""
+
+        return await self.get_price_single_with_selection(market_hash_name)
+
+    async def get_price_batch_with_selection(
         self,
         market_hash_names: list[str],
+        *,
+        selection_config: SteamDTPriceSelectionConfig | None = None,
+        avg_prices_by_name: dict[str, Decimal] | None = None,
     ) -> SteamDTBatchPriceResult:
-        """Fetch official read-only SteamDT batch price quotes via the batch-price endpoint."""
+        """Fetch batch price quotes and apply a caller-provided selection strategy per name."""
 
         if not market_hash_names:
             return SteamDTBatchPriceResult(quotes={}, missing=[], raw=None)
@@ -721,7 +737,8 @@ class SteamDTHttpClient:
             selection_result = select_steamdt_price_quote(
                 name,
                 platform_prices,
-                config=SteamDTPriceSelectionConfig(),
+                config=selection_config or SteamDTPriceSelectionConfig(),
+                avg_price_cny=None if avg_prices_by_name is None else avg_prices_by_name.get(name),
                 original_payload=payload,
             )
             if selection_result.quote is None:
@@ -734,6 +751,14 @@ class SteamDTHttpClient:
             missing=missing,
             raw=payload,
         )
+
+    async def get_price_batch(
+        self,
+        market_hash_names: list[str],
+    ) -> SteamDTBatchPriceResult:
+        """Fetch official read-only SteamDT batch price quotes via the batch-price endpoint."""
+
+        return await self.get_price_batch_with_selection(market_hash_names)
 
     async def get_avg_price(self, market_hash_name: str) -> SteamDTAvgPrice:
         """Fetch one official read-only SteamDT 7-day average price result."""

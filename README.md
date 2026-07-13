@@ -81,7 +81,9 @@
 - Avg price:
   - `python scripts/steamdt_avg_price_smoke.py`
 - 当前 smoke request 的价格选择策略已升级为 liquidity-aware，但默认仍然不会真实请求 SteamDT。
-- `avg` smoke 只作为 sanity check input，不直接替代 valuation price。
+- Single / batch smoke 可选启用 avg sanity check，默认关闭。
+- 启用后会额外调用 avg endpoint。
+- `avg` 只用于 sanity check，不替代 sellPrice valuation。
 - 必须手动设置：
   - `STEAMDT_DRY_RUN=false`
   - `STEAMDT_API_KEY`

@@ -17,6 +17,7 @@ from app.clients.steamdt_client import (
     SteamDTPriceQuote,
     SteamDTWearInfo,
 )
+from app.clients.steamdt_price_selection import SteamDTPriceSelectionConfig
 
 
 def _make_price_quote(name: str = "AK-47 | Redline") -> SteamDTPriceQuote:
@@ -743,3 +744,279 @@ def test_steamdt_http_client_get_avg_price_rejects_non_dict_json_payload() -> No
 
     with pytest.raises(RuntimeError, match="SteamDT HTTP request failed"):
         asyncio.run(client.get_avg_price("AK-47 | Redline"))
+
+
+
+def test_steamdt_http_client_get_price_single_default_does_not_call_avg_endpoint() -> None:
+    payload = {
+        "success": True,
+        "data": [
+            {
+                "platform": "steam",
+                "sellPrice": "12.34",
+                "sellCount": 2,
+            }
+        ],
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = _response_with_request(200, payload)
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    result = asyncio.run(client.get_price_single("AK-47 | Redline"))
+
+    assert result.price_cny == Decimal("12.34")
+    mock_http_client.request.assert_awaited_once()
+    _, kwargs = mock_http_client.request.call_args
+    assert kwargs["url"] == "/open/cs2/v1/price/single"
+
+
+
+def test_steamdt_http_client_get_price_batch_default_does_not_call_avg_endpoint() -> None:
+    payload = {
+        "success": True,
+        "data": [
+            {
+                "marketHashName": "A",
+                "dataList": [
+                    {"platform": "steam", "sellPrice": "10.00", "sellCount": 2}
+                ],
+            }
+        ],
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = httpx.Response(200, json=payload)
+    response.request = httpx.Request("POST", "https://open.steamdt.com/open/cs2/v1/price/batch")
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    result = asyncio.run(client.get_price_batch(["A"]))
+
+    assert result.quotes["A"].price_cny == Decimal("10.00")
+    mock_http_client.request.assert_awaited_once()
+    _, kwargs = mock_http_client.request.call_args
+    assert kwargs["url"] == "/open/cs2/v1/price/batch"
+
+
+
+def test_steamdt_http_client_get_price_single_with_selection_uses_avg_sanity() -> None:
+    payload = {
+        "success": True,
+        "data": [
+            {"platform": "steam", "sellPrice": "14.00", "sellCount": 2},
+        ],
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = _response_with_request(200, payload)
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    result = asyncio.run(
+        client.get_price_single_with_selection(
+            "A",
+            selection_config=SteamDTPriceSelectionConfig(
+                max_price_to_avg_ratio=Decimal("1.5"),
+                fallback_to_lowest_positive=False,
+            ),
+            avg_price_cny=Decimal("10.00"),
+        )
+    )
+
+    assert result.price_cny == Decimal("14.00")
+    assert result.raw["selected_strategy"] == "liquidity_aware_sell_price"
+
+
+
+def test_steamdt_http_client_get_price_single_avg_sanity_rejects_high_sell_price() -> None:
+    payload = {
+        "success": True,
+        "data": [
+            {"platform": "steam", "sellPrice": "20.00", "sellCount": 2},
+        ],
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = _response_with_request(200, payload)
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    with pytest.raises(RuntimeError, match="NO_ACCEPTED_LIQUID_PRICE"):
+        asyncio.run(
+            client.get_price_single_with_selection(
+                "A",
+                selection_config=SteamDTPriceSelectionConfig(
+                    max_price_to_avg_ratio=Decimal("1.5"),
+                    fallback_to_lowest_positive=False,
+                ),
+                avg_price_cny=Decimal("10.00"),
+            )
+        )
+
+
+
+def test_steamdt_http_client_get_price_single_avg_sanity_error_does_not_leak_api_key() -> None:
+    payload = {
+        "success": True,
+        "data": [
+            {"platform": "steam", "sellPrice": "20.00", "sellCount": 2},
+        ],
+    }
+    config = SteamDTClientConfig(
+        api_key="super-secret-steamdt-key",
+        dry_run=False,
+        max_retries=0,
+    )
+    mock_http_client = AsyncMock()
+    response = _response_with_request(200, payload)
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        asyncio.run(
+            client.get_price_single_with_selection(
+                "A",
+                selection_config=SteamDTPriceSelectionConfig(
+                    max_price_to_avg_ratio=Decimal("1.5"),
+                    fallback_to_lowest_positive=False,
+                ),
+                avg_price_cny=Decimal("10.00"),
+            )
+        )
+
+    assert "super-secret-steamdt-key" not in str(exc_info.value)
+
+
+
+def test_steamdt_http_client_get_price_batch_with_selection_uses_avg_sanity() -> None:
+    payload = {
+        "success": True,
+        "data": [
+            {
+                "marketHashName": "A",
+                "dataList": [
+                    {"platform": "steam", "sellPrice": "14.00", "sellCount": 2}
+                ],
+            }
+        ],
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = httpx.Response(200, json=payload)
+    response.request = httpx.Request("POST", "https://open.steamdt.com/open/cs2/v1/price/batch")
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    result = asyncio.run(
+        client.get_price_batch_with_selection(
+            ["A"],
+            selection_config=SteamDTPriceSelectionConfig(
+                max_price_to_avg_ratio=Decimal("1.5"),
+                fallback_to_lowest_positive=False,
+            ),
+            avg_prices_by_name={"A": Decimal("10.00")},
+        )
+    )
+
+    assert result.quotes["A"].price_cny == Decimal("14.00")
+    assert result.missing == []
+
+
+
+def test_steamdt_http_client_get_price_batch_avg_sanity_rejects_name_into_missing() -> None:
+    payload = {
+        "success": True,
+        "data": [
+            {
+                "marketHashName": "A",
+                "dataList": [
+                    {"platform": "steam", "sellPrice": "20.00", "sellCount": 2}
+                ],
+            },
+            {
+                "marketHashName": "B",
+                "dataList": [
+                    {"platform": "steam", "sellPrice": "10.00", "sellCount": 2}
+                ],
+            },
+        ],
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = httpx.Response(200, json=payload)
+    response.request = httpx.Request("POST", "https://open.steamdt.com/open/cs2/v1/price/batch")
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    result = asyncio.run(
+        client.get_price_batch_with_selection(
+            ["A", "B"],
+            selection_config=SteamDTPriceSelectionConfig(
+                max_price_to_avg_ratio=Decimal("1.5"),
+                fallback_to_lowest_positive=False,
+            ),
+            avg_prices_by_name={"A": Decimal("10.00"), "B": Decimal("10.00")},
+        )
+    )
+
+    assert "A" not in result.quotes
+    assert result.quotes["B"].price_cny == Decimal("10.00")
+    assert result.missing == ["A"]
+
+
+
+def test_steamdt_http_client_get_price_single_skips_avg_sanity_when_avg_price_is_none() -> None:
+    payload = {
+        "success": True,
+        "data": [
+            {"platform": "steam", "sellPrice": "20.00", "sellCount": 2},
+        ],
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = _response_with_request(200, payload)
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    result = asyncio.run(
+        client.get_price_single_with_selection(
+            "A",
+            selection_config=SteamDTPriceSelectionConfig(
+                max_price_to_avg_ratio=Decimal("1.5"),
+                fallback_to_lowest_positive=False,
+            ),
+            avg_price_cny=None,
+        )
+    )
+
+    assert result.price_cny == Decimal("20.00")
+
+
+
+def test_steamdt_http_client_get_price_single_skips_avg_sanity_when_ratio_is_none() -> None:
+    payload = {
+        "success": True,
+        "data": [
+            {"platform": "steam", "sellPrice": "20.00", "sellCount": 2},
+        ],
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = _response_with_request(200, payload)
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    result = asyncio.run(
+        client.get_price_single_with_selection(
+            "A",
+            selection_config=SteamDTPriceSelectionConfig(
+                max_price_to_avg_ratio=None,
+                fallback_to_lowest_positive=False,
+            ),
+            avg_price_cny=Decimal("10.00"),
+        )
+    )
+
+    assert result.price_cny == Decimal("20.00")

@@ -591,6 +591,25 @@ Potential future mapping:
 - No automated purchase.
 - No automated login.
 
+## Phase 8B Avg Sanity Check in Smoke Flow
+
+- Avg sanity check is only used when a smoke script explicitly enables it.
+- It uses the official endpoint: `GET /open/cs2/v1/price/avg`.
+- `avgPrice` is passed into the selector as `avg_price_cny`.
+- `max_price_to_avg_ratio` is used to reject obviously high `sellPrice` values.
+- Avg sanity is disabled by default.
+- Enabling it causes additional official read-only avg requests.
+- `avgPrice` does not directly replace `sellPrice` valuation.
+- Current smoke flows still do not integrate with pipeline / scheduler / alerts.
+- No non-official evasion techniques are used.
+- No cookie scraping.
+- No browser automation.
+- No captcha bypass.
+- No risk-control bypass.
+- No hidden endpoints.
+- No automated purchase.
+- No automated login.
+
 ## Safety Notes
 
 - Do not implement auto-buying.

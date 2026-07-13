@@ -170,6 +170,7 @@ def _select_lowest_positive_sell_price(
         raw={
             "selected_strategy": SteamDTPriceSelectionStrategy.LOWEST_POSITIVE_SELL_PRICE.value,
             "reason_codes": ["ACCEPTED_LOWEST_POSITIVE"],
+            "selected_platform": selected.platform,
             "platform_prices": [price.raw for price in platform_prices],
             "original_payload": original_payload,
         },
@@ -264,6 +265,8 @@ def _select_liquidity_aware_sell_price(
         ):
             reasons.append("PRICE_ABOVE_AVG_SANITY_LIMIT")
             accepted = False
+            if config.fallback_to_lowest_positive:
+                reasons.append("AVG_SANITY_WOULD_BLOCK_FALLBACK")
 
         if accepted:
             accepted_candidates.append(price)
@@ -298,6 +301,7 @@ def _select_liquidity_aware_sell_price(
             raw={
                 "selected_strategy": SteamDTPriceSelectionStrategy.LIQUIDITY_AWARE_SELL_PRICE.value,
                 "reason_codes": ["LIQUIDITY_ACCEPTED"],
+                "selected_platform": selected.platform,
                 "platform_prices": [price.raw for price in platform_prices],
                 "original_payload": original_payload,
             },
@@ -318,6 +322,24 @@ def _select_liquidity_aware_sell_price(
             platform_prices,
             original_payload=original_payload,
         )
+        if (
+            fallback_result.quote is not None
+            and avg_price_cny is not None
+            and config.max_price_to_avg_ratio is not None
+            and fallback_result.quote.price_cny
+            > avg_price_cny * config.max_price_to_avg_ratio
+        ):
+            return SteamDTPriceSelectionResult(
+                market_hash_name=market_hash_name,
+                quote=None,
+                selected_platform=None,
+                selected_strategy=(
+                    "liquidity_aware_sell_price_with_lowest_positive_fallback"
+                ),
+                reason_codes=["NO_ACCEPTED_LIQUID_PRICE"],
+                candidate_decisions=candidate_decisions,
+                raw={"original_payload": original_payload},
+            )
         if fallback_result.quote is not None:
             return SteamDTPriceSelectionResult(
                 market_hash_name=market_hash_name,
