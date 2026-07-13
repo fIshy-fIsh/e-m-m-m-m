@@ -99,6 +99,11 @@
 - provider 不读取 env，也不创建真实 SteamDT HTTP client；只使用调用方注入的 client。
 - avg price 只作为 sanity check input，不直接替代 sellPrice valuation。
 - 当前 provider integration 不接入 pipeline / scheduler / alerts。
+- SteamDTPriceProvider manual smoke:
+  - `python scripts/steamdt_provider_price_smoke.py`
+- Provider smoke 默认不会请求 SteamDT；必须显式设置 `STEAMDT_DRY_RUN=false` 和 `STEAMDT_API_KEY`。
+- Provider smoke 支持 single / batch mode（`STEAMDT_PROVIDER_BATCH_MODE`）和 optional avg sanity check。
+- Provider smoke 只组合 injected `SteamDTHttpClient` + `SteamDTPriceProvider`，不接入 pipeline / scheduler / alerts。
 - API key 不要提交到 git。
 
 ## Docker dry-run

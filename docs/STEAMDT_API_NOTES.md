@@ -629,6 +629,23 @@ Potential future mapping:
 - No automated purchase.
 - No automated login.
 
+## Phase 10A SteamDTPriceProvider Manual Smoke Flow
+
+- A manual `scripts/steamdt_provider_price_smoke.py` flow validates the provider layer with an injected `SteamDTHttpClient`.
+- The flow uses official read-only SteamDT endpoints through the injected client only.
+- Default remains dry-run; it does not make real SteamDT requests unless manually run with `STEAMDT_DRY_RUN=false` and an API key.
+- Single and batch provider smoke modes are supported.
+- Optional avg sanity check is supported through `SteamDTPriceProviderConfig`.
+- `avgPrice` is only a sanity-check input and does not directly replace `sellPrice` valuation.
+- `SteamDTPriceProvider` does not read environment variables; env reading stays in the smoke script composition layer.
+- `SteamDTPriceProvider` does not create a real client; the smoke script composition layer injects the client.
+- The provider smoke flow remains isolated from pipeline / scheduler / alerts.
+- No non-official evasion techniques are used.
+- No request replay from browser sessions.
+- No unofficial reverse-engineered endpoints.
+- No automated purchase.
+- No automated login.
+
 ## Safety Notes
 
 - Do not implement auto-buying.

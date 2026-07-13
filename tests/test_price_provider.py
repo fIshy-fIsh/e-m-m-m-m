@@ -707,3 +707,323 @@ def test_steamdt_price_provider_get_prices_error_redacts_authorization_bearer() 
     assert result.errors
     assert "super-secret-steamdt-key" not in result.errors[0]
     assert "Authorization: Bearer [REDACTED]" in result.errors[0]
+
+
+
+class SmokeFakeProvider:
+    captured_configs: list[SteamDTPriceProviderConfig] = []
+    captured_client_configs: list[object] = []
+
+    def __init__(self, client: object, config: SteamDTPriceProviderConfig) -> None:
+        self.client = client
+        self.config = config
+        self.captured_configs.append(config)
+
+    async def get_price(self, market_hash_name: str) -> PriceQuote:
+        return PriceQuote(
+            market_hash_name=market_hash_name,
+            price_cny=Decimal("12.34"),
+            source="steamdt",
+            raw={
+                "selected_strategy": "liquidity_aware_sell_price",
+                "reason_codes": ["LIQUIDITY_ACCEPTED"],
+                "selected_platform": "steam",
+                "platform_prices": [{"platform": "steam"}],
+            },
+        )
+
+    async def get_prices(self, market_hash_names: list[str]) -> PriceLookupResult:
+        return PriceLookupResult(
+            quotes={
+                name: PriceQuote(
+                    market_hash_name=name,
+                    price_cny=Decimal("12.34"),
+                    source="steamdt",
+                    raw={
+                        "selected_strategy": "liquidity_aware_sell_price",
+                        "reason_codes": ["LIQUIDITY_ACCEPTED"],
+                        "selected_platform": "steam",
+                        "platform_prices": [{"platform": "steam"}],
+                    },
+                )
+                for name in market_hash_names
+            },
+            missing=[],
+            errors=[],
+        )
+
+
+
+def _run_provider_smoke_with_output(
+    environ: dict[str, str],
+    *,
+    provider_factory=SmokeFakeProvider,
+) -> tuple[int, list[str], list[object]]:
+    from scripts.steamdt_provider_price_smoke import run_provider_smoke
+
+    output: list[str] = []
+    client_configs: list[object] = []
+
+    def client_factory(config: object) -> object:
+        client_configs.append(config)
+        return object()
+
+    status = asyncio.run(
+        run_provider_smoke(
+            environ,
+            client_factory=client_factory,
+            provider_factory=provider_factory,
+            printer=output.append,
+        )
+    )
+    return status, output, client_configs
+
+
+
+def test_provider_smoke_script_dry_run_default_does_not_request() -> None:
+    from scripts.steamdt_provider_price_smoke import run_provider_smoke
+
+    output: list[str] = []
+
+    def client_factory(config: object) -> object:
+        raise AssertionError("client factory should not be called")
+
+    status = asyncio.run(
+        run_provider_smoke({}, client_factory=client_factory, printer=output.append)
+    )
+
+    assert status == 0
+    assert output == ["SteamDT provider smoke request skipped: STEAMDT_DRY_RUN is not false."]
+
+
+
+def test_provider_smoke_script_missing_api_key_does_not_request() -> None:
+    from scripts.steamdt_provider_price_smoke import run_provider_smoke
+
+    output: list[str] = []
+
+    def client_factory(config: object) -> object:
+        raise AssertionError("client factory should not be called")
+
+    status = asyncio.run(
+        run_provider_smoke(
+            {"STEAMDT_DRY_RUN": "false"},
+            client_factory=client_factory,
+            printer=output.append,
+        )
+    )
+
+    assert status == 0
+    assert output == ["SteamDT provider smoke request skipped: STEAMDT_API_KEY is missing."]
+
+
+
+def test_provider_smoke_script_single_missing_market_hash_name_does_not_request() -> None:
+    from scripts.steamdt_provider_price_smoke import run_provider_smoke
+
+    output: list[str] = []
+
+    def client_factory(config: object) -> object:
+        raise AssertionError("client factory should not be called")
+
+    status = asyncio.run(
+        run_provider_smoke(
+            {"STEAMDT_DRY_RUN": "false", "STEAMDT_API_KEY": "secret-key"},
+            client_factory=client_factory,
+            printer=output.append,
+        )
+    )
+
+    assert status == 0
+    assert output == [
+        "SteamDT provider smoke request skipped: STEAMDT_SMOKE_MARKET_HASH_NAME is missing."
+    ]
+
+
+
+def test_provider_smoke_script_batch_missing_market_hash_names_does_not_request() -> None:
+    from scripts.steamdt_provider_price_smoke import run_provider_smoke
+
+    output: list[str] = []
+
+    def client_factory(config: object) -> object:
+        raise AssertionError("client factory should not be called")
+
+    status = asyncio.run(
+        run_provider_smoke(
+            {
+                "STEAMDT_DRY_RUN": "false",
+                "STEAMDT_API_KEY": "secret-key",
+                "STEAMDT_PROVIDER_BATCH_MODE": "true",
+            },
+            client_factory=client_factory,
+            printer=output.append,
+        )
+    )
+
+    assert status == 0
+    assert output == [
+        "SteamDT provider batch smoke request skipped: "
+        "STEAMDT_SMOKE_MARKET_HASH_NAMES is missing."
+    ]
+
+
+
+def test_provider_smoke_script_batch_over_ten_names_does_not_request() -> None:
+    from scripts.steamdt_provider_price_smoke import run_provider_smoke
+
+    output: list[str] = []
+
+    def client_factory(config: object) -> object:
+        raise AssertionError("client factory should not be called")
+
+    names = ",".join(f"Item {index}" for index in range(11))
+    status = asyncio.run(
+        run_provider_smoke(
+            {
+                "STEAMDT_DRY_RUN": "false",
+                "STEAMDT_API_KEY": "secret-key",
+                "STEAMDT_PROVIDER_BATCH_MODE": "true",
+                "STEAMDT_SMOKE_MARKET_HASH_NAMES": names,
+            },
+            client_factory=client_factory,
+            printer=output.append,
+        )
+    )
+
+    assert status == 0
+    assert output == [
+        "SteamDT provider batch smoke request skipped: maximum 10 market hash names are allowed."
+    ]
+
+
+
+def test_provider_smoke_script_invalid_ratio_does_not_request() -> None:
+    from scripts.steamdt_provider_price_smoke import run_provider_smoke
+
+    output: list[str] = []
+
+    def client_factory(config: object) -> object:
+        raise AssertionError("client factory should not be called")
+
+    status = asyncio.run(
+        run_provider_smoke(
+            {
+                "STEAMDT_DRY_RUN": "false",
+                "STEAMDT_API_KEY": "secret-key",
+                "STEAMDT_SMOKE_MARKET_HASH_NAME": "A",
+                "STEAMDT_MAX_PRICE_TO_AVG_RATIO": "not-a-decimal",
+            },
+            client_factory=client_factory,
+            printer=output.append,
+        )
+    )
+
+    assert status == 0
+    assert output == [
+        "SteamDT provider smoke request skipped: "
+        "STEAMDT_MAX_PRICE_TO_AVG_RATIO must be a valid decimal value"
+    ]
+
+
+
+def test_provider_smoke_script_single_mode_constructs_provider_config() -> None:
+    SmokeFakeProvider.captured_configs = []
+    status, output, client_configs = _run_provider_smoke_with_output(
+        {
+            "STEAMDT_DRY_RUN": "false",
+            "STEAMDT_API_KEY": "secret-key",
+            "STEAMDT_SMOKE_MARKET_HASH_NAME": "A",
+        }
+    )
+
+    assert status == 0
+    assert client_configs
+    assert SmokeFakeProvider.captured_configs[0].enable_avg_sanity_check is False
+    assert SmokeFakeProvider.captured_configs[0].selection_config is not None
+    assert "provider mode: single" in output
+
+
+
+def test_provider_smoke_script_batch_mode_constructs_provider_config() -> None:
+    SmokeFakeProvider.captured_configs = []
+    status, output, client_configs = _run_provider_smoke_with_output(
+        {
+            "STEAMDT_DRY_RUN": "false",
+            "STEAMDT_API_KEY": "secret-key",
+            "STEAMDT_PROVIDER_BATCH_MODE": "true",
+            "STEAMDT_SMOKE_MARKET_HASH_NAMES": "A,B",
+        }
+    )
+
+    assert status == 0
+    assert client_configs
+    assert SmokeFakeProvider.captured_configs[0].max_avg_requests_per_batch == 10
+    assert "provider mode: batch" in output
+    assert "requested count: 2" in output
+
+
+
+def test_provider_smoke_script_avg_sanity_env_enters_provider_config() -> None:
+    SmokeFakeProvider.captured_configs = []
+    status, output, _ = _run_provider_smoke_with_output(
+        {
+            "STEAMDT_DRY_RUN": "false",
+            "STEAMDT_API_KEY": "secret-key",
+            "STEAMDT_SMOKE_MARKET_HASH_NAME": "A",
+            "STEAMDT_ENABLE_AVG_SANITY_CHECK": "true",
+            "STEAMDT_MAX_PRICE_TO_AVG_RATIO": "1.25",
+            "STEAMDT_AVG_SANITY_FALLBACK_TO_LOWEST_POSITIVE": "true",
+            "STEAMDT_PROVIDER_MAX_AVG_REQUESTS_PER_BATCH": "3",
+        }
+    )
+
+    config = SmokeFakeProvider.captured_configs[0]
+    assert status == 0
+    assert config.enable_avg_sanity_check is True
+    assert config.fail_closed_on_avg_error is True
+    assert config.max_avg_requests_per_batch == 3
+    assert config.selection_config is not None
+    assert config.selection_config.max_price_to_avg_ratio == Decimal("1.25")
+    assert config.selection_config.fallback_to_lowest_positive is True
+    assert "avg sanity enabled: True" in output
+
+
+
+def test_provider_smoke_script_output_does_not_include_api_key() -> None:
+    status, output, _ = _run_provider_smoke_with_output(
+        {
+            "STEAMDT_DRY_RUN": "false",
+            "STEAMDT_API_KEY": "super-secret-steamdt-key",
+            "STEAMDT_SMOKE_MARKET_HASH_NAME": "A",
+        }
+    )
+
+    assert status == 0
+    assert "super-secret-steamdt-key" not in "\n".join(output)
+
+
+
+def test_provider_smoke_script_output_does_not_include_authorization_header() -> None:
+    class ErrorProvider:
+        def __init__(self, client: object, config: SteamDTPriceProviderConfig) -> None:
+            self.client = client
+            self.config = config
+
+        async def get_price(self, market_hash_name: str) -> PriceQuote:
+            raise RuntimeError("Authorization: Bearer super-secret-steamdt-key")
+
+    status, output, _ = _run_provider_smoke_with_output(
+        {
+            "STEAMDT_DRY_RUN": "false",
+            "STEAMDT_API_KEY": "super-secret-steamdt-key",
+            "STEAMDT_SMOKE_MARKET_HASH_NAME": "A",
+        },
+        provider_factory=ErrorProvider,
+    )
+
+    joined_output = "\n".join(output)
+    assert status == 1
+    assert "super-secret-steamdt-key" not in joined_output
+    assert "Authorization:" not in joined_output
+    assert "[REDACTED_AUTHORIZATION]" in joined_output
