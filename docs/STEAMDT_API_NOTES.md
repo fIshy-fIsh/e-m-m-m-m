@@ -699,6 +699,34 @@ Retry boundaries:
 - Do not retry parser/schema/Decimal conversion failures.
 - Error strings must not include API keys, Authorization headers, or full raw payloads.
 
+## Phase 12B Endpoint-specific In-memory Rate Limiter
+
+Endpoint policy table:
+
+| Endpoint | Path | Current policy | Source |
+| --- | --- | --- | --- |
+| `price_single` | `/open/cs2/v1/price/single` | 60 requests / minute | Confirmed official quota |
+| `price_batch` | `/open/cs2/v1/price/batch` | 1 request / minute + 5-second project safety buffer | Confirmed official quota plus internal buffer |
+| `price_avg` | `/open/cs2/v1/price/avg` | 10 requests / minute | Internal safety cap only |
+| `base` | `/open/cs2/v1/base` | 1 request / day | Confirmed official quota |
+| `kline` | `/open/cs2/item/v1/kline` | 120 requests / minute | Confirmed official quota |
+| `wear` | `/open/cs2/v1/wear` | 36000 requests / hour | Confirmed official quota |
+
+Notes:
+- `price_avg` 10/min is an internal safety cap, not a confirmed official SteamDT limit.
+- The batch 5-second safety buffer is a project safety margin, not part of the official quota.
+- Policies may exist for endpoints whose HTTP methods remain unimplemented; that does not enable new requests.
+- The limiter uses monotonic-clock sliding windows and records timestamps per endpoint bucket.
+- Fail-fast behavior is intentional: local exhaustion raises `SteamDTRateLimitError` instead of silently sleeping for 60 seconds or longer.
+- HTTP 429 and wrapper `errorCode=4005` record a server cooldown for only the affected endpoint.
+- If HTTP `Retry-After` is present and numeric, cooldown lasts at least that many seconds; otherwise the endpoint policy safety window is used.
+- Transport failures and HTTP 5xx may be retried, but every retry attempt must acquire endpoint budget first.
+- A `price_batch` retry after a 5xx can therefore be blocked by the local 1/min budget before sending another HTTP request; this is expected safe behavior.
+- Current limiter state is process-local only. Different CLI processes do not share request history or server cooldowns.
+- Phase 12C is reserved for Redis/shared limiter behavior across processes.
+- No raw payload, API key, Authorization header, or secret is stored by the limiter.
+- No Redis connection, price cache, pipeline integration, scheduler integration, automatic purchase, automatic login, browser automation, cookie scraping, captcha bypass, risk-control bypass, hidden endpoint, or non-official evasion technique is added in this phase.
+
 ## Safety Notes
 
 - Do not implement auto-buying.

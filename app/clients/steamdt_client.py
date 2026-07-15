@@ -1,5 +1,5 @@
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Protocol
@@ -18,6 +18,13 @@ from app.clients.steamdt_errors import (
 from app.clients.steamdt_price_selection import (
     SteamDTPriceSelectionConfig,
     select_steamdt_price_quote,
+)
+from app.services.steamdt_rate_limiter import (
+    InMemorySteamDTRateLimiter,
+    SteamDTEndpoint,
+    SteamDTRateLimiter,
+    SteamDTRateLimitPolicy,
+    build_steamdt_rate_limit_policies,
 )
 
 UNCONFIRMED_MAPPING_ERROR = (
@@ -39,6 +46,9 @@ class SteamDTClientConfig:
     max_retries: int = 3
     dry_run: bool = True
     rate_limit_per_minute: int = 60
+    rate_limit_policies: dict[SteamDTEndpoint, SteamDTRateLimitPolicy] = field(
+        default_factory=build_steamdt_rate_limit_policies
+    )
 
     def __post_init__(self) -> None:
         if not self.base_url.strip():
@@ -51,6 +61,11 @@ class SteamDTClientConfig:
             raise ValueError("max_retries must be greater than or equal to 0")
         if self.rate_limit_per_minute <= 0:
             raise ValueError("rate_limit_per_minute must be greater than 0")
+        for endpoint in SteamDTEndpoint:
+            if endpoint not in self.rate_limit_policies:
+                raise ValueError(
+                    f"rate_limit_policies is missing endpoint policy: {endpoint.value}"
+                )
 
     def __repr__(self) -> str:
         return (
@@ -60,7 +75,8 @@ class SteamDTClientConfig:
             f"timeout_seconds={self.timeout_seconds}, "
             f"max_retries={self.max_retries}, "
             f"dry_run={self.dry_run}, "
-            f"rate_limit_per_minute={self.rate_limit_per_minute}"
+            f"rate_limit_per_minute={self.rate_limit_per_minute}, "
+            "rate_limit_policies=<endpoint-specific>"
             ")"
         )
 
@@ -705,6 +721,24 @@ def _parse_retry_after_seconds(value: str | None) -> float | None:
         return None
 
 
+def _steamdt_endpoint_for_path(path: str) -> SteamDTEndpoint:
+    """Map a confirmed SteamDT path to its stable local endpoint identifier."""
+
+    if path == "/open/cs2/v1/price/single":
+        return SteamDTEndpoint.PRICE_SINGLE
+    if path == "/open/cs2/v1/price/batch":
+        return SteamDTEndpoint.PRICE_BATCH
+    if path == "/open/cs2/v1/price/avg":
+        return SteamDTEndpoint.PRICE_AVG
+    if path == "/open/cs2/v1/base":
+        return SteamDTEndpoint.BASE
+    if path == "/open/cs2/item/v1/kline":
+        return SteamDTEndpoint.KLINE
+    if path == "/open/cs2/v1/wear":
+        return SteamDTEndpoint.WEAR
+    raise ValueError(f"unknown SteamDT endpoint path: {path}")
+
+
 class SteamDTHttpClient:
     """HTTP client skeleton for future direct SteamDT REST access.
 
@@ -716,11 +750,14 @@ class SteamDTHttpClient:
         self,
         config: SteamDTClientConfig,
         http_client: httpx.AsyncClient | None = None,
+        *,
+        rate_limiter: SteamDTRateLimiter | None = None,
     ) -> None:
         self.config = config
         self.http_client = http_client
-        self._minimum_interval_seconds = 60.0 / config.rate_limit_per_minute
-        self._last_request_monotonic = 0.0
+        self.rate_limiter = rate_limiter or InMemorySteamDTRateLimiter(
+            config.rate_limit_policies
+        )
 
     async def get_price_single_with_selection(
         self,
@@ -737,9 +774,11 @@ class SteamDTHttpClient:
             raise RuntimeError("real SteamDT HTTP requests are disabled in dry-run mode")
 
         path = "/open/cs2/v1/price/single"
+        endpoint = SteamDTEndpoint.PRICE_SINGLE
         payload = await self._request_json(
             "GET",
             path,
+            endpoint=endpoint,
             params={"marketHashName": market_hash_name},
         )
         try:
@@ -748,6 +787,12 @@ class SteamDTHttpClient:
                 payload,
                 endpoint=path,
             )
+        except SteamDTRateLimitError as exc:
+            await self.rate_limiter.record_server_limit(
+                endpoint,
+                retry_after_seconds=exc.retry_after_seconds,
+            )
+            raise
         except SteamDTError:
             raise
         except ValueError as exc:
@@ -792,13 +837,21 @@ class SteamDTHttpClient:
             return SteamDTBatchPriceResult(quotes={}, missing=cleaned_names, raw=None)
 
         path = "/open/cs2/v1/price/batch"
+        endpoint = SteamDTEndpoint.PRICE_BATCH
         payload = await self._request_json(
             "POST",
             path,
+            endpoint=endpoint,
             json={"marketHashNames": cleaned_names},
         )
         try:
             parsed_batch = parse_price_batch_response(cleaned_names, payload, endpoint=path)
+        except SteamDTRateLimitError as exc:
+            await self.rate_limiter.record_server_limit(
+                endpoint,
+                retry_after_seconds=exc.retry_after_seconds,
+            )
+            raise
         except SteamDTError:
             raise
         except ValueError as exc:
@@ -846,13 +899,21 @@ class SteamDTHttpClient:
             raise RuntimeError("real SteamDT HTTP requests are disabled in dry-run mode")
 
         path = "/open/cs2/v1/price/avg"
+        endpoint = SteamDTEndpoint.PRICE_AVG
         payload = await self._request_json(
             "GET",
             path,
+            endpoint=endpoint,
             params={"marketHashName": market_hash_name},
         )
         try:
             return parse_avg_price_response(market_hash_name, payload, endpoint=path)
+        except SteamDTRateLimitError as exc:
+            await self.rate_limiter.record_server_limit(
+                endpoint,
+                retry_after_seconds=exc.retry_after_seconds,
+            )
+            raise
         except SteamDTError:
             raise
         except ValueError as exc:
@@ -881,20 +942,22 @@ class SteamDTHttpClient:
         method: str,
         path: str,
         *,
+        endpoint: SteamDTEndpoint | None = None,
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Perform an HTTP request with timeout, retry, and simple rate limiting."""
+        """Perform an HTTP request with timeout, retry, and endpoint rate limiting."""
 
         if self.config.dry_run:
             raise RuntimeError("real SteamDT HTTP requests are disabled in dry-run mode")
         if not self.config.base_url.strip():
             raise ValueError("base_url cannot be empty")
 
-        await self._respect_rate_limit()
+        limiter_endpoint = endpoint or _steamdt_endpoint_for_path(path)
         last_error: Exception | None = None
 
         for attempt in range(self.config.max_retries + 1):
+            await self.rate_limiter.acquire(limiter_endpoint)
             try:
                 if self.http_client is not None:
                     response = await self.http_client.request(
@@ -927,12 +990,17 @@ class SteamDTHttpClient:
 
             status_code = response.status_code
             if status_code == 429:
+                retry_after_seconds = _parse_retry_after_seconds(
+                    response.headers.get("Retry-After")
+                )
+                await self.rate_limiter.record_server_limit(
+                    limiter_endpoint,
+                    retry_after_seconds=retry_after_seconds,
+                )
                 raise SteamDTRateLimitError(
                     "SteamDT HTTP rate limit reached",
                     endpoint=path,
-                    retry_after_seconds=_parse_retry_after_seconds(
-                        response.headers.get("Retry-After")
-                    ),
+                    retry_after_seconds=retry_after_seconds,
                     status_code=status_code,
                 )
             if 400 <= status_code < 500:
@@ -969,16 +1037,6 @@ class SteamDTHttpClient:
         if last_error is not None:
             raise last_error
         raise SteamDTTransportError("SteamDT HTTP request failed", endpoint=path)
-
-    async def _respect_rate_limit(self) -> None:
-        """Apply a simple minimum-interval gate between outgoing requests."""
-
-        now = asyncio.get_running_loop().time()
-        elapsed = now - self._last_request_monotonic
-        remaining = self._minimum_interval_seconds - elapsed
-        if remaining > 0:
-            await asyncio.sleep(remaining)
-        self._last_request_monotonic = asyncio.get_running_loop().time()
 
     def _build_headers(self) -> dict[str, str]:
         """Build safe HTTP headers for confirmed transport-level behavior only."""

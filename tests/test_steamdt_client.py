@@ -28,6 +28,10 @@ from app.clients.steamdt_errors import (
     SteamDTTransportError,
 )
 from app.clients.steamdt_price_selection import SteamDTPriceSelectionConfig
+from app.services.steamdt_rate_limiter import (
+    SteamDTEndpoint,
+    build_steamdt_rate_limit_policies,
+)
 
 
 def _make_price_quote(name: str = "AK-47 | Redline") -> SteamDTPriceQuote:
@@ -78,6 +82,29 @@ def _response_with_request(status_code: int, payload) -> httpx.Response:
     return response
 
 
+class RecordingRateLimiter:
+    def __init__(self, *, reject_on_acquire: bool = False) -> None:
+        self.reject_on_acquire = reject_on_acquire
+        self.acquired: list[SteamDTEndpoint] = []
+        self.server_limits: list[tuple[SteamDTEndpoint, float | None]] = []
+
+    async def acquire(self, endpoint: SteamDTEndpoint) -> None:
+        self.acquired.append(endpoint)
+        if self.reject_on_acquire:
+            raise SteamDTRateLimitError(
+                "local limit",
+                endpoint=endpoint.value,
+                retry_after_seconds=60,
+            )
+
+    async def record_server_limit(
+        self,
+        endpoint: SteamDTEndpoint,
+        *,
+        retry_after_seconds: float | None = None,
+    ) -> None:
+        self.server_limits.append((endpoint, retry_after_seconds))
+
 
 def test_steamdt_client_config_creates_successfully() -> None:
     config = SteamDTClientConfig()
@@ -115,11 +142,28 @@ def test_steamdt_client_config_rejects_non_positive_rate_limit() -> None:
 
 
 
+def test_steamdt_client_config_accepts_endpoint_specific_rate_limit_policies() -> None:
+    policies = build_steamdt_rate_limit_policies(
+        price_single_per_minute=30,
+        price_batch_per_minute=1,
+        price_avg_per_minute=5,
+        base_per_day=1,
+        kline_per_minute=60,
+        wear_per_hour=100,
+        price_batch_safety_buffer_seconds=7,
+    )
+
+    config = SteamDTClientConfig(rate_limit_policies=policies)
+
+    assert config.rate_limit_policies[SteamDTEndpoint.PRICE_SINGLE].max_requests == 30
+    assert config.rate_limit_policies[SteamDTEndpoint.PRICE_BATCH].safety_buffer_seconds == 7
+
+
+
 def test_steamdt_client_config_repr_does_not_leak_api_key() -> None:
     config = SteamDTClientConfig(api_key="secret-key")
     assert "secret-key" not in repr(config)
     assert "[REDACTED]" in repr(config)
-
 
 
 def test_steamdt_price_quote_creates_successfully() -> None:
@@ -1159,6 +1203,250 @@ def test_steamdt_http_client_typed_error_does_not_leak_api_key() -> None:
     assert exc_info.value.endpoint == "/open/cs2/v1/price/single"
     assert "super-secret-steamdt-key" not in error_text
     assert "Authorization:" not in error_text
+
+
+def test_steamdt_http_client_single_uses_price_single_bucket() -> None:
+    payload = {
+        "success": True,
+        "data": [{"platform": "steam", "sellPrice": "12.34", "sellCount": 2}],
+    }
+    limiter = RecordingRateLimiter()
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    mock_http_client.request.return_value = _response_with_request(200, payload)
+    client = SteamDTHttpClient(config, http_client=mock_http_client, rate_limiter=limiter)
+
+    asyncio.run(client.get_price_single("A"))
+
+    assert limiter.acquired == [SteamDTEndpoint.PRICE_SINGLE]
+
+
+def test_steamdt_http_client_batch_uses_price_batch_bucket() -> None:
+    payload = {
+        "success": True,
+        "data": [
+            {
+                "marketHashName": "A",
+                "dataList": [{"platform": "steam", "sellPrice": "12.34"}],
+            }
+        ],
+    }
+    limiter = RecordingRateLimiter()
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = httpx.Response(200, json=payload)
+    response.request = httpx.Request("POST", "https://open.steamdt.com/open/cs2/v1/price/batch")
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client, rate_limiter=limiter)
+
+    asyncio.run(client.get_price_batch(["A"]))
+
+    assert limiter.acquired == [SteamDTEndpoint.PRICE_BATCH]
+
+
+def test_steamdt_http_client_avg_uses_price_avg_bucket() -> None:
+    payload = {
+        "success": True,
+        "data": {"marketHashName": "A", "avgPrice": "12.34", "dataList": []},
+    }
+    limiter = RecordingRateLimiter()
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    response = httpx.Response(200, json=payload)
+    response.request = httpx.Request("GET", "https://open.steamdt.com/open/cs2/v1/price/avg")
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client, rate_limiter=limiter)
+
+    asyncio.run(client.get_avg_price("A"))
+
+    assert limiter.acquired == [SteamDTEndpoint.PRICE_AVG]
+
+
+def test_steamdt_http_client_acquires_before_each_http_attempt() -> None:
+    payload = {
+        "success": True,
+        "data": [{"platform": "steam", "sellPrice": "12.34", "sellCount": 2}],
+    }
+    limiter = RecordingRateLimiter()
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=1)
+    mock_http_client = AsyncMock()
+    mock_http_client.request.side_effect = [
+        httpx.ReadTimeout("timeout"),
+        _response_with_request(200, payload),
+    ]
+    client = SteamDTHttpClient(config, http_client=mock_http_client, rate_limiter=limiter)
+
+    asyncio.run(client.get_price_single("A"))
+
+    assert limiter.acquired == [
+        SteamDTEndpoint.PRICE_SINGLE,
+        SteamDTEndpoint.PRICE_SINGLE,
+    ]
+    assert mock_http_client.request.await_count == 2
+
+
+def test_steamdt_http_client_local_limiter_rejection_does_not_call_transport() -> None:
+    limiter = RecordingRateLimiter(reject_on_acquire=True)
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    client = SteamDTHttpClient(config, http_client=mock_http_client, rate_limiter=limiter)
+
+    with pytest.raises(SteamDTRateLimitError) as exc_info:
+        asyncio.run(client.get_price_single("A"))
+
+    assert exc_info.value.endpoint == SteamDTEndpoint.PRICE_SINGLE.value
+    mock_http_client.request.assert_not_called()
+
+
+def test_steamdt_http_client_wrapper_4005_records_server_limit() -> None:
+    payload = {
+        "success": False,
+        "errorCode": 4005,
+        "errorMsg": "接口请求达到上限",
+        "errorCodeStr": "RATE_LIMIT",
+        "data": None,
+    }
+    limiter = RecordingRateLimiter()
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=3)
+    mock_http_client = AsyncMock()
+    mock_http_client.request.return_value = _response_with_request(200, payload)
+    client = SteamDTHttpClient(config, http_client=mock_http_client, rate_limiter=limiter)
+
+    with pytest.raises(SteamDTRateLimitError):
+        asyncio.run(client.get_price_single("A"))
+
+    assert limiter.server_limits == [(SteamDTEndpoint.PRICE_SINGLE, None)]
+    mock_http_client.request.assert_awaited_once()
+
+
+def test_steamdt_http_client_http_429_records_server_limit() -> None:
+    limiter = RecordingRateLimiter()
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=3)
+    mock_http_client = AsyncMock()
+    response = _response_with_request(429, {"success": False})
+    response.headers["Retry-After"] = "2.5"
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client, rate_limiter=limiter)
+
+    with pytest.raises(SteamDTRateLimitError):
+        asyncio.run(client.get_price_single("A"))
+
+    assert limiter.server_limits == [(SteamDTEndpoint.PRICE_SINGLE, 2.5)]
+    mock_http_client.request.assert_awaited_once()
+
+
+def test_steamdt_http_client_parser_error_does_not_record_server_limit() -> None:
+    limiter = RecordingRateLimiter()
+    payload = {"success": True, "data": {}}
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=3)
+    mock_http_client = AsyncMock()
+    mock_http_client.request.return_value = _response_with_request(200, payload)
+    client = SteamDTHttpClient(config, http_client=mock_http_client, rate_limiter=limiter)
+
+    with pytest.raises(SteamDTResponseParseError):
+        asyncio.run(client.get_price_single("A"))
+
+    assert limiter.server_limits == []
+
+
+@pytest.mark.parametrize("status_code", [401, 403, 404])
+def test_steamdt_http_client_401_403_404_do_not_record_server_limit(
+    status_code: int,
+) -> None:
+    limiter = RecordingRateLimiter()
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=3)
+    mock_http_client = AsyncMock()
+    mock_http_client.request.return_value = _response_with_request(status_code, {"success": False})
+    client = SteamDTHttpClient(config, http_client=mock_http_client, rate_limiter=limiter)
+
+    with pytest.raises(SteamDTHttpStatusError):
+        asyncio.run(client.get_price_single("A"))
+
+    assert limiter.server_limits == []
+    mock_http_client.request.assert_awaited_once()
+
+
+def test_steamdt_http_client_5xx_retry_uses_endpoint_budget() -> None:
+    payload = {
+        "success": True,
+        "data": [{"platform": "steam", "sellPrice": "12.34", "sellCount": 2}],
+    }
+    limiter = RecordingRateLimiter()
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=1)
+    mock_http_client = AsyncMock()
+    mock_http_client.request.side_effect = [
+        _response_with_request(500, {"success": False}),
+        _response_with_request(200, payload),
+    ]
+    client = SteamDTHttpClient(config, http_client=mock_http_client, rate_limiter=limiter)
+
+    asyncio.run(client.get_price_single("A"))
+
+    assert limiter.acquired == [
+        SteamDTEndpoint.PRICE_SINGLE,
+        SteamDTEndpoint.PRICE_SINGLE,
+    ]
+    assert mock_http_client.request.await_count == 2
+
+
+def test_steamdt_http_client_transport_retry_uses_endpoint_budget() -> None:
+    payload = {
+        "success": True,
+        "data": [{"platform": "steam", "sellPrice": "12.34", "sellCount": 2}],
+    }
+    limiter = RecordingRateLimiter()
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=1)
+    mock_http_client = AsyncMock()
+    mock_http_client.request.side_effect = [
+        httpx.ConnectError("connection failed"),
+        _response_with_request(200, payload),
+    ]
+    client = SteamDTHttpClient(config, http_client=mock_http_client, rate_limiter=limiter)
+
+    asyncio.run(client.get_price_single("A"))
+
+    assert limiter.acquired == [
+        SteamDTEndpoint.PRICE_SINGLE,
+        SteamDTEndpoint.PRICE_SINGLE,
+    ]
+    assert mock_http_client.request.await_count == 2
+
+
+def test_steamdt_http_client_batch_5xx_retry_cannot_bypass_one_per_minute_budget() -> None:
+    policies = build_steamdt_rate_limit_policies(price_batch_per_minute=1)
+    config = SteamDTClientConfig(
+        api_key="secret-key",
+        dry_run=False,
+        max_retries=1,
+        rate_limit_policies=policies,
+    )
+    mock_http_client = AsyncMock()
+    response = httpx.Response(500, json={"success": False})
+    response.request = httpx.Request("POST", "https://open.steamdt.com/open/cs2/v1/price/batch")
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    with pytest.raises(SteamDTRateLimitError) as exc_info:
+        asyncio.run(client.get_price_batch(["A"]))
+
+    assert exc_info.value.endpoint == SteamDTEndpoint.PRICE_BATCH.value
+    assert mock_http_client.request.await_count == 1
+
+
+def test_steamdt_http_client_dry_run_does_not_acquire_or_request() -> None:
+    limiter = RecordingRateLimiter()
+    mock_http_client = AsyncMock()
+    client = SteamDTHttpClient(
+        SteamDTClientConfig(api_key=None, dry_run=True),
+        http_client=mock_http_client,
+        rate_limiter=limiter,
+    )
+
+    with pytest.raises(RuntimeError, match="dry-run mode"):
+        asyncio.run(client.get_price_single("A"))
+
+    assert limiter.acquired == []
+    mock_http_client.request.assert_not_called()
 
 
 def _clear_steamdt_smoke_env(monkeypatch: pytest.MonkeyPatch) -> None:

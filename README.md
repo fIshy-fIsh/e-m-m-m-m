@@ -139,6 +139,18 @@
 - Observed `errorCode=4005` means the SteamDT interface request limit was reached; stop manual smoke requests instead of retrying aggressively.
 - Error text must remain redacted: no API key, no Authorization header, no full raw payload.
 
+### SteamDT endpoint-specific in-memory limiter
+- `SteamDTHttpClient` uses endpoint-specific, process-local buckets for SteamDT requests.
+- Current buckets: `price_single`, `price_batch`, `price_avg`, `base`, `kline`, and `wear`.
+- The limiter is fail-fast: it raises `SteamDTRateLimitError` instead of silently sleeping for a long window.
+- Every real HTTP attempt consumes that endpoint's request budget, including attempts that later timeout, return HTTP 5xx, or fail parsing.
+- Transport and HTTP 5xx retries still obey the endpoint budget; a retry may be blocked locally before another HTTP request is sent.
+- Batch price uses the confirmed 1/min quota plus a project 5-second safety buffer.
+- Avg price defaults to 10/min as an internal safety cap; 10/min is an internal safety cap, not a confirmed official SteamDT limit.
+- The limiter is in-memory only. Different CLI processes do not share bucket state, so Phase 12C will handle Redis shared limiting.
+- This limiter is not connected to pipeline / scheduler and does not add price cache behavior.
+- It does not implement automatic buying, automatic login, browser automation, cookie scraping, captcha bypass, risk-control bypass, hidden endpoints, or any non-official evasion technique.
+
 ## Docker dry-run
 1. `cp .env.example .env`
 2. `docker compose build`

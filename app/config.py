@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -53,7 +53,25 @@ class Settings(BaseSettings):
     steamdt_base_url: str = "https://open.steamdt.com"
     steamdt_api_key: str = ""
     steamdt_dry_run: bool = True
-    steamdt_rate_limit_per_minute: int = 60
+    steamdt_rate_limit_per_minute: int = Field(
+        default=60,
+        gt=0,
+        description="Deprecated; SteamDT uses endpoint-specific request budgets.",
+    )
+    steamdt_rate_limit_price_single_per_minute: int = Field(default=60, gt=0)
+    steamdt_rate_limit_price_batch_per_minute: int = Field(default=1, gt=0)
+    steamdt_rate_limit_price_avg_per_minute: int = Field(
+        default=10,
+        gt=0,
+        description=(
+            "Internal safety cap; official SteamDT limit is not documented in the "
+            "permissions table."
+        ),
+    )
+    steamdt_rate_limit_base_per_day: int = Field(default=1, gt=0)
+    steamdt_rate_limit_kline_per_minute: int = Field(default=120, gt=0)
+    steamdt_rate_limit_wear_per_hour: int = Field(default=36000, gt=0)
+    steamdt_rate_limit_price_batch_safety_buffer_seconds: float = Field(default=5.0, ge=0)
 
     scan_high_priority_interval_seconds: int = 60
     scan_normal_interval_seconds: int = 300
