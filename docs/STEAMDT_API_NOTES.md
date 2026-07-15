@@ -674,6 +674,31 @@ Additional boundaries:
 - No automated purchase.
 - No automated login.
 
+## Phase 12A Typed Errors and Retry Classification
+
+Real manual read-only smoke observations completed before this phase:
+- Single price endpoint passed: `GET /open/cs2/v1/price/single`.
+- Avg price endpoint passed: `GET /open/cs2/v1/price/avg`.
+- Batch price endpoint passed: `POST /open/cs2/v1/price/batch`.
+- Provider single flow passed with injected SteamDT HTTP client.
+- Provider batch smoke observed SteamDT `errorCode=4005` after repeated batch calls within roughly one minute; this is treated as an API rate-limit condition.
+- No raw payload or API key is stored in this document.
+
+Typed error classification:
+- `SteamDTTransportError`: connect/read timeout, connection reset, and other transport failures. These may be retried within `max_retries`.
+- `SteamDTHttpStatusError`: non-rate-limit HTTP status failures. HTTP 5xx may be retried; HTTP 400 / 401 / 403 / 404 are not automatically retried.
+- `SteamDTApiError`: SteamDT wrapper `success=false` business/API failures other than known rate-limit code `4005`. These are not automatically retried.
+- `SteamDTRateLimitError`: HTTP 429 or SteamDT wrapper `errorCode=4005`. These are not automatically retried.
+- `SteamDTResponseParseError`: invalid JSON, unexpected wrapper/data shape, invalid Decimal/int conversion, or parser schema mismatch. These are not automatically retried.
+
+Retry boundaries:
+- Retry only transport failures and HTTP 5xx.
+- Do not retry HTTP 400 / 401 / 403 / 404 / 429.
+- Do not retry SteamDT wrapper `errorCode=4005`.
+- Do not retry other `success=false` wrapper errors.
+- Do not retry parser/schema/Decimal conversion failures.
+- Error strings must not include API keys, Authorization headers, or full raw payloads.
+
 ## Safety Notes
 
 - Do not implement auto-buying.

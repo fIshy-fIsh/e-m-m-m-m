@@ -7,6 +7,7 @@ from app.clients.steamdt_client import (
     SteamDTClient,
     SteamDTPriceQuote,
 )
+from app.clients.steamdt_errors import SteamDTError
 from app.clients.steamdt_price_selection import SteamDTPriceSelectionConfig
 
 
@@ -130,6 +131,8 @@ class SteamDTPriceProvider:
                 )
             else:
                 quote = await self.steamdt_client.get_price_single(market_hash_name)
+        except SteamDTError:
+            raise
         except Exception as exc:
             raise RuntimeError(
                 f"STEAMDT_PRICE_REQUEST_FAILED: {_safe_error_message(exc)}"

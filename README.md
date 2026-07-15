@@ -132,6 +132,13 @@
 - Provider smoke 只组合 injected `SteamDTHttpClient` + `SteamDTPriceProvider`，不接入 pipeline / scheduler / alerts。
 - API key 不要提交到 git。
 
+### SteamDT typed errors and retry classification
+- SteamDT client errors are classified into transport, HTTP status, API wrapper, rate-limit, and response-parse errors.
+- Retried automatically: transport failures and HTTP 5xx, bounded by `max_retries`.
+- Not retried automatically: HTTP 400 / 401 / 403 / 404 / 429, SteamDT wrapper `errorCode=4005`, other `success=false` wrapper errors, and parser/schema/Decimal conversion errors.
+- Observed `errorCode=4005` means the SteamDT interface request limit was reached; stop manual smoke requests instead of retrying aggressively.
+- Error text must remain redacted: no API key, no Authorization header, no full raw payload.
+
 ## Docker dry-run
 1. `cp .env.example .env`
 2. `docker compose build`

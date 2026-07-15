@@ -6,6 +6,15 @@ from typing import Any, Protocol
 
 import httpx
 
+from app.clients.steamdt_errors import (
+    SteamDTApiError,
+    SteamDTError,
+    SteamDTHttpStatusError,
+    SteamDTRateLimitError,
+    SteamDTResponseParseError,
+    SteamDTTransportError,
+    redact_steamdt_error_text,
+)
 from app.clients.steamdt_price_selection import (
     SteamDTPriceSelectionConfig,
     select_steamdt_price_quote,
@@ -355,23 +364,40 @@ class DryRunSteamDTClient:
 
 
 
-def _require_response_wrapper(payload: dict[str, Any]) -> Any:
+def _require_response_wrapper(payload: dict[str, Any], *, endpoint: str | None = None) -> Any:
     """Validate the common SteamDT wrapper and return the inner `data` payload."""
 
     if not isinstance(payload, dict):
-        raise RuntimeError("SteamDT response payload must be a dict")
+        raise SteamDTResponseParseError(
+            "SteamDT response payload must be a dict",
+            endpoint=endpoint,
+        )
 
     if payload.get("success") is False:
         error_code = payload.get("errorCode")
         error_msg = payload.get("errorMsg")
         error_code_str = payload.get("errorCodeStr")
-        raise RuntimeError(
-            "SteamDT response indicated failure: "
-            f"errorCode={error_code}, errorMsg={error_msg}, errorCodeStr={error_code_str}"
+        if error_code == 4005 or str(error_code) == "4005":
+            raise SteamDTRateLimitError(
+                "SteamDT API rate limit reached",
+                endpoint=endpoint,
+                error_code=error_code,
+                error_msg=None if error_msg is None else str(error_msg),
+                error_code_str=None if error_code_str is None else str(error_code_str),
+            )
+        raise SteamDTApiError(
+            "SteamDT response indicated failure",
+            endpoint=endpoint,
+            error_code=error_code,
+            error_msg=None if error_msg is None else str(error_msg),
+            error_code_str=None if error_code_str is None else str(error_code_str),
         )
 
     if "data" not in payload:
-        raise RuntimeError("SteamDT response is missing data field")
+        raise SteamDTResponseParseError(
+            "SteamDT response is missing data field",
+            endpoint=endpoint,
+        )
 
     return payload["data"]
 
@@ -384,8 +410,13 @@ def _to_decimal_or_none(value: Any) -> Decimal | None:
         return None
     try:
         return Decimal(str(value))
+    except SteamDTResponseParseError:
+        raise
     except Exception as exc:
-        raise ValueError(f"cannot convert value to Decimal: {value!r}") from exc
+        raise SteamDTResponseParseError(
+            f"cannot convert value to Decimal: {redact_steamdt_error_text(type(value).__name__)}",
+            endpoint="parse_decimal",
+        ) from exc
 
 
 
@@ -395,26 +426,37 @@ def _to_int_or_none(value: Any) -> int | None:
     if value is None or value == "":
         return None
     if isinstance(value, float) and not value.is_integer():
-        raise ValueError(f"cannot convert non-integer float to int: {value!r}")
+        raise SteamDTResponseParseError(
+            "cannot convert non-integer float to int",
+            endpoint="parse_int",
+        )
     try:
         return int(value)
     except Exception as exc:
-        raise ValueError(f"cannot convert value to int: {value!r}") from exc
+        raise SteamDTResponseParseError(
+            f"cannot convert value to int: {redact_steamdt_error_text(type(value).__name__)}",
+            endpoint="parse_int",
+        ) from exc
 
 
 
 def parse_price_single_response(
     market_hash_name: str,
     payload: dict[str, Any],
+    *,
+    endpoint: str | None = "parse_price_single_response",
 ) -> list[SteamDTPlatformPrice]:
     """Parse SteamDT single-price response data into platform-level price records."""
 
     if not market_hash_name.strip():
         raise ValueError("market_hash_name cannot be empty")
 
-    data = _require_response_wrapper(payload)
+    data = _require_response_wrapper(payload, endpoint=endpoint)
     if not isinstance(data, list):
-        raise ValueError("SteamDT single price response data must be a list")
+        raise SteamDTResponseParseError(
+            "SteamDT single price response data must be a list",
+            endpoint=endpoint,
+        )
 
     results: list[SteamDTPlatformPrice] = []
     for item in data:
@@ -446,12 +488,17 @@ def parse_price_single_response(
 def parse_price_batch_response(
     requested_market_hash_names: list[str],
     payload: dict[str, Any],
+    *,
+    endpoint: str | None = "parse_price_batch_response",
 ) -> dict[str, list[SteamDTPlatformPrice]]:
     """Parse SteamDT batch-price response data into grouped platform-level price records."""
 
-    data = _require_response_wrapper(payload)
+    data = _require_response_wrapper(payload, endpoint=endpoint)
     if not isinstance(data, list):
-        raise ValueError("SteamDT batch price response data must be a list")
+        raise SteamDTResponseParseError(
+            "SteamDT batch price response data must be a list",
+            endpoint=endpoint,
+        )
 
     parsed: dict[str, list[SteamDTPlatformPrice]] = {}
     for batch_item in data:
@@ -469,6 +516,7 @@ def parse_price_batch_response(
         parsed[str(market_hash_name)] = parse_price_single_response(
             str(market_hash_name),
             {"success": True, "data": data_list},
+            endpoint=endpoint,
         )
     return parsed
 
@@ -477,13 +525,15 @@ def parse_price_batch_response(
 def parse_avg_price_response(
     market_hash_name: str,
     payload: dict[str, Any],
+    *,
+    endpoint: str | None = "parse_avg_price_response",
 ) -> SteamDTAvgPrice:
     """Parse SteamDT 7-day average price response into a normalized avg-price model."""
 
     if not market_hash_name.strip():
         raise ValueError("market_hash_name cannot be empty")
 
-    data = _require_response_wrapper(payload)
+    data = _require_response_wrapper(payload, endpoint=endpoint)
     if not isinstance(data, dict):
         raise ValueError("SteamDT avg price response data must be a dict")
 
@@ -644,6 +694,17 @@ def _select_lowest_positive_sell_price_quote(
     )
 
 
+def _parse_retry_after_seconds(value: str | None) -> float | None:
+    """Parse Retry-After seconds when SteamDT/httpx provides it as a number."""
+
+    if value is None or value.strip() == "":
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
 class SteamDTHttpClient:
     """HTTP client skeleton for future direct SteamDT REST access.
 
@@ -675,12 +736,22 @@ class SteamDTHttpClient:
         if self.config.dry_run:
             raise RuntimeError("real SteamDT HTTP requests are disabled in dry-run mode")
 
+        path = "/open/cs2/v1/price/single"
         payload = await self._request_json(
             "GET",
-            "/open/cs2/v1/price/single",
+            path,
             params={"marketHashName": market_hash_name},
         )
-        platform_prices = parse_price_single_response(market_hash_name, payload)
+        try:
+            platform_prices = parse_price_single_response(
+                market_hash_name,
+                payload,
+                endpoint=path,
+            )
+        except SteamDTError:
+            raise
+        except ValueError as exc:
+            raise SteamDTResponseParseError(str(exc), endpoint=path) from exc
         selected_result = select_steamdt_price_quote(
             market_hash_name,
             platform_prices,
@@ -720,12 +791,18 @@ class SteamDTHttpClient:
         if self.config.dry_run:
             return SteamDTBatchPriceResult(quotes={}, missing=cleaned_names, raw=None)
 
+        path = "/open/cs2/v1/price/batch"
         payload = await self._request_json(
             "POST",
-            "/open/cs2/v1/price/batch",
+            path,
             json={"marketHashNames": cleaned_names},
         )
-        parsed_batch = parse_price_batch_response(cleaned_names, payload)
+        try:
+            parsed_batch = parse_price_batch_response(cleaned_names, payload, endpoint=path)
+        except SteamDTError:
+            raise
+        except ValueError as exc:
+            raise SteamDTResponseParseError(str(exc), endpoint=path) from exc
 
         quotes: dict[str, SteamDTPriceQuote] = {}
         missing: list[str] = []
@@ -768,12 +845,18 @@ class SteamDTHttpClient:
         if self.config.dry_run:
             raise RuntimeError("real SteamDT HTTP requests are disabled in dry-run mode")
 
+        path = "/open/cs2/v1/price/avg"
         payload = await self._request_json(
             "GET",
-            "/open/cs2/v1/price/avg",
+            path,
             params={"marketHashName": market_hash_name},
         )
-        return parse_avg_price_response(market_hash_name, payload)
+        try:
+            return parse_avg_price_response(market_hash_name, payload, endpoint=path)
+        except SteamDTError:
+            raise
+        except ValueError as exc:
+            raise SteamDTResponseParseError(str(exc), endpoint=path) from exc
 
     async def get_base_item_info(self, market_hash_name: str) -> SteamDTBaseItemInfo:
         """Raise until SteamDT base-item endpoint mapping is fully confirmed."""
@@ -833,19 +916,59 @@ class SteamDTHttpClient:
                             json=json,
                             params=params,
                         )
-
-                response.raise_for_status()
-                payload = response.json()
-                if not isinstance(payload, dict):
-                    raise RuntimeError("SteamDT response payload must be a JSON object")
-                return payload
-            except (httpx.HTTPError, RuntimeError, ValueError) as exc:
-                last_error = exc
+            except httpx.TransportError as exc:
+                last_error = SteamDTTransportError(str(exc), endpoint=path)
                 if attempt >= self.config.max_retries:
-                    raise RuntimeError("SteamDT HTTP request failed") from exc
+                    raise last_error from exc
                 await asyncio.sleep(2**attempt * 0.1)
+                continue
+            except httpx.HTTPError as exc:
+                raise SteamDTTransportError(str(exc), endpoint=path) from exc
 
-        raise RuntimeError("SteamDT HTTP request failed") from last_error
+            status_code = response.status_code
+            if status_code == 429:
+                raise SteamDTRateLimitError(
+                    "SteamDT HTTP rate limit reached",
+                    endpoint=path,
+                    retry_after_seconds=_parse_retry_after_seconds(
+                        response.headers.get("Retry-After")
+                    ),
+                    status_code=status_code,
+                )
+            if 400 <= status_code < 500:
+                raise SteamDTHttpStatusError(
+                    "SteamDT HTTP client error",
+                    endpoint=path,
+                    status_code=status_code,
+                )
+            if status_code >= 500:
+                last_error = SteamDTHttpStatusError(
+                    "SteamDT HTTP server error",
+                    endpoint=path,
+                    status_code=status_code,
+                )
+                if attempt >= self.config.max_retries:
+                    raise last_error
+                await asyncio.sleep(2**attempt * 0.1)
+                continue
+
+            try:
+                payload = response.json()
+            except ValueError as exc:
+                raise SteamDTResponseParseError(
+                    "SteamDT response JSON could not be parsed",
+                    endpoint=path,
+                ) from exc
+            if not isinstance(payload, dict):
+                raise SteamDTResponseParseError(
+                    "SteamDT response payload must be a JSON object",
+                    endpoint=path,
+                )
+            return payload
+
+        if last_error is not None:
+            raise last_error
+        raise SteamDTTransportError("SteamDT HTTP request failed", endpoint=path)
 
     async def _respect_rate_limit(self) -> None:
         """Apply a simple minimum-interval gate between outgoing requests."""

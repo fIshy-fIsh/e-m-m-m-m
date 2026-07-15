@@ -21,6 +21,12 @@ from app.clients.steamdt_client import (
     SteamDTPriceQuote,
     SteamDTWearInfo,
 )
+from app.clients.steamdt_errors import (
+    SteamDTHttpStatusError,
+    SteamDTRateLimitError,
+    SteamDTResponseParseError,
+    SteamDTTransportError,
+)
 from app.clients.steamdt_price_selection import SteamDTPriceSelectionConfig
 
 
@@ -391,7 +397,7 @@ def test_steamdt_http_client_get_price_single_rejects_non_2xx_response() -> None
     mock_http_client.request.return_value = response
     client = SteamDTHttpClient(config, http_client=mock_http_client)
 
-    with pytest.raises(RuntimeError, match="SteamDT HTTP request failed"):
+    with pytest.raises(SteamDTHttpStatusError, match="status_code=500"):
         asyncio.run(client.get_price_single("A"))
 
 
@@ -403,7 +409,7 @@ def test_steamdt_http_client_get_price_single_rejects_non_dict_json_payload() ->
     mock_http_client.request.return_value = response
     client = SteamDTHttpClient(config, http_client=mock_http_client)
 
-    with pytest.raises(RuntimeError, match="SteamDT HTTP request failed"):
+    with pytest.raises(SteamDTResponseParseError, match="JSON object"):
         asyncio.run(client.get_price_single("A"))
 
 
@@ -621,7 +627,7 @@ def test_steamdt_http_client_get_price_batch_rejects_non_2xx_response() -> None:
     mock_http_client.request.return_value = response
     client = SteamDTHttpClient(config, http_client=mock_http_client)
 
-    with pytest.raises(RuntimeError, match="SteamDT HTTP request failed"):
+    with pytest.raises(SteamDTHttpStatusError, match="status_code=500"):
         asyncio.run(client.get_price_batch(["A"]))
 
 
@@ -634,7 +640,7 @@ def test_steamdt_http_client_get_price_batch_rejects_non_dict_json_payload() -> 
     mock_http_client.request.return_value = response
     client = SteamDTHttpClient(config, http_client=mock_http_client)
 
-    with pytest.raises(RuntimeError, match="SteamDT HTTP request failed"):
+    with pytest.raises(SteamDTResponseParseError, match="JSON object"):
         asyncio.run(client.get_price_batch(["A"]))
 
 
@@ -733,7 +739,7 @@ def test_steamdt_http_client_get_avg_price_rejects_non_2xx_response() -> None:
     mock_http_client.request.return_value = response
     client = SteamDTHttpClient(config, http_client=mock_http_client)
 
-    with pytest.raises(RuntimeError, match="SteamDT HTTP request failed"):
+    with pytest.raises(SteamDTHttpStatusError, match="status_code=500"):
         asyncio.run(client.get_avg_price("AK-47 | Redline"))
 
 
@@ -746,7 +752,7 @@ def test_steamdt_http_client_get_avg_price_rejects_non_dict_json_payload() -> No
     mock_http_client.request.return_value = response
     client = SteamDTHttpClient(config, http_client=mock_http_client)
 
-    with pytest.raises(RuntimeError, match="SteamDT HTTP request failed"):
+    with pytest.raises(SteamDTResponseParseError, match="JSON object"):
         asyncio.run(client.get_avg_price("AK-47 | Redline"))
 
 
@@ -1025,6 +1031,134 @@ def test_steamdt_http_client_get_price_single_skips_avg_sanity_when_ratio_is_non
 
     assert result.price_cny == Decimal("20.00")
 
+
+
+
+def test_steamdt_http_client_wrapper_error_4005_is_rate_limit_without_retry() -> None:
+    payload = {
+        "success": False,
+        "errorCode": 4005,
+        "errorMsg": "接口请求达到上限",
+        "errorCodeStr": "RATE_LIMIT",
+        "data": None,
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=3)
+    mock_http_client = AsyncMock()
+    response = _response_with_request(200, payload)
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    with pytest.raises(SteamDTRateLimitError) as exc_info:
+        asyncio.run(client.get_price_single("A"))
+
+    assert exc_info.value.endpoint == "/open/cs2/v1/price/single"
+    assert exc_info.value.error_code == 4005
+    mock_http_client.request.assert_awaited_once()
+
+
+def test_steamdt_http_client_http_429_is_rate_limit_without_retry() -> None:
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=3)
+    mock_http_client = AsyncMock()
+    response = _response_with_request(429, {"success": False})
+    response.headers["Retry-After"] = "2.5"
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    with pytest.raises(SteamDTRateLimitError) as exc_info:
+        asyncio.run(client.get_price_single("A"))
+
+    assert exc_info.value.endpoint == "/open/cs2/v1/price/single"
+    assert exc_info.value.status_code == 429
+    assert exc_info.value.retry_after_seconds == 2.5
+    mock_http_client.request.assert_awaited_once()
+
+
+@pytest.mark.parametrize("status_code", [401, 403, 404])
+def test_steamdt_http_client_http_auth_and_not_found_errors_do_not_retry(
+    status_code: int,
+) -> None:
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=3)
+    mock_http_client = AsyncMock()
+    response = _response_with_request(status_code, {"success": False})
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    with pytest.raises(SteamDTHttpStatusError) as exc_info:
+        asyncio.run(client.get_price_single("A"))
+
+    assert exc_info.value.status_code == status_code
+    assert exc_info.value.endpoint == "/open/cs2/v1/price/single"
+    mock_http_client.request.assert_awaited_once()
+
+
+def test_steamdt_http_client_parser_error_does_not_retry() -> None:
+    payload = {"success": True, "data": {}}
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=3)
+    mock_http_client = AsyncMock()
+    response = _response_with_request(200, payload)
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    with pytest.raises(SteamDTResponseParseError):
+        asyncio.run(client.get_price_single("A"))
+
+    mock_http_client.request.assert_awaited_once()
+
+
+def test_steamdt_http_client_timeout_retries_until_success() -> None:
+    payload = {
+        "success": True,
+        "data": [{"platform": "steam", "sellPrice": "12.34", "sellCount": 2}],
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=1)
+    mock_http_client = AsyncMock()
+    response = _response_with_request(200, payload)
+    mock_http_client.request.side_effect = [httpx.ReadTimeout("timeout"), response]
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    result = asyncio.run(client.get_price_single("A"))
+
+    assert result.price_cny == Decimal("12.34")
+    assert mock_http_client.request.await_count == 2
+
+
+def test_steamdt_http_client_http_500_retries_until_success() -> None:
+    payload = {
+        "success": True,
+        "data": [{"platform": "steam", "sellPrice": "12.34", "sellCount": 2}],
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=1)
+    mock_http_client = AsyncMock()
+    first = _response_with_request(500, {"success": False})
+    second = _response_with_request(200, payload)
+    mock_http_client.request.side_effect = [first, second]
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    result = asyncio.run(client.get_price_single("A"))
+
+    assert result.price_cny == Decimal("12.34")
+    assert mock_http_client.request.await_count == 2
+
+
+def test_steamdt_http_client_typed_error_does_not_leak_api_key() -> None:
+    config = SteamDTClientConfig(
+        api_key="super-secret-steamdt-key",
+        dry_run=False,
+        max_retries=0,
+    )
+    mock_http_client = AsyncMock()
+    mock_http_client.request.side_effect = httpx.ConnectError(
+        "Authorization: Bearer super-secret-steamdt-key"
+    )
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    with pytest.raises(SteamDTTransportError) as exc_info:
+        asyncio.run(client.get_price_single("A"))
+
+    error_text = str(exc_info.value)
+    assert exc_info.value.endpoint == "/open/cs2/v1/price/single"
+    assert "super-secret-steamdt-key" not in error_text
+    assert "Authorization:" not in error_text
 
 
 def _clear_steamdt_smoke_env(monkeypatch: pytest.MonkeyPatch) -> None:
