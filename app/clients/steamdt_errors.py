@@ -121,5 +121,25 @@ class SteamDTRateLimitError(SteamDTError):
         )
 
 
+class SteamDTRateLimitBackendError(SteamDTError):
+    """Rate-limiter backend failure that should fail closed before SteamDT requests."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        endpoint: str | None = None,
+        backend: str,
+        operation: str,
+    ) -> None:
+        self.backend = redact_steamdt_error_text(backend)
+        self.operation = redact_steamdt_error_text(operation)
+        super().__init__(message, endpoint=endpoint)
+
+    def __str__(self) -> str:
+        base = super().__str__()
+        return f"{base}: backend={self.backend}, operation={self.operation}"
+
+
 class SteamDTResponseParseError(SteamDTError, ValueError):
     """SteamDT response schema/JSON/field conversion parse failure."""

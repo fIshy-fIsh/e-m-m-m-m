@@ -151,6 +151,17 @@
 - This limiter is not connected to pipeline / scheduler and does not add price cache behavior.
 - It does not implement automatic buying, automatic login, browser automation, cookie scraping, captcha bypass, risk-control bypass, hidden endpoints, or any non-official evasion technique.
 
+### SteamDT Redis shared limiter core
+- `RedisSteamDTRateLimiter` provides a shared limiter core for callers that explicitly inject an already-created async Redis client.
+- It does not read env, call `Redis.from_url()`, own the Redis connection, or close the injected client.
+- It uses Redis Lua scripts so each acquire / server-cooldown decision is atomic across CLI, API, and scheduler processes.
+- The Lua acquire path uses Redis server `TIME`, a per-endpoint sorted set, and non-sensitive UUID request members.
+- Redis keys are endpoint-scoped and versioned; they do not contain API keys, Authorization headers, market hash names, Redis passwords, or full URLs.
+- Redis backend failures raise `SteamDTRateLimitBackendError` and fail closed before a SteamDT HTTP request is sent.
+- There is no automatic fallback to in-memory limiting; fallback must be an explicit future composition decision.
+- `SteamDTHttpClient` still defaults to `InMemorySteamDTRateLimiter`; Redis limiter composition wiring is not enabled in this phase.
+- This Redis limiter core is not connected to pipeline / scheduler, does not add price cache behavior, and does not run real SteamDT requests.
+
 ## Docker dry-run
 1. `cp .env.example .env`
 2. `docker compose build`

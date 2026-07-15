@@ -2,6 +2,7 @@ from app.clients.steamdt_errors import (
     SteamDTApiError,
     SteamDTError,
     SteamDTHttpStatusError,
+    SteamDTRateLimitBackendError,
     SteamDTRateLimitError,
     SteamDTResponseParseError,
     SteamDTTransportError,
@@ -73,6 +74,22 @@ def test_typed_error_str_does_not_leak_api_key() -> None:
 
     assert "super-secret-steamdt-key" not in str(error)
     assert "Bearer [REDACTED]" in str(error)
+
+
+def test_rate_limit_backend_error_preserves_safe_backend_and_operation() -> None:
+    error = SteamDTRateLimitBackendError(
+        "redis failed with Authorization: Bearer super-secret",
+        endpoint="price_batch",
+        backend="redis",
+        operation="acquire",
+    )
+
+    assert error.endpoint == "price_batch"
+    assert error.backend == "redis"
+    assert error.operation == "acquire"
+    assert not isinstance(error, SteamDTRateLimitError)
+    assert "Authorization:" not in str(error)
+    assert "super-secret" not in str(error)
 
 
 def test_response_parse_error_is_value_error_and_steamdt_error() -> None:

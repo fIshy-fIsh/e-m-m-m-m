@@ -727,6 +727,57 @@ Notes:
 - No raw payload, API key, Authorization header, or secret is stored by the limiter.
 - No Redis connection, price cache, pipeline integration, scheduler integration, automatic purchase, automatic login, browser automation, cookie scraping, captcha bypass, risk-control bypass, hidden endpoint, or non-official evasion technique is added in this phase.
 
+## Phase 12C1 Redis Shared Rate Limiter Core
+
+Why process-local limiting is not enough:
+- The in-memory limiter protects only one Python process.
+- Separate CLI, API, and scheduler processes can otherwise have independent request histories.
+- A Redis-backed limiter lets explicitly wired callers share endpoint budget state across processes.
+
+Redis key schema:
+- Each endpoint uses two keys:
+  - `{steamdt-rate-limit-v1:<endpoint>}:requests`
+  - `{steamdt-rate-limit-v1:<endpoint>}:blocked`
+- The `{...}` hash tag keeps one endpoint's request sorted set and blocked marker in the same Redis Cluster slot.
+- Different endpoints use different hash tags, so endpoint buckets stay independent.
+- Keys use stable endpoint identifiers, not full URLs.
+- Keys must not contain SteamDT API keys, Redis passwords, Authorization headers, market hash names, or other user-sensitive data.
+
+Acquire behavior:
+- Acquire uses a Redis Lua script to make the read/check/write sequence atomic.
+- The script uses Redis server `TIME`, not local monotonic time, so separate processes compare a shared clock.
+- The request history is a sorted set scored by Redis server milliseconds.
+- Window pruning, count check, and request insertion happen inside one script invocation.
+- Python supplies a non-sensitive UUID request member so same-millisecond concurrent requests do not overwrite each other.
+- On allow, the script sets a requests-key TTL covering the effective rate-limit window plus Redis cleanup grace.
+- Redis cleanup TTL grace only cleans idle Redis state; it does not change the request budget window.
+
+Server cooldown behavior:
+- HTTP 429 and wrapper `errorCode=4005` can call `record_server_limit()` on the same limiter protocol.
+- Redis server cooldown uses a separate blocked-until key per endpoint.
+- The Lua script computes requested blocked-until from Redis server `TIME`.
+- Existing and new blocked-until values use max semantics, so shorter new blocks cannot reduce longer existing blocks.
+- `retry_after_seconds=None` uses the endpoint policy effective window.
+- Negative retry-after values are normalized safely and never create a past cooldown.
+- Blocked keys also receive TTL; no background cleanup job is required.
+
+Backend behavior:
+- Redis connection, timeout, response, or malformed Lua response errors are converted to `SteamDTRateLimitBackendError`.
+- Backend failure is not reported as SteamDT quota exhaustion.
+- Backend failure fails closed before a SteamDT HTTP request is sent.
+- There is no silent fallback to in-memory limiting.
+- Redis limiter code does not read env, call `Redis.from_url()`, save a Redis URL, or own connection shutdown.
+- Composition/factory wiring is intentionally left to the next phase.
+- `SteamDTHttpClient` still defaults to the in-memory limiter unless a Redis limiter is explicitly injected.
+
+Safety boundaries:
+- This phase does not enable Redis limiter by default.
+- This phase does not connect pipeline / scheduler / smoke scripts to Redis limiter.
+- This phase does not add price cache, refresh service, or Redis connection factory.
+- No raw payload is stored in Redis.
+- No secrets are included in Redis keys or Lua scripts.
+- No non-official evasion techniques, hidden endpoints, automatic purchase, automatic login, cookie scraping, browser automation, captcha bypass, or risk-control bypass are added.
+
 ## Safety Notes
 
 - Do not implement auto-buying.
