@@ -1,6 +1,10 @@
 import asyncio
+import os
+import subprocess
+import sys
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import httpx
@@ -1233,3 +1237,44 @@ def test_steamdt_smoke_utils_parse_and_redact_helpers() -> None:
         "selected_platform": "steam",
         "candidate_count": 1,
     }
+
+
+
+@pytest.mark.parametrize(
+    "script_name",
+    [
+        "steamdt_price_single_smoke",
+        "steamdt_price_batch_smoke",
+        "steamdt_avg_price_smoke",
+        "steamdt_provider_price_smoke",
+    ],
+)
+@pytest.mark.parametrize("entrypoint", ["direct", "module"])
+def test_steamdt_smoke_script_entrypoints_support_dry_run_without_import_error(
+    script_name: str,
+    entrypoint: str,
+) -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    env = os.environ.copy()
+    env["STEAMDT_DRY_RUN"] = "true"
+    env.pop("STEAMDT_API_KEY", None)
+
+    if entrypoint == "direct":
+        command = [sys.executable, f"scripts/{script_name}.py"]
+    else:
+        command = [sys.executable, "-m", f"scripts.{script_name}"]
+
+    result = subprocess.run(
+        command,
+        cwd=project_root,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=30,
+    )
+    combined_output = f"{result.stdout}\n{result.stderr}"
+
+    assert result.returncode == 0
+    assert "ModuleNotFoundError" not in combined_output
+    assert "Authorization:" not in combined_output
+    assert "STEAMDT_DRY_RUN is not false" in combined_output

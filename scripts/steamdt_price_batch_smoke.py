@@ -1,18 +1,31 @@
+# ruff: noqa: I001
 import os
 from decimal import Decimal
 
 from app.clients.steamdt_client import SteamDTClientConfig, SteamDTHttpClient
 from app.clients.steamdt_price_selection import SteamDTPriceSelectionConfig
-from scripts.steamdt_smoke_utils import (
-    MAX_STEAMDT_SMOKE_BATCH_NAMES,
-    is_explicit_false,
-    parse_bool_env,
-    parse_decimal_env,
-    parse_market_hash_names,
-    print_guard_exit,
-    safe_error_message,
-    summarize_quote_raw,
-)
+if __package__:
+    from .steamdt_smoke_utils import (
+        MAX_STEAMDT_SMOKE_BATCH_NAMES,
+        is_explicit_false,
+        parse_bool_env,
+        parse_decimal_env,
+        parse_market_hash_names,
+        print_guard_exit,
+        safe_error_message,
+        summarize_quote_raw,
+    )
+else:
+    from steamdt_smoke_utils import (
+        MAX_STEAMDT_SMOKE_BATCH_NAMES,
+        is_explicit_false,
+        parse_bool_env,
+        parse_decimal_env,
+        parse_market_hash_names,
+        print_guard_exit,
+        safe_error_message,
+        summarize_quote_raw,
+    )
 
 
 async def _run() -> None:

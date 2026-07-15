@@ -1,11 +1,19 @@
+# ruff: noqa: I001
 import os
 
 from app.clients.steamdt_client import SteamDTClientConfig, SteamDTHttpClient
-from scripts.steamdt_smoke_utils import (
-    is_explicit_false,
-    print_guard_exit,
-    safe_error_message,
-)
+if __package__:
+    from .steamdt_smoke_utils import (
+        is_explicit_false,
+        print_guard_exit,
+        safe_error_message,
+    )
+else:
+    from steamdt_smoke_utils import (
+        is_explicit_false,
+        print_guard_exit,
+        safe_error_message,
+    )
 
 
 async def _run() -> None:

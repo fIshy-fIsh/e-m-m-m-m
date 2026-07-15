@@ -75,11 +75,14 @@
 
 ### SteamDT official read-only smoke scripts
 - Single price:
-  - `python scripts/steamdt_price_single_smoke.py`
+  - 推荐：`python -m scripts.steamdt_price_single_smoke`
+  - 也支持：`python scripts/steamdt_price_single_smoke.py`
 - Batch price:
-  - `python scripts/steamdt_price_batch_smoke.py`
+  - 推荐：`python -m scripts.steamdt_price_batch_smoke`
+  - 也支持：`python scripts/steamdt_price_batch_smoke.py`
 - Avg price:
-  - `python scripts/steamdt_avg_price_smoke.py`
+  - 推荐：`python -m scripts.steamdt_avg_price_smoke`
+  - 也支持：`python scripts/steamdt_avg_price_smoke.py`
 - 当前 smoke request 的价格选择策略已升级为 liquidity-aware，但默认仍然不会真实请求 SteamDT。
 - Single / batch smoke 可选启用 avg sanity check，默认关闭。
 - 启用后会额外调用 avg endpoint。
@@ -94,7 +97,7 @@
 
 ### SteamDT Manual Smoke Scripts
 
-所有 SteamDT manual smoke scripts 默认不会请求；必须显式设置 `STEAMDT_DRY_RUN=false` 和 `STEAMDT_API_KEY` 才允许官方只读请求。
+所有 SteamDT manual smoke scripts 默认不会请求；必须显式设置 `STEAMDT_DRY_RUN=false` 和 `STEAMDT_API_KEY` 才允许官方只读请求。推荐使用 module 方式运行（例如 `python -m scripts.steamdt_price_single_smoke`）；直接文件执行（例如 `python scripts/steamdt_price_single_smoke.py`）也已支持。
 
 1. `scripts/steamdt_price_single_smoke.py`
    - 用途：验证 single price endpoint 和 selector。
@@ -122,7 +125,8 @@
 - avg price 只作为 sanity check input，不直接替代 sellPrice valuation。
 - 当前 provider integration 不接入 pipeline / scheduler / alerts。
 - SteamDTPriceProvider manual smoke:
-  - `python scripts/steamdt_provider_price_smoke.py`
+  - 推荐：`python -m scripts.steamdt_provider_price_smoke`
+  - 也支持：`python scripts/steamdt_provider_price_smoke.py`
 - Provider smoke 默认不会请求 SteamDT；必须显式设置 `STEAMDT_DRY_RUN=false` 和 `STEAMDT_API_KEY`。
 - Provider smoke 支持 single / batch mode（`STEAMDT_PROVIDER_BATCH_MODE`）和 optional avg sanity check。
 - Provider smoke 只组合 injected `SteamDTHttpClient` + `SteamDTPriceProvider`，不接入 pipeline / scheduler / alerts。
