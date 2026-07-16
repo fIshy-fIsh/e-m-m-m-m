@@ -162,6 +162,16 @@
 - `SteamDTHttpClient` still defaults to `InMemorySteamDTRateLimiter`; Redis limiter composition wiring is not enabled in this phase.
 - This Redis limiter core is not connected to pipeline / scheduler, does not add price cache behavior, and does not run real SteamDT requests.
 
+### SteamDT Rate Limiter Composition Factory
+- `STEAMDT_RATE_LIMIT_BACKEND` selects the explicit SteamDT limiter backend for factory-created runtimes: `inmemory` by default, or `redis` when intentionally enabled.
+- Direct `SteamDTHttpClient(...)` construction remains compatible and still defaults to the in-memory endpoint limiter.
+- The factory/runtime layer creates `InMemorySteamDTRateLimiter` or `RedisSteamDTRateLimiter` from already-parsed settings and injects it into `SteamDTHttpClient`; the lower-level limiter/client classes do not read env.
+- Redis backend reuses the normal `REDIS_URL` setting and `STEAMDT_RATE_LIMIT_REDIS_NAMESPACE` (default `steamdt-rate-limit-v1`); the Phase 12C2 test variables are only for integration tests, not formal composition.
+- Redis backend never silently falls back to in-memory. Missing Redis URL, unsupported backend, or invalid namespace fail during composition.
+- Factory-created Redis clients are owned by the runtime and closed by `await runtime.aclose()`; externally injected Redis clients are not closed unless explicit ownership is requested.
+- This composition entrypoint is still not wired into pipeline / scheduler / FastAPI startup / price cache, and it does not call SteamDT by itself.
+- SteamDT batch request control remains endpoint-specific with the existing 1/minute policy plus project safety buffer.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.

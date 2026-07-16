@@ -72,6 +72,8 @@ class Settings(BaseSettings):
     steamdt_rate_limit_kline_per_minute: int = Field(default=120, gt=0)
     steamdt_rate_limit_wear_per_hour: int = Field(default=36000, gt=0)
     steamdt_rate_limit_price_batch_safety_buffer_seconds: float = Field(default=5.0, ge=0)
+    steamdt_rate_limit_backend: str = "inmemory"
+    steamdt_rate_limit_redis_namespace: str = "steamdt-rate-limit-v1"
 
     scan_high_priority_interval_seconds: int = 60
     scan_normal_interval_seconds: int = 300

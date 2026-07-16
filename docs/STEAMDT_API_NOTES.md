@@ -814,6 +814,38 @@ Cleanup and safety:
 - No raw payload or secret is saved.
 - No non-official evasion techniques, request replay from browser sessions, hidden endpoints, automatic purchase, automatic login, cookie scraping, browser automation, captcha bypass, or risk-control bypass are added.
 
+## Phase 12C3 Explicit Rate Limiter Composition / Factory Wiring
+
+Purpose:
+- Factory-created SteamDT runtimes can now explicitly choose `inmemory` or `redis` as the rate-limiter backend.
+- Default remains `inmemory`, preserving direct `SteamDTHttpClient(...)` construction and avoiding Redis access unless Redis is explicitly selected.
+- This phase only adds configuration, composition, resource ownership, and client construction behavior.
+
+Configuration:
+- `STEAMDT_RATE_LIMIT_BACKEND` accepts only `inmemory` or `redis`.
+- Unset backend defaults to `inmemory`.
+- `STEAMDT_RATE_LIMIT_REDIS_NAMESPACE` defaults to `steamdt-rate-limit-v1` and is only for the SteamDT limiter.
+- Redis composition reuses the formal `REDIS_URL` setting rather than `STEAMDT_TEST_REDIS_URL`.
+- The Phase 12C2 variables `STEAMDT_RUN_REDIS_INTEGRATION_TESTS` and `STEAMDT_TEST_REDIS_URL` remain test-only and are not used by the formal composition factory.
+
+Factory/runtime behavior:
+- The composition layer reads an already-parsed settings object and builds `SteamDTClientConfig` using the existing endpoint-specific policies.
+- `backend=inmemory` creates `InMemorySteamDTRateLimiter` and does not create a Redis client.
+- `backend=redis` creates or receives an async Redis client, creates `RedisSteamDTRateLimiter`, and injects it into `SteamDTHttpClient`.
+- `SteamDTHttpClient`, `InMemorySteamDTRateLimiter`, and `RedisSteamDTRateLimiter` still do not read environment variables.
+- Redis client creation does not happen at import time, does not use a global singleton, and does not ping automatically.
+- The runtime exposes `aclose()` so owned Redis clients can be closed explicitly and idempotently.
+- Factory-created Redis clients are owned by the runtime; externally injected Redis clients are not closed unless ownership is explicitly requested.
+
+Errors and safety:
+- Unsupported backend, missing Redis URL for Redis backend, and empty namespace are composition/configuration errors, not quota errors.
+- Redis composition never silently falls back to in-memory limiting.
+- Error messages must not include Redis passwords, SteamDT API keys, Authorization headers, or full credential-bearing URLs.
+- Runtime Redis/Lua failures still use `SteamDTRateLimitBackendError` and fail closed before SteamDT HTTP transport.
+- This phase is not wired into pipeline, scheduler, price cache, refresh service, alerts, FastAPI startup, or application lifecycle.
+- It does not call SteamDT and does not change endpoint paths, parser behavior, selector behavior, retry behavior, or endpoint policy values.
+- `price_avg` remains an internal safety cap, not a documented official SteamDT quota.
+
 ## Safety Notes
 
 - Do not implement auto-buying.

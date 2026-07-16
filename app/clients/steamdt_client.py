@@ -758,6 +758,16 @@ class SteamDTHttpClient:
         self.rate_limiter = rate_limiter or InMemorySteamDTRateLimiter(
             config.rate_limit_policies
         )
+        self._closed = False
+
+    async def aclose(self) -> None:
+        """Close the injected persistent HTTP client once, when one is configured."""
+
+        if self._closed:
+            return
+        self._closed = True
+        if self.http_client is not None:
+            await self.http_client.aclose()
 
     async def get_price_single_with_selection(
         self,
