@@ -1,6 +1,10 @@
 import asyncio
+import os
+import subprocess
+import sys
 from dataclasses import dataclass, field
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -655,3 +659,278 @@ def test_lua_scripts_do_not_contain_secrets_or_raw_response_storage() -> None:
     assert "Bearer" not in scripts
     assert "api_key" not in scripts.lower()
     assert "raw" not in scripts.lower()
+
+
+class FakeCleanupRedis:
+    def __init__(self, pages: list[tuple[object, list[object]]]) -> None:
+        self.pages = pages
+        self.scan_calls: list[dict[str, object]] = []
+        self.deleted: list[object] = []
+        self.flushdb_called = False
+        self.flushall_called = False
+
+    async def scan(
+        self,
+        *,
+        cursor: object = 0,
+        match: str | None = None,
+        count: int | None = None,
+    ) -> tuple[object, list[object]]:
+        self.scan_calls.append({"cursor": cursor, "match": match, "count": count})
+        if len(self.scan_calls) <= len(self.pages):
+            return self.pages[len(self.scan_calls) - 1]
+        return 0, []
+
+    async def delete(self, *keys: object) -> int:
+        self.deleted.extend(keys)
+        return len(keys)
+
+    async def flushdb(self) -> None:
+        self.flushdb_called = True
+        raise AssertionError("FLUSHDB must not be called")
+
+    async def flushall(self) -> None:
+        self.flushall_called = True
+        raise AssertionError("FLUSHALL must not be called")
+
+
+class FakeFailingRedis:
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def ping(self) -> bool:
+        raise ConnectionError("redis://user:dummy-password@localhost:6379/15?token=dummy-token")
+
+    async def scan(
+        self,
+        *,
+        cursor: object = 0,
+        match: str | None = None,
+        count: int | None = None,
+    ) -> tuple[int, list[object]]:
+        return 0, []
+
+    async def delete(self, *keys: object) -> int:
+        return 0
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+def test_redis_smoke_opt_in_defaults_false() -> None:
+    from scripts import steamdt_redis_limiter_smoke as smoke
+
+    assert smoke.parse_bool_env({}, smoke.RUN_REDIS_INTEGRATION_ENV) is False
+
+
+def test_redis_smoke_async_guard_does_not_create_client() -> None:
+    from scripts import steamdt_redis_limiter_smoke as smoke
+
+    messages: list[str] = []
+
+    def forbidden_factory(_url: str) -> object:
+        raise AssertionError("Redis client must not be created when guard is false")
+
+    exit_code = asyncio.run(
+        smoke.async_main(
+            {smoke.RUN_REDIS_INTEGRATION_ENV: "false"},
+            printer=messages.append,
+            redis_factory=forbidden_factory,
+        )
+    )
+
+    assert exit_code == 0
+    assert "STEAMDT_RUN_REDIS_INTEGRATION_TESTS is not true" in "\n".join(messages)
+
+
+@pytest.mark.parametrize("entrypoint", ["direct", "module"])
+def test_redis_smoke_script_entrypoints_guard_without_redis_connection(entrypoint: str) -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    env = os.environ.copy()
+    env["STEAMDT_RUN_REDIS_INTEGRATION_TESTS"] = "false"
+    env.pop("STEAMDT_TEST_REDIS_URL", None)
+
+    if entrypoint == "direct":
+        command = [sys.executable, "scripts/steamdt_redis_limiter_smoke.py"]
+    else:
+        command = [sys.executable, "-m", "scripts.steamdt_redis_limiter_smoke"]
+
+    result = subprocess.run(
+        command,
+        cwd=project_root,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=30,
+    )
+    combined_output = f"{result.stdout}\n{result.stderr}"
+
+    assert result.returncode == 0
+    assert "STEAMDT_RUN_REDIS_INTEGRATION_TESTS is not true" in combined_output
+    assert "ModuleNotFoundError" not in combined_output
+    assert "redis://" not in combined_output
+    assert "Authorization:" not in combined_output
+
+
+def test_redis_smoke_invalid_namespace_is_rejected_before_connection() -> None:
+    from scripts import steamdt_redis_limiter_smoke as smoke
+
+    created = False
+    messages: list[str] = []
+
+    def forbidden_factory(_url: str) -> object:
+        nonlocal created
+        created = True
+        raise AssertionError("Redis client must not be created before namespace validation")
+
+    exit_code = asyncio.run(
+        smoke.async_main(
+            {
+                smoke.RUN_REDIS_INTEGRATION_ENV: "true",
+                smoke.TEST_REDIS_NAMESPACE_ENV: "bad{namespace",
+            },
+            printer=messages.append,
+            redis_factory=forbidden_factory,
+        )
+    )
+
+    assert exit_code == 1
+    assert created is False
+    assert "namespace" in "\n".join(messages)
+
+
+def test_redact_redis_url_hides_password_and_query_values() -> None:
+    from scripts.steamdt_redis_limiter_smoke import redact_redis_url
+
+    redacted = redact_redis_url(
+        "redis://user:dummy-password@localhost:6379/15?token=dummy-token"
+    )
+
+    assert "dummy-password" not in redacted
+    assert "dummy-token" not in redacted
+    assert "redis://user:[REDACTED]@localhost:6379/15" in redacted
+
+
+def test_safe_redis_error_message_hides_password_and_authorization() -> None:
+    from scripts.steamdt_redis_limiter_smoke import safe_redis_error_message
+
+    redis_url = "redis://user:dummy-password@localhost:6379/15?token=dummy-token"
+    message = safe_redis_error_message(
+        ConnectionError(f"failed {redis_url} Authorization: Bearer dummy-token-123456"),
+        redis_url=redis_url,
+    )
+
+    assert "dummy-password" not in message
+    assert "dummy-token" not in message
+    assert "Authorization:" not in message
+
+
+def test_cleanup_pattern_is_exact_to_current_namespace() -> None:
+    from scripts.steamdt_redis_limiter_smoke import build_namespace_scan_pattern
+
+    assert build_namespace_scan_pattern("steamdt-rate-limit-integration-v1-test") == (
+        "{steamdt-rate-limit-integration-v1-test:*}:*"
+    )
+
+
+def test_cleanup_helper_uses_scan_pagination_and_only_deletes_matching_keys() -> None:
+    from scripts.steamdt_redis_limiter_smoke import cleanup_namespace_keys
+
+    redis = FakeCleanupRedis(
+        pages=[
+            (
+                1,
+                [
+                    b"{steamdt-rate-limit-integration-v1-test:price_single}:requests",
+                    b"{other-namespace:price_single}:requests",
+                ],
+            ),
+            (
+                0,
+                [
+                    "{steamdt-rate-limit-integration-v1-test:price_batch}:blocked",
+                    "not-a-matching-key",
+                ],
+            ),
+        ]
+    )
+
+    deleted_count = asyncio.run(
+        cleanup_namespace_keys(redis, "steamdt-rate-limit-integration-v1-test")
+    )
+
+    assert deleted_count == 2
+    assert redis.deleted == [
+        b"{steamdt-rate-limit-integration-v1-test:price_single}:requests",
+        "{steamdt-rate-limit-integration-v1-test:price_batch}:blocked",
+    ]
+    assert len(redis.scan_calls) == 2
+    assert redis.flushdb_called is False
+    assert redis.flushall_called is False
+
+
+def test_cleanup_helper_handles_no_matching_keys() -> None:
+    from scripts.steamdt_redis_limiter_smoke import cleanup_namespace_keys
+
+    redis = FakeCleanupRedis(pages=[(0, ["{other:price_single}:requests"])])
+
+    deleted_count = asyncio.run(
+        cleanup_namespace_keys(redis, "steamdt-rate-limit-integration-v1-test")
+    )
+
+    assert deleted_count == 0
+    assert redis.deleted == []
+
+
+def test_smoke_harness_does_not_import_or_call_steamdt_http_client() -> None:
+    from scripts import steamdt_redis_limiter_smoke as smoke
+
+    script_path = Path(smoke.__file__)
+    script_text = script_path.read_text(encoding="utf-8")
+
+    assert "SteamDTHttpClient" not in script_text
+    assert "SteamDTClientConfig" not in script_text
+
+
+def test_redis_smoke_failure_returns_non_zero_and_redacts_url() -> None:
+    from scripts import steamdt_redis_limiter_smoke as smoke
+
+    fake_client = FakeFailingRedis()
+    redis_url = "redis://user:dummy-password@localhost:6379/15?token=dummy-token"
+    messages: list[str] = []
+
+    exit_code = asyncio.run(
+        smoke.async_main(
+            {
+                smoke.RUN_REDIS_INTEGRATION_ENV: "true",
+                smoke.TEST_REDIS_URL_ENV: redis_url,
+                smoke.TEST_REDIS_NAMESPACE_ENV: smoke.DEFAULT_TEST_REDIS_NAMESPACE,
+            },
+            printer=messages.append,
+            redis_factory=lambda _url: fake_client,
+        )
+    )
+    combined_output = "\n".join(messages)
+
+    assert exit_code == 1
+    assert fake_client.closed is True
+    assert "dummy-password" not in combined_output
+    assert "dummy-token" not in combined_output
+    assert "Authorization:" not in combined_output
+
+
+def test_default_redis_integration_env_does_not_connect_real_redis() -> None:
+    from scripts import steamdt_redis_limiter_smoke as smoke
+
+    calls: list[str] = []
+
+    exit_code = asyncio.run(
+        smoke.async_main(
+            {},
+            printer=lambda message: calls.append(message),
+            redis_factory=lambda _url: (_ for _ in ()).throw(AssertionError("no Redis")),
+        )
+    )
+
+    assert exit_code == 0
+    assert calls

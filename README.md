@@ -162,6 +162,21 @@
 - `SteamDTHttpClient` still defaults to `InMemorySteamDTRateLimiter`; Redis limiter composition wiring is not enabled in this phase.
 - This Redis limiter core is not connected to pipeline / scheduler, does not add price cache behavior, and does not run real SteamDT requests.
 
+### SteamDT Redis Limiter Integration Harness
+- `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
+- It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.
+- It does not create or call `SteamDTHttpClient`, does not call SteamDT, and does not implement automatic buying or login.
+- Use an isolated Redis database such as `/15` and a test namespace such as `steamdt-rate-limit-integration-v1`; do not use production Redis.
+- The harness uses short test-only policies so it does not wait for official 60-second windows; these policies are not official SteamDT limits and do not change default policies.
+- Cleanup uses paged `SCAN` for the exact test namespace and does not execute `FLUSHDB` or `FLUSHALL`.
+- Default pytest skips the real Redis integration tests unless the same opt-in env var is set.
+- Both direct and module entrypoints are supported:
+  - `python scripts/steamdt_redis_limiter_smoke.py`
+  - `python -m scripts.steamdt_redis_limiter_smoke`
+- Manual local example without a password:
+  - `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true STEAMDT_TEST_REDIS_URL=redis://localhost:6379/15 STEAMDT_TEST_REDIS_NAMESPACE=steamdt-rate-limit-integration-v1 python -m scripts.steamdt_redis_limiter_smoke`
+- Redis limiter composition wiring is still not enabled for pipeline / scheduler.
+
 ## Docker dry-run
 1. `cp .env.example .env`
 2. `docker compose build`

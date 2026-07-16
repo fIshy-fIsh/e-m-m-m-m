@@ -778,6 +778,42 @@ Safety boundaries:
 - No secrets are included in Redis keys or Lua scripts.
 - No non-official evasion techniques, hidden endpoints, automatic purchase, automatic login, cookie scraping, browser automation, captcha bypass, or risk-control bypass are added.
 
+## Phase 12C2 Redis Limiter Integration Harness
+
+Purpose:
+- Fake Redis backend unit tests validate control flow, but a real Redis harness is still needed to confirm redis-py 5.x, Lua return parsing, server `TIME`, sorted-set behavior, TTL commands, and cleanup semantics against a real Redis server.
+- The harness validates only the `RedisSteamDTRateLimiter` Redis/Lua contract.
+- It does not validate SteamDT endpoints and does not call SteamDT.
+
+Opt-in boundary:
+- The smoke script and integration pytest are disabled by default.
+- They only connect to Redis when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.
+- The test URL comes from `STEAMDT_TEST_REDIS_URL`, not production `REDIS_URL`; the example uses `redis://localhost:6379/15`.
+- The test namespace comes from `STEAMDT_TEST_REDIS_NAMESPACE` and defaults to `steamdt-rate-limit-integration-v1`, separate from the production limiter namespace.
+- The harness appends a UUID suffix to the namespace for each run to avoid concurrent-run collisions.
+
+Real Redis checks:
+- Redis `PING` verifies connectivity before limiter scenarios.
+- Two limiter instances sharing one Redis namespace verify shared `price_batch` quota.
+- Endpoint independence verifies `price_batch`, `price_single`, and `price_avg` remain separate buckets.
+- Short test-only policies verify window recovery without waiting for official 60-second windows; these policies are not official SteamDT limits.
+- Server cooldown checks use `record_server_limit()` and Redis server `TIME`.
+- Longer-block-wins behavior confirms the Lua max semantics for blocked-until values.
+- Requests and blocked keys are checked with positive millisecond TTL values.
+- Same-millisecond or near-simultaneous successful acquires confirm UUID request members do not collide.
+
+Cleanup and safety:
+- Cleanup uses paged `SCAN` with a narrow pattern for the exact test namespace.
+- Cleanup deletes only keys under the current test namespace.
+- The harness does not execute `KEYS *`, `FLUSHDB`, or `FLUSHALL`.
+- A final scan confirms the current namespace has no residual keys.
+- Cleanup failures are reported with redacted messages and can make the smoke fail, but cleanup is still attempted after primary validation failures.
+- Redis URL passwords, query secrets, Authorization headers, SteamDT API keys, raw Redis responses, and Lua script bodies are not printed.
+- Redis unreachable, timeout, response, Lua, malformed-response, and `SteamDTRateLimitBackendError` failures fail closed and do not fall back to in-memory limiting.
+- Composition wiring for pipeline / scheduler remains a later phase.
+- No raw payload or secret is saved.
+- No non-official evasion techniques, request replay from browser sessions, hidden endpoints, automatic purchase, automatic login, cookie scraping, browser automation, captcha bypass, or risk-control bypass are added.
+
 ## Safety Notes
 
 - Do not implement auto-buying.
