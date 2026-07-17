@@ -172,6 +172,16 @@
 - This composition entrypoint is still not wired into pipeline / scheduler / FastAPI startup / price cache, and it does not call SteamDT by itself.
 - SteamDT batch request control remains endpoint-specific with the existing 1/minute policy plus project safety buffer.
 
+### Phase 12D1 Price Cache Domain and In-Memory Core
+- Phase 12D1 defines an async cache protocol and an instance-local in-memory core only; it is not wired into `PriceProvider`, `ValuationService`, pipeline, scheduler, FastAPI, alerts, or any production runtime.
+- The cached payload is the normalized multi-platform SteamDT candidate snapshot before selector policy is applied. Preferred-platform, liquidity, fallback, and avg-sanity policy changes therefore reuse the same observation without cache-key collisions.
+- State boundaries are exact: fresh while `now < fresh_until`, stale while `fresh_until <= now < stale_until`, stale-grace while `stale_until <= now < expires_at`, and expired at `now >= expires_at`.
+- Reads default to fresh-only. Stale data requires `ALLOW_STALE`; stale-grace requires the explicit `ALLOW_STALE_GRACE` policy.
+- Freshness is always based on `observed_at`, never a caller-declared storage time; `InMemoryPriceCache.put()` rejects future observations and stamps `stored_at` from its injected UTC clock. Rewriting an old observation cannot make it fresh again, and an older observation cannot replace a newer one.
+- The core uses immutable models, stable/versioned keys, UTC timestamps, string-preserved Decimal values, an injectable clock, and an `asyncio.Lock` without real sleeps or background tasks.
+- There is currently no Redis price cache, refresh planner, background refresh, cache warming, runtime configuration, or changed SteamDT request behavior.
+- The existing `price_avg=10/min` value remains a project-internal safety cap, not a confirmed official SteamDT limit.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.

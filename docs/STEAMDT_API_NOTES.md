@@ -846,6 +846,45 @@ Errors and safety:
 - It does not call SteamDT and does not change endpoint paths, parser behavior, selector behavior, retry behavior, or endpoint policy values.
 - `price_avg` remains an internal safety cap, not a documented official SteamDT quota.
 
+## Phase 12D1 Price Cache Domain Model and In-Memory Core
+
+Scope and placement:
+- This phase adds only a typed async cache protocol, immutable cache models, and a concurrency-safe in-memory implementation.
+- The payload is the normalized multi-platform price-candidate snapshot before selector policy is applied.
+- The cache is not connected to `SteamDTPriceProvider`, `ValuationService`, pipeline, scheduler, FastAPI startup, alerts, or application lifecycle.
+- No Redis price cache, refresh planner, refresh worker, batch refresh, cache warming, or background task is implemented.
+- No production TTL environment variables are added; callers construct an explicit `PriceCachePolicy`.
+
+Identity and payload:
+- `market_hash_name` remains the canonical item identifier used by existing provider and valuation contracts.
+- A stable cache key also carries game, normalized currency contract, source/provider namespace, snapshot type, and schema version.
+- Preferred platform, liquidity thresholds, fallback behavior, and avg-sanity configuration are intentionally absent from the key because cached candidates precede selection.
+- Candidate records use immutable tuples and frozen models and omit raw HTTP responses and runtime objects.
+- Schema version 1, deterministic JSON key encoding, UTC ISO-8601 timestamps, and Decimal-as-string dumps establish a future Redis serialization boundary without implementing a Redis serializer.
+
+Freshness state machine:
+- `fresh_until = observed_at + fresh_ttl`.
+- `stale_until = fresh_until + stale_ttl`.
+- `expires_at = stale_until + stale_grace_ttl`.
+- `FRESH` means `now < fresh_until`.
+- `STALE` means `fresh_until <= now < stale_until`.
+- `STALE_GRACE` means `stale_until <= now < expires_at`.
+- `EXPIRED` means `now >= expires_at`.
+- Reads default to `FRESH_ONLY`; stale requires `ALLOW_STALE`, and stale-grace requires explicit `ALLOW_STALE_GRACE`.
+- Stale and stale-grace lookups recommend refresh but never start refresh work.
+
+Time and ordering:
+- Freshness is calculated from `observed_at`, not `stored_at`, so rewriting old data cannot reset its age.
+- Both timestamps must be timezone-aware and are normalized to UTC; the in-memory cache treats its injected UTC clock as the authoritative actual storage time.
+- `put()` rejects an observation later than that authoritative clock and replaces the stored snapshot's caller-declared `stored_at` with the actual put time, preventing a future declared storage time from legitimizing a future observation.
+- Newer `observed_at` replaces the current entry, older observations are ignored, and equal observations deterministically retain the existing entry; caller-declared `stored_at` never affects ordering.
+- Expired entries are never returned and can be removed on lookup or by explicit purge.
+
+Safety boundaries:
+- The in-memory cache has instance-local state, one `asyncio.Lock`, and an injectable UTC clock; tests use no real waits.
+- This phase does not read environment variables, create Redis or HTTP clients, call SteamDT, or change any endpoint/parser/selector/retry behavior.
+- `price_avg=10/min` remains an internal project safety cap and is not a confirmed official SteamDT quota.
+
 ## Safety Notes
 
 - Do not implement auto-buying.
