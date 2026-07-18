@@ -154,6 +154,10 @@ class CachedPriceSnapshot:
     schema_version: int = PRICE_CACHE_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
+        if not isinstance(self.key, PriceCacheKey):
+            raise TypeError("key must be a PriceCacheKey")
+        if not isinstance(self.policy, PriceCachePolicy):
+            raise TypeError("policy must be a PriceCachePolicy")
         observed_at = _normalize_utc(self.observed_at, field_name="observed_at")
         stored_at = _normalize_utc(self.stored_at, field_name="stored_at")
         if observed_at > stored_at:
@@ -167,9 +171,15 @@ class CachedPriceSnapshot:
             )
         if self.schema_version != self.key.schema_version:
             raise ValueError("snapshot schema_version must match cache key schema_version")
+        candidates = tuple(self.candidates)
+        if any(
+            not isinstance(candidate, NormalizedPriceCandidate)
+            for candidate in candidates
+        ):
+            raise TypeError("candidates must contain only NormalizedPriceCandidate values")
         object.__setattr__(self, "observed_at", observed_at)
         object.__setattr__(self, "stored_at", stored_at)
-        object.__setattr__(self, "candidates", tuple(self.candidates))
+        object.__setattr__(self, "candidates", candidates)
 
     @property
     def fresh_until(self) -> datetime:
@@ -297,32 +307,14 @@ class InMemoryPriceCache:
             if snapshot is None:
                 return PriceCacheLookup.missing(key)
 
-            state = _state_at(snapshot, now)
-            age = now - snapshot.observed_at
-            if state == PriceCacheState.EXPIRED:
-                del self._entries[key]
-                return PriceCacheLookup(
-                    key=key,
-                    hit=False,
-                    state=state,
-                    snapshot=None,
-                    age=age,
-                    needs_refresh=True,
-                    policy_blocked=False,
-                    expired=True,
-                )
-
-            allowed = _state_is_allowed(state, read_policy)
-            return PriceCacheLookup(
-                key=key,
-                hit=allowed,
-                state=state,
-                snapshot=snapshot if allowed else None,
-                age=age,
-                needs_refresh=state != PriceCacheState.FRESH,
-                policy_blocked=not allowed,
-                expired=False,
+            lookup = evaluate_price_cache_lookup(
+                snapshot,
+                now=now,
+                read_policy=read_policy,
             )
+            if lookup.expired:
+                del self._entries[key]
+            return lookup
 
     async def put(self, snapshot: CachedPriceSnapshot) -> PriceCacheWriteResult:
         """Store a snapshot using this cache's clock as the storage-time authority."""
@@ -365,6 +357,42 @@ class InMemoryPriceCache:
 
     def _read_clock(self) -> datetime:
         return _normalize_utc(self._clock(), field_name="clock result")
+
+
+def evaluate_price_cache_lookup(
+    snapshot: CachedPriceSnapshot,
+    *,
+    now: datetime,
+    read_policy: PriceCacheReadPolicy = PriceCacheReadPolicy.FRESH_ONLY,
+) -> PriceCacheLookup:
+    """Evaluate one immutable snapshot with an authoritative UTC cache clock."""
+
+    normalized_now = _normalize_utc(now, field_name="cache time")
+    state = _state_at(snapshot, normalized_now)
+    age = normalized_now - snapshot.observed_at
+    if state == PriceCacheState.EXPIRED:
+        return PriceCacheLookup(
+            key=snapshot.key,
+            hit=False,
+            state=state,
+            snapshot=None,
+            age=age,
+            needs_refresh=True,
+            policy_blocked=False,
+            expired=True,
+        )
+
+    allowed = _state_is_allowed(state, read_policy)
+    return PriceCacheLookup(
+        key=snapshot.key,
+        hit=allowed,
+        state=state,
+        snapshot=snapshot if allowed else None,
+        age=age,
+        needs_refresh=state != PriceCacheState.FRESH,
+        policy_blocked=not allowed,
+        expired=False,
+    )
 
 
 def _state_at(snapshot: CachedPriceSnapshot, now: datetime) -> PriceCacheState:

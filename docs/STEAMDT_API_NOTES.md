@@ -885,6 +885,42 @@ Safety boundaries:
 - This phase does not read environment variables, create Redis or HTTP clients, call SteamDT, or change any endpoint/parser/selector/retry behavior.
 - `price_avg=10/min` remains an internal project safety cap and is not a confirmed official SteamDT quota.
 
+## Phase 12D2A Redis Price Cache Codec and Atomic Core
+
+Scope and ownership:
+- This phase adds only a strict Redis record codec and an isolated `RedisPriceCache` implementation of the Phase 12D1 protocol.
+- The async Redis client is explicitly injected and externally owned. The cache does not read environment variables, call `Redis.from_url()`, ping, close the client, create a singleton, or create a background task.
+- No provider, selector, valuation, pipeline, scheduler, FastAPI, refresh, warming, configuration, or application-lifecycle integration is added.
+
+Keys and record codec:
+- The default namespace is `steamdt-price-cache-v1`; entry keys use `{steamdt-price-cache-v1:<stable-digest>}:snapshot` and never include the full market hash name or credentials.
+- The Redis Hash record is codec-versioned and keeps canonical key identity, split UTC timestamps, exact integer-microsecond TTLs and boundaries, and deterministic candidate JSON in separate fields.
+- Candidate JSON uses sorted keys and fixed separators. Decimal prices remain strings, datetimes never pass through float, and provider candidate order and duplicates are preserved.
+- Decoding validates exact fields, current schema versions, canonical key/digest agreement, UTF-8/JSON structure, timestamps, durations, boundaries, finite nonnegative Decimal values, exact nonnegative counts, and candidate types.
+- A malformed or mismatched stored record raises `PriceCacheCodecError`; corruption is not converted into a cache miss and is not automatically deleted.
+
+Redis time and atomic operations:
+- Put/get/purge use one-key Lua scripts and Redis server `TIME` as their cross-process clock authority.
+- Put rejects observations later than Redis time and compares observed seconds before observed microseconds; `stored_at`, arrival order, and task completion order do not affect ordering.
+- New and newer observations write atomically and stamp `stored_at` from the same Redis `TIME`. Equal and older observations retain the existing payload, storage time, and physical expiry without mutation.
+- Lua stores opaque deterministic JSON without `cjson` decoding or re-encoding.
+- Logical expiration remains `observed_at + fresh_ttl + stale_ttl + stale_grace_ttl`. Physical cleanup uses absolute `PEXPIREAT`, rounded upward to milliseconds and extended by a 5-second cleanup grace; it never restarts from `stored_at`.
+- Get reads the hash, computes state from split microsecond boundaries, and deletes an expired entry in the same Lua call. Policy-blocked and expired lookups never return a snapshot.
+- During physical cleanup grace, the first expired read can return `EXPIRED` and atomically delete the record. If Redis removes it naturally first, a later read is indistinguishable from a normal missing key.
+
+Administration and errors:
+- Exact-key delete returns the existing protocol boolean.
+- `clear()` performs paginated namespace-scoped `SCAN`, locally validates each opaque digest key, and deletes only exact matches. It never uses `KEYS`, `FLUSHDB`, or `FLUSHALL`.
+- `purge_expired()` scans only the namespace and runs a Redis-time one-key atomic purge script per exact key; it counts only entries actually deleted by that invocation.
+- Namespace SCAN is bounded and scoped but is not linearizable with concurrent writers and is not claimed to provide a Redis-Cluster-global scan.
+- Redis availability and malformed response contracts raise `PriceCacheBackendError`, preserve the cause, and fail closed without falling back to in-memory cache.
+
+Validation boundary:
+- Phase 12D2A unit tests use fake/scripted Redis clients only and do not connect to Redis or SteamDT.
+- Static tests assert Lua command and argument contracts, but real Redis/Lua atomic behavior is not yet validated. That integration is reserved for Phase 12D2B.
+- No refresh planner, worker, batch refresh, cache warming, retry loop, production TTL environment configuration, or business wiring exists in this phase.
+- `price_avg=10/min` remains an internal project safety cap and is not a confirmed official SteamDT quota.
+
 ## Safety Notes
 
 - Do not implement auto-buying.

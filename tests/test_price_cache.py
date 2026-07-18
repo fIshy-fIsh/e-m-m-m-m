@@ -16,6 +16,7 @@ from app.services.price_cache import (
     PriceCacheReadPolicy,
     PriceCacheState,
     PriceCacheWriteResult,
+    evaluate_price_cache_lookup,
 )
 
 BASE_TIME = datetime(2026, 7, 16, 12, tzinfo=UTC)
@@ -859,6 +860,24 @@ def test_core_snapshot_contains_no_secret_or_runtime_objects() -> None:
     assert "httpx" not in encoded.lower()
     assert "callback" not in encoded.lower()
     assert all(not asyncio.iscoroutine(value) for value in dumped.values())
+
+
+def test_shared_lookup_evaluator_matches_cache_without_mutating_snapshot() -> None:
+    snapshot = _snapshot()
+
+    lookup = evaluate_price_cache_lookup(
+        snapshot,
+        now=BASE_TIME + timedelta(minutes=6),
+        read_policy=PriceCacheReadPolicy.FRESH_ONLY,
+    )
+
+    assert lookup.state == PriceCacheState.STALE
+    assert lookup.hit is False
+    assert lookup.snapshot is None
+    assert lookup.policy_blocked is True
+    assert lookup.age == timedelta(minutes=6)
+    assert snapshot.observed_at == BASE_TIME
+    assert snapshot.stored_at == BASE_TIME
 
 
 def test_clock_must_return_aware_datetime() -> None:

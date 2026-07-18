@@ -182,6 +182,19 @@
 - There is currently no Redis price cache, refresh planner, background refresh, cache warming, runtime configuration, or changed SteamDT request behavior.
 - The existing `price_avg=10/min` value remains a project-internal safety cap, not a confirmed official SteamDT limit.
 
+### Phase 12D2A Redis Price Cache Codec and Atomic Core
+- `RedisPriceCache` is an isolated core that receives an externally owned async Redis client; it does not read env, call `Redis.from_url()`, ping, close the client, or create a background task.
+- Redis entry keys use only the explicit namespace and `PriceCacheKey.stable_digest()` in `{steamdt-price-cache-v1:<digest>}:snapshot` form. Full market names and credentials are not included in keys.
+- The versioned Redis Hash codec keeps ordering/time metadata separate from deterministic candidate JSON. Decimal values remain strings, timestamps and TTLs retain microsecond precision, and provider candidate order is preserved.
+- Atomic put/get/purge Lua scripts use Redis server `TIME`. Put compares observed seconds then microseconds, stamps authoritative `stored_at`, and leaves equal/older payload, storage time, and expiry unchanged.
+- Physical cleanup uses absolute `PEXPIREAT` derived from the observation-based logical expiry, rounded upward to milliseconds plus a 5-second cleanup grace. That grace does not change fresh/stale/grace state.
+- Get computes logical state with Redis time and atomically deletes an expired hash. During cleanup grace the first read can report `EXPIRED`; after natural Redis removal the result is a normal miss.
+- Corrupt stored data raises `PriceCacheCodecError`; Redis call or response-contract failures raise `PriceCacheBackendError` and fail closed without an in-memory fallback.
+- `clear()` and `purge_expired()` use paged, namespace-scoped `SCAN` plus local exact-key validation. They never use `KEYS`, `FLUSHDB`, or `FLUSHALL`; SCAN administration is not claimed to be linearizable or Redis-Cluster-global.
+- Phase 12D2A uses fake Redis clients only. The Lua atomic contract has not yet been validated against real Redis; that is reserved for Phase 12D2B.
+- This core is not wired into provider, selector, valuation, pipeline, scheduler, FastAPI, refresh, warming, configuration, or application lifecycle, and it does not call SteamDT.
+- The existing `price_avg=10/min` value remains a project-internal safety cap, not a confirmed official SteamDT limit.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.
