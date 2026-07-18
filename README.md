@@ -191,9 +191,21 @@
 - Get computes logical state with Redis time and atomically deletes an expired hash. During cleanup grace the first read can report `EXPIRED`; after natural Redis removal the result is a normal miss.
 - Corrupt stored data raises `PriceCacheCodecError`; Redis call or response-contract failures raise `PriceCacheBackendError` and fail closed without an in-memory fallback.
 - `clear()` and `purge_expired()` use paged, namespace-scoped `SCAN` plus local exact-key validation. They never use `KEYS`, `FLUSHDB`, or `FLUSHALL`; SCAN administration is not claimed to be linearizable or Redis-Cluster-global.
-- Phase 12D2A uses fake Redis clients only. The Lua atomic contract has not yet been validated against real Redis; that is reserved for Phase 12D2B.
+- Phase 12D2A was validated with fake Redis clients only; Phase 12D2B provides the separate opt-in real Redis harness below.
 - This core is not wired into provider, selector, valuation, pipeline, scheduler, FastAPI, refresh, warming, configuration, or application lifecycle, and it does not call SteamDT.
 - The existing `price_avg=10/min` value remains a project-internal safety cap, not a confirmed official SteamDT limit.
+
+### Phase 12D2B Real Redis Price Cache Integration Harness
+- `scripts/steamdt_redis_price_cache_smoke.py` and `tests/test_redis_price_cache_integration.py` validate the Phase 12D2A Lua/hash contract against an explicitly selected test Redis server. They are disabled unless `STEAMDT_RUN_REDIS_PRICE_CACHE_INTEGRATION_TESTS=true`.
+- The harness reads only `STEAMDT_TEST_REDIS_URL` (default `redis://localhost:6379/15`) and `STEAMDT_TEST_REDIS_PRICE_CACHE_NAMESPACE`. It never reads the formal `REDIS_URL`, production namespace, or SteamDT API key.
+- Every run appends a lowercase UUID to the required `steamdt-price-cache-integration-v1` prefix. Cleanup uses paged `SCAN`, Python exact-key validation, and `DEL` only for that UUID namespace; it never uses `KEYS`, `FLUSHDB`, or `FLUSHALL`.
+- Real Redis coverage includes bytes/list Lua replies, `TYPE`, flat `HGETALL`, `TIME`, absolute `PEXPIREAT`, integer SCAN cursors, cross-client visibility, microsecond ordering, equal/older preservation, logical state reads, atomic expired deletion, fail-closed wrong/corrupt types, namespace isolation, purge, pagination, and concurrent races.
+- The fixture and smoke harness own and close two redis-py async clients in `finally`; `RedisPriceCache` still never owns or closes an injected client. Cleanup failure is reported without replacing the primary scenario failure.
+- Both entrypoints safely skip with exit code 0 before client construction when not opted in:
+  - `python scripts/steamdt_redis_price_cache_smoke.py`
+  - `python -m scripts.steamdt_redis_price_cache_smoke`
+- Manual local example: `STEAMDT_RUN_REDIS_PRICE_CACHE_INTEGRATION_TESTS=true STEAMDT_TEST_REDIS_URL=redis://localhost:6379/15 STEAMDT_TEST_REDIS_PRICE_CACHE_NAMESPACE=steamdt-price-cache-integration-v1 python -m scripts.steamdt_redis_price_cache_smoke`.
+- This is test-only integration validation, not production cache deployment. It does not call SteamDT or wire cache composition, provider, pipeline, scheduler, FastAPI, refresh, or background work. Namespace SCAN is not claimed to be Redis-Cluster-global.
 
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.

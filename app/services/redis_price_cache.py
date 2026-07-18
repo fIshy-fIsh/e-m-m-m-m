@@ -57,6 +57,15 @@ local redis_time = redis.call("TIME")
 local now_seconds = tonumber(redis_time[1])
 local now_microseconds = tonumber(redis_time[2])
 
+local incoming = {}
+for index = 0, field_count - 1 do
+    local field = ARGV[7 + (index * 2)]
+    if incoming[field] ~= nil then
+        return {"invalid_args", now_seconds, now_microseconds}
+    end
+    incoming[field] = ARGV[8 + (index * 2)]
+end
+
 if observed_seconds > now_seconds or
    (observed_seconds == now_seconds and observed_microseconds > now_microseconds) then
     return {"future", now_seconds, now_microseconds}
@@ -67,6 +76,23 @@ local result = "created"
 if existing_type ~= "none" then
     if existing_type ~= "hash" then
         return {"corrupt", now_seconds, now_microseconds, "wrong_type"}
+    end
+    local existing = redis.call("HGETALL", key)
+    if #existing ~= field_count * 2 + 4 then
+        return {"corrupt", now_seconds, now_microseconds, "unexpected_fields"}
+    end
+    local existing_fields = {}
+    for index = 1, #existing, 2 do
+        existing_fields[existing[index]] = true
+    end
+    for field, _value in pairs(incoming) do
+        if existing_fields[field] ~= true then
+            return {"corrupt", now_seconds, now_microseconds, "missing_field"}
+        end
+    end
+    if existing_fields["stored_seconds"] ~= true or
+       existing_fields["stored_microseconds"] ~= true then
+        return {"corrupt", now_seconds, now_microseconds, "missing_storage_time"}
     end
     local existing_seconds_text = redis.call("HGET", key, "observed_seconds")
     local existing_microseconds_text = redis.call("HGET", key, "observed_microseconds")
@@ -79,12 +105,10 @@ if existing_type ~= "none" then
     if existing_seconds > observed_seconds or
        (existing_seconds == observed_seconds and
         existing_microseconds > observed_microseconds) then
-        local existing = redis.call("HGETALL", key)
         return {"ignored_older", now_seconds, now_microseconds, unpack(existing)}
     end
     if existing_seconds == observed_seconds and
        existing_microseconds == observed_microseconds then
-        local existing = redis.call("HGETALL", key)
         return {"unchanged_equal", now_seconds, now_microseconds, unpack(existing)}
     end
     result = "replaced"
@@ -206,11 +230,66 @@ end
 if existing_type ~= "hash" then
     return {"corrupt", 0, "wrong_type"}
 end
+local required_fields = {
+    "codec_version",
+    "schema_version",
+    "key_json",
+    "key_digest",
+    "observed_seconds",
+    "observed_microseconds",
+    "stored_seconds",
+    "stored_microseconds",
+    "fresh_ttl_microseconds",
+    "stale_ttl_microseconds",
+    "stale_grace_ttl_microseconds",
+    "fresh_until_seconds",
+    "fresh_until_microseconds",
+    "stale_until_seconds",
+    "stale_until_microseconds",
+    "expires_seconds",
+    "expires_microseconds",
+    "payload_json"
+}
+if redis.call("HLEN", key) ~= #required_fields then
+    return {"corrupt", 0, "unexpected_fields"}
+end
+for _, field in ipairs(required_fields) do
+    if redis.call("HEXISTS", key, field) ~= 1 then
+        return {"corrupt", 0, "missing_field"}
+    end
+end
+if redis.call("HGET", key, "codec_version") ~= "1" or
+   redis.call("HGET", key, "schema_version") ~= "1" then
+    return {"corrupt", 0, "unsupported_version"}
+end
+local key_digest = redis.call("HGET", key, "key_digest")
+if string.len(key_digest) ~= 64 or
+   string.match(key_digest, "^[0-9a-f]+$") == nil then
+    return {"corrupt", 0, "malformed_digest"}
+end
+local observed_seconds = parse_uint(redis.call("HGET", key, "observed_seconds"))
+local observed_microseconds = parse_uint(redis.call("HGET", key, "observed_microseconds"))
+local stored_seconds = parse_uint(redis.call("HGET", key, "stored_seconds"))
+local stored_microseconds = parse_uint(redis.call("HGET", key, "stored_microseconds"))
+local fresh_ttl = parse_uint(redis.call("HGET", key, "fresh_ttl_microseconds"))
+local stale_ttl = parse_uint(redis.call("HGET", key, "stale_ttl_microseconds"))
+local grace_ttl = parse_uint(redis.call("HGET", key, "stale_grace_ttl_microseconds"))
+local fresh_until_seconds = parse_uint(redis.call("HGET", key, "fresh_until_seconds"))
+local fresh_until_microseconds = parse_uint(redis.call("HGET", key, "fresh_until_microseconds"))
+local stale_until_seconds = parse_uint(redis.call("HGET", key, "stale_until_seconds"))
+local stale_until_microseconds = parse_uint(redis.call("HGET", key, "stale_until_microseconds"))
 local expires_seconds = parse_uint(redis.call("HGET", key, "expires_seconds"))
 local expires_microseconds = parse_uint(redis.call("HGET", key, "expires_microseconds"))
-if expires_seconds == nil or expires_microseconds == nil or
+if observed_seconds == nil or observed_microseconds == nil or
+   stored_seconds == nil or stored_microseconds == nil or
+   fresh_ttl == nil or fresh_ttl == 0 or stale_ttl == nil or grace_ttl == nil or
+   fresh_until_seconds == nil or fresh_until_microseconds == nil or
+   stale_until_seconds == nil or stale_until_microseconds == nil or
+   expires_seconds == nil or expires_microseconds == nil or
+   observed_microseconds > 999999 or stored_microseconds > 999999 or
+   fresh_until_microseconds > 999999 or stale_until_microseconds > 999999 or
    expires_microseconds > 999999 then
-    return {"corrupt", 0, "malformed_expiry"}
+    return {"corrupt", 0, "malformed_metadata"}
 end
 if now_seconds > expires_seconds or
    (now_seconds == expires_seconds and now_microseconds >= expires_microseconds) then

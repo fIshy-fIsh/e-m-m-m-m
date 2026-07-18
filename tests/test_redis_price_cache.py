@@ -861,6 +861,10 @@ def test_lua_scripts_have_atomic_server_time_and_expiry_contracts() -> None:
     assert 'redis.call("PEXPIRE"' not in REDIS_PRICE_CACHE_PUT_SCRIPT
     assert "existing_seconds > observed_seconds" in REDIS_PRICE_CACHE_PUT_SCRIPT
     assert "existing_microseconds > observed_microseconds" in REDIS_PRICE_CACHE_PUT_SCRIPT
+    assert 'redis.call("HGETALL", key)' in REDIS_PRICE_CACHE_PUT_SCRIPT
+    assert "#existing ~= field_count * 2 + 4" in REDIS_PRICE_CACHE_PUT_SCRIPT
+    assert 'existing_fields["stored_seconds"] ~= true' in REDIS_PRICE_CACHE_PUT_SCRIPT
+    assert 'existing_fields["stored_microseconds"] ~= true' in REDIS_PRICE_CACHE_PUT_SCRIPT
     assert 'return {"ignored_older"' in REDIS_PRICE_CACHE_PUT_SCRIPT
     assert 'return {"unchanged_equal"' in REDIS_PRICE_CACHE_PUT_SCRIPT
     assert REDIS_PRICE_CACHE_GET_SCRIPT.count('redis.call("TIME")') == 1
@@ -869,6 +873,11 @@ def test_lua_scripts_have_atomic_server_time_and_expiry_contracts() -> None:
     assert 'redis.call("DEL", key)' in REDIS_PRICE_CACHE_GET_SCRIPT
     assert REDIS_PRICE_CACHE_PURGE_SCRIPT.count('redis.call("TIME")') == 1
     assert 'redis.call("TYPE", key)["ok"]' in REDIS_PRICE_CACHE_PURGE_SCRIPT
+    assert 'redis.call("HLEN", key)' in REDIS_PRICE_CACHE_PURGE_SCRIPT
+    assert 'redis.call("HEXISTS", key, field)' in REDIS_PRICE_CACHE_PURGE_SCRIPT
+    assert 'redis.call("HGET", key, "codec_version") ~= "1"' in (
+        REDIS_PRICE_CACHE_PURGE_SCRIPT
+    )
     assert "HGETALL" not in REDIS_PRICE_CACHE_PURGE_SCRIPT
     assert "redis.call(\"GET\"" not in scripts
     assert "cjson" not in scripts.lower()
@@ -877,6 +886,22 @@ def test_lua_scripts_have_atomic_server_time_and_expiry_contracts() -> None:
     assert "FLUSHALL" not in scripts.upper()
     assert "Authorization" not in scripts
     assert "api_key" not in scripts.lower()
+
+
+def test_lua_rejects_incomplete_hash_before_replace_or_purge_delete() -> None:
+    put_structure_check = REDIS_PRICE_CACHE_PUT_SCRIPT.index(
+        "#existing ~= field_count * 2 + 4"
+    )
+    put_replacement = REDIS_PRICE_CACHE_PUT_SCRIPT.index('result = "replaced"')
+    purge_structure_check = REDIS_PRICE_CACHE_PURGE_SCRIPT.index(
+        'redis.call("HLEN", key)'
+    )
+    purge_delete = REDIS_PRICE_CACHE_PURGE_SCRIPT.index(
+        'return {"deleted", redis.call("DEL", key)}'
+    )
+
+    assert put_structure_check < put_replacement
+    assert purge_structure_check < purge_delete
 
 
 def test_codec_versions_are_explicit_and_stable() -> None:

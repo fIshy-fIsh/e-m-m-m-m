@@ -917,8 +917,35 @@ Administration and errors:
 
 Validation boundary:
 - Phase 12D2A unit tests use fake/scripted Redis clients only and do not connect to Redis or SteamDT.
-- Static tests assert Lua command and argument contracts, but real Redis/Lua atomic behavior is not yet validated. That integration is reserved for Phase 12D2B.
+- Static tests assert Lua command and argument contracts. Phase 12D2B adds separate, explicitly opted-in real Redis validation without changing this core's ownership or wiring boundaries.
 - No refresh planner, worker, batch refresh, cache warming, retry loop, production TTL environment configuration, or business wiring exists in this phase.
+- `price_avg=10/min` remains an internal project safety cap and is not a confirmed official SteamDT quota.
+
+## Phase 12D2B Real Redis Price Cache Integration
+
+Opt-in and isolation:
+- `STEAMDT_RUN_REDIS_PRICE_CACHE_INTEGRATION_TESTS=false` is the default. Neither the pytest module nor either smoke entrypoint creates a Redis client unless the value is explicitly `true`.
+- The harness reads `STEAMDT_TEST_REDIS_URL` rather than formal `REDIS_URL`, and reads `STEAMDT_TEST_REDIS_PRICE_CACHE_NAMESPACE` rather than any production namespace. It never reads a SteamDT API key or calls SteamDT.
+- The namespace base must start with `steamdt-price-cache-integration-v1`; every run appends a generated lowercase UUID hex suffix. Empty values, surrounding whitespace, controls, glob characters, braces, production namespace, limiter namespace, and missing/invalid UUID suffixes are rejected before connection.
+- Cleanup uses paginated SCAN with `{<exact-uuid-namespace>:*}:snapshot`, validates every returned key against the exact namespace and 64-hex digest format in Python, and applies DEL only to verified keys. It is repeatable and runs in `finally`; no `KEYS`, `FLUSHDB`, or `FLUSHALL` is used.
+
+Ownership and safe operation:
+- The smoke harness and pytest fixture create two independent redis-py async clients and close both with `aclose()` in `finally`. `RedisPriceCache` remains externally owned and never closes either client.
+- Cleanup and close attempts still run after scenario failure. A cleanup error is reported but does not replace the primary scenario exception.
+- Full Redis URLs, passwords, query credentials, authorization headers, payload JSON, and key lists are not printed. The smoke output reports only fixed scenario labels and `SteamDT requests sent: 0`.
+- Direct and module execution are both supported. With the gate disabled they print a skip message and exit 0 before Redis namespace/client work.
+
+Real Redis contract coverage:
+- The harness validates PING, Redis version discovery, Redis `TIME`, bytes tags in Python list Lua replies, flat `HGETALL` field/value data, Redis 7 Lua `TYPE(...)["ok"]`, exact integer delete results, absolute `PEXPIREAT`, and redis-py integer SCAN cursors.
+- Basic round-trip preserves exact Decimal strings, aware UTC microseconds, provider order, and duplicate candidates. Redis TIME stamps authoritative `stored_at` between real pre/post TIME reads and ignores caller-declared storage time.
+- Two independent clients verify shared namespace visibility, deterministic keys, newer replacement, older/equal no-op preservation, one-microsecond ordering within one Unix second, and concurrent newer/older and equal-observation races.
+- Real logical state checks cover fresh, stale, stale-grace, explicit read policies, policy-blocked snapshot isolation, and an expired read that reports EXPIRED once and deletes in the same Lua operation.
+- `PEXPIRETIME` is checked against `observed_at + all logical TTLs + five-second cleanup grace`, with microseconds rounded upward. Equal and older writes must not change stored metadata or physical expiry.
+- Wrong Redis types and minimally corrupt hashes fail closed for get, put, and purge and remain present until explicit namespace clear. Namespace isolation, real SCAN pagination, and purge counts are also covered.
+
+Boundary:
+- This phase validates a local/test Redis server only. It does not deploy the cache, add a factory, read production cache settings, or wire provider, selector, valuation, pipeline, scheduler, FastAPI, refresh, warming, or background work.
+- Namespace SCAN remains non-linearizable with concurrent writers and is not claimed to be Redis-Cluster-global.
 - `price_avg=10/min` remains an internal project safety cap and is not a confirmed official SteamDT quota.
 
 ## Safety Notes
