@@ -205,7 +205,16 @@
   - `python scripts/steamdt_redis_price_cache_smoke.py`
   - `python -m scripts.steamdt_redis_price_cache_smoke`
 - Manual local example: `STEAMDT_RUN_REDIS_PRICE_CACHE_INTEGRATION_TESTS=true STEAMDT_TEST_REDIS_URL=redis://localhost:6379/15 STEAMDT_TEST_REDIS_PRICE_CACHE_NAMESPACE=steamdt-price-cache-integration-v1 python -m scripts.steamdt_redis_price_cache_smoke`.
-- This is test-only integration validation, not production cache deployment. It does not call SteamDT or wire cache composition, provider, pipeline, scheduler, FastAPI, refresh, or background work. Namespace SCAN is not claimed to be Redis-Cluster-global.
+- This is test-only integration validation, not production cache deployment. It does not call SteamDT or wire the Phase 12D3A cache factory into provider, pipeline, scheduler, FastAPI, refresh, or background work. Namespace SCAN is not claimed to be Redis-Cluster-global.
+
+### Phase 12D3A Price Cache Factory / Composition
+- `STEAMDT_PRICE_CACHE_BACKEND` selects the explicit cache backend: `inmemory` by default, or `redis` when intentionally enabled. Redis failures never silently fall back to memory.
+- The Redis backend reuses formal `REDIS_URL` and `STEAMDT_PRICE_CACHE_REDIS_NAMESPACE` (default `steamdt-price-cache-v1`). It does not read the D2B test URL/namespace and adds no production TTL environment variables.
+- Composition constructs `InMemoryPriceCache` or `RedisPriceCache` without PING, EVAL, SCAN, TIME, DELETE, or a SteamDT request. redis-py client creation is lazy and Redis connectivity is not checked at construction.
+- `RedisPriceCache` still never owns or closes its client. Factory-created clients are owned by `SteamDTPriceCacheRuntime`; externally injected clients remain open by default unless ownership is explicitly transferred.
+- Runtime close is asynchronous, idempotent, and at-most-once even after failure. Construction cleanup preserves the primary construction error and exposes a separate cleanup error if both operations fail, while public errors omit credential-bearing exception text.
+- The limiter and cache factories remain independent. A future application runtime can inject one externally owned redis-py client into both with ownership disabled, then close that shared client itself; the client must not be marked owned by both runtimes.
+- Phase 12D3A uses fake Redis clients only and is not wired into `PriceProvider`, selector, `ValuationService`, pipeline, scheduler, FastAPI, refresh, warming, alerts, or production deployment.
 
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.

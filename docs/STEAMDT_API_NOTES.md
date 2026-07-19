@@ -944,9 +944,27 @@ Real Redis contract coverage:
 - Wrong Redis types and minimally corrupt hashes fail closed for get, put, and purge and remain present until explicit namespace clear. Namespace isolation, real SCAN pagination, and purge counts are also covered.
 
 Boundary:
-- This phase validates a local/test Redis server only. It does not deploy the cache, add a factory, read production cache settings, or wire provider, selector, valuation, pipeline, scheduler, FastAPI, refresh, warming, or background work.
+- This phase validates a local/test Redis server only. It does not deploy the cache or wire the Phase 12D3A composition factory into provider, selector, valuation, pipeline, scheduler, FastAPI, refresh, warming, or background work.
 - Namespace SCAN remains non-linearizable with concurrent writers and is not claimed to be Redis-Cluster-global.
 - `price_avg=10/min` remains an internal project safety cap and is not a confirmed official SteamDT quota.
+
+## Phase 12D3A Price Cache Factory / Composition
+
+Configuration and selection:
+- `STEAMDT_PRICE_CACHE_BACKEND` accepts only `inmemory` or `redis`; the default is `inmemory`, and Redis composition never silently falls back to memory.
+- Redis composition reuses formal `REDIS_URL` and `STEAMDT_PRICE_CACHE_REDIS_NAMESPACE` (default `steamdt-price-cache-v1`). It never reads D2B integration-test variables and introduces no second production URL or production TTL settings.
+- The factory reuses the cache core's namespace normalization, including its exact `[A-Za-z0-9._:-]+` allowlist. Unsupported backends, missing or malformed required URLs, invalid namespaces, ownership without an injected client, and conflicting or backend-irrelevant arguments fail explicitly.
+
+Construction and ownership:
+- The default path constructs only `InMemoryPriceCache` and does not create a Redis client. Redis composition constructs `RedisPriceCache` without PING, EVAL, SCAN, TIME, DELETE, or another Redis command; `Redis.from_url()` remains lazy and does not prove connectivity.
+- `RedisPriceCache` continues to be an injected-client core and never owns or closes Redis. A factory-created client is owned by `SteamDTPriceCacheRuntime`; an external client defaults to non-owned and can transfer ownership explicitly.
+- Runtime close is asynchronous and at-most-once, including after close failure or concurrent close calls. Only owned clients are closed; modern `aclose()` and compatible `close()` clients are supported.
+- If construction fails after an owned client is acquired, cleanup is attempted once. The primary construction exception remains inspectable; if cleanup also fails, a dedicated composition error exposes both exceptions without placing arbitrary credential-bearing messages in public error text or traceback chaining.
+
+Compatibility and boundaries:
+- The rate-limiter factory and price-cache factory remain separate and the limiter ownership contract is unchanged. A future application runtime may inject the same external redis-py client into both with ownership false and become the sole closer; both runtimes must not independently own that shared client.
+- Phase 12D3A tests use fake Redis clients and do not connect to Redis or SteamDT. Direct `InMemoryPriceCache` and `RedisPriceCache` construction remains compatible.
+- The factory is not imported by `PriceProvider`, selector, `ValuationService`, pipeline, scheduler, FastAPI, alerts, or refresh/warming workers. This phase does not claim production deployment and does not modify Lua, codec, cache state, or read/write semantics.
 
 ## Safety Notes
 

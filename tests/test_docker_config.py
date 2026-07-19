@@ -29,6 +29,17 @@ def test_settings_default_steamdt_rate_limiter_backend_is_inmemory() -> None:
     assert settings.steamdt_rate_limit_redis_namespace == "steamdt-rate-limit-v1"
 
 
+def test_settings_default_steamdt_price_cache_backend_is_inmemory() -> None:
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+psycopg://cs2bot:password@postgres:5432/cs2tradeup",
+        redis_url="redis://redis:6379/0",
+        bymykel_base_url="https://example.test",
+    )
+
+    assert settings.steamdt_price_cache_backend == "inmemory"
+    assert settings.steamdt_price_cache_redis_namespace == "steamdt-price-cache-v1"
+
 
 def test_scheduler_env_defaults_are_reasonable() -> None:
     settings = Settings(
@@ -71,7 +82,10 @@ def test_env_example_contains_critical_scheduler_variables() -> None:
     assert "SCHEDULER_MAX_INSTANCES=1" in content
     assert "STEAMDT_RATE_LIMIT_BACKEND=inmemory" in content
     assert "STEAMDT_RATE_LIMIT_REDIS_NAMESPACE=steamdt-rate-limit-v1" in content
-
+    assert "STEAMDT_PRICE_CACHE_BACKEND=inmemory" in content
+    assert (
+        "STEAMDT_PRICE_CACHE_REDIS_NAMESPACE=steamdt-price-cache-v1" in content
+    )
 
 
 def test_dockerignore_exists_and_ignores_env() -> None:

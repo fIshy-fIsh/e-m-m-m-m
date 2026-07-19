@@ -347,7 +347,7 @@ class RedisPriceCache:
         scan_count: int = REDIS_PRICE_CACHE_SCAN_COUNT,
     ) -> None:
         self.redis_client = redis_client
-        self.namespace = _validate_namespace(namespace)
+        self.namespace = normalize_redis_price_cache_namespace(namespace)
         if type(scan_count) is not int or scan_count <= 0:
             raise ValueError("scan_count must be a positive integer")
         self.scan_count = scan_count
@@ -543,7 +543,9 @@ class RedisPriceCache:
         return re.fullmatch(r"[0-9a-f]{64}", digest) is not None
 
 
-def _validate_namespace(namespace: str) -> str:
+def normalize_redis_price_cache_namespace(namespace: str) -> str:
+    """Normalize one namespace using the cache core's exact key-safety rules."""
+
     if not isinstance(namespace, str):
         raise TypeError("namespace must be a string")
     normalized = namespace.strip()
