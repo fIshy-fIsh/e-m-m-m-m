@@ -216,6 +216,15 @@
 - The limiter and cache factories remain independent. A future application runtime can inject one externally owned redis-py client into both with ownership disabled, then close that shared client itself; the client must not be marked owned by both runtimes.
 - Phase 12D3A uses fake Redis clients only and is not wired into `PriceProvider`, selector, `ValuationService`, pipeline, scheduler, FastAPI, refresh, warming, alerts, or production deployment.
 
+### Phase 12D3B SteamDT Snapshot Adapter and Cache-Backed Quote Resolver
+- The adapter maps every selector-dependent `SteamDTPlatformPrice` field to the immutable pre-selection `NormalizedPriceCandidate`; Decimal values never pass through float, source timestamps remain opaque `int | str | None`, and candidate order and duplicates are preserved.
+- Mutable raw HTTP records are never cached. Reconstructed selector inputs use `raw=None`, so the adapter does not claim to reproduce provider payload metadata.
+- The read-only resolver performs one `PriceCache.get()` and reruns the existing selector with the caller's current `SteamDTPriceSelectionConfig` on every allowed hit. Selection strategy, liquidity thresholds, fallback policy, optional already-known avg input, and any future preferred-platform policy remain outside `PriceCacheKey`.
+- `MISS`, `POLICY_BLOCKED`, `EXPIRED`, and `SELECTION_FAILURE` are typed normal outcomes with no live fallback. Allowed stale and stale-grace hits retain their state, age, and `needs_refresh=true` advice but never start refresh work.
+- Redis backend failures and corrupt codec records continue to fail closed; adapter invariant failures remain a separate non-sensitive error type. D3B itself invokes no cache write/administration method, refresh, Redis/HTTP client creation, env read, or background task; the existing cache `get()` contract may remove an expired entry, and injected collaborators retain responsibility for their own side effects.
+- The current selector does not implement a preferred-platform option. Policy-independent cache reuse is validated with its existing strategy and liquidity controls instead of inventing a new selector setting.
+- Phase 12D3B is not wired into `PriceProvider`, `ValuationService`, pipeline, scheduler, FastAPI, alerts, or production deployment. A later phase will own the refresh/write path.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.

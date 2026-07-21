@@ -966,6 +966,28 @@ Compatibility and boundaries:
 - Phase 12D3A tests use fake Redis clients and do not connect to Redis or SteamDT. Direct `InMemoryPriceCache` and `RedisPriceCache` construction remains compatible.
 - The factory is not imported by `PriceProvider`, selector, `ValuationService`, pipeline, scheduler, FastAPI, alerts, or refresh/warming workers. This phase does not claim production deployment and does not modify Lua, codec, cache state, or read/write semantics.
 
+## Phase 12D3B SteamDT Snapshot Adapter and Cache-Backed Quote Resolver
+
+Adapter contract:
+- `SteamDTPlatformPrice` maps field-for-field to `NormalizedPriceCandidate`: platform, platform item ID, sell/bid Decimal values, sell/bid counts, and opaque source update time. `update_time` is renamed to `source_update_time`; its unit remains unconfirmed and the adapter does not parse or infer it.
+- Prices must remain finite nonnegative `Decimal` values, counts remain exact nonnegative integers, and source update time remains `int | str | None` with ambiguous values such as `bool` rejected explicitly.
+- Multi-candidate conversion preserves original order and duplicates. Raw HTTP mappings are deliberately excluded from cache records; reconstruction for the selector sets `raw=None` and does not claim payload round-trip compatibility.
+- Snapshot construction accepts an existing D1 `PriceCacheKey`, ordered normalized candidates, explicit aware observation/storage timestamps, and `PriceCachePolicy`. It does not read a clock or write a backend. Adapter invariant failures use a dedicated non-sensitive error rather than backend or codec errors.
+
+Resolver and read policy:
+- `SteamDTCachedPriceResolver` depends on a narrow structural cache-reader contract, performs exactly one policy-aware `get()`, and never directly calls put, delete, clear, or purge operations. Existing cache backends may atomically remove an expired record as part of their established `get()` semantics.
+- A permitted hit is converted back to selector input and evaluated once with the caller's current `SteamDTPriceSelectionConfig`, optional already-known `avg_price_cny`, and no original payload. The resolver never calls SteamDT or obtains avg data itself.
+- Selection strategy, liquidity thresholds, bidding/spread requirements, avg sanity inputs, fallback behavior, and future preferred-platform policy remain absent from `PriceCacheKey`. The same pre-selection snapshot can therefore produce a different result under a later config without a new cache entry.
+- The existing selector currently has no preferred-platform setting. D3B validates policy-independent reuse with the supported strategy and liquidity controls instead of adding or simulating that feature.
+- Allowed stale and stale-grace hits preserve state, age, and `needs_refresh=true` while remaining selectable. `FRESH_ONLY`, `ALLOW_STALE`, and `ALLOW_STALE_GRACE` retain the exact D1 policy matrix; the resolver does not act on refresh advice.
+
+Results, errors, and boundaries:
+- Resolution statuses distinguish `SELECTED`, ordinary `MISS`, `POLICY_BLOCKED`, `EXPIRED`, and selector `SELECTION_FAILURE`. Miss, blocked, expired, and no acceptable candidate are normal typed results and never trigger a live fallback.
+- The thin result retains the complete `PriceCacheLookup` plus the existing `SteamDTPriceSelectionResult` when selection ran, and exposes the existing `SteamDTPriceQuote` without duplicating provider-specific `PriceQuote` or batch `PriceLookupResult` behavior.
+- `PriceCacheBackendError` and `PriceCacheCodecError` propagate unchanged and fail closed. Adapter invariant errors and unexpected selector errors remain distinct; none is converted to a miss or selection failure.
+- D3B directly creates no Redis or HTTP client, reads no environment variables, creates no task, invokes no cache write/administration method, refreshes nothing, and owns no runtime lifecycle. The default selector is local and network-free; externally injected cache readers/selectors retain responsibility for their own side effects. It is not imported by provider, valuation, pipeline, scheduler, FastAPI, or alerts.
+- The next cache phase owns refresh/write behavior. D3B does not claim production deployment and changes no provider protocol, cache factory, Redis codec/Lua/harness, selector behavior, pipeline, or scheduler behavior.
+
 ## Safety Notes
 
 - Do not implement auto-buying.
