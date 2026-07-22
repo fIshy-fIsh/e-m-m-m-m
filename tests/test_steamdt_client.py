@@ -373,6 +373,216 @@ def test_steamdt_http_client_get_price_single_uses_official_single_path_and_quer
     assert kwargs["headers"]["Authorization"] == "Bearer secret-key"
 
 
+class FailingCloseHttpClient:
+    def __init__(self) -> None:
+        self.close_calls = 0
+
+    async def aclose(self) -> None:
+        self.close_calls += 1
+        if self.close_calls == 1:
+            raise RuntimeError("close failed")
+
+
+def test_steamdt_http_client_retries_close_after_underlying_failure() -> None:
+    http_client = FailingCloseHttpClient()
+    client = SteamDTHttpClient(
+        SteamDTClientConfig(),
+        http_client=http_client,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(RuntimeError, match="close failed"):
+        asyncio.run(client.aclose())
+    asyncio.run(client.aclose())
+    asyncio.run(client.aclose())
+
+    assert http_client.close_calls == 2
+
+
+def test_steamdt_http_client_get_price_single_candidates_preserves_complete_sequence() -> None:
+    payload = {
+        "success": True,
+        "data": [
+            {
+                "platform": "steam",
+                "platformItemId": "first",
+                "sellPrice": "12.3400",
+                "sellCount": 0,
+                "biddingPrice": "11.2500",
+                "biddingCount": 2,
+                "updateTime": 123456,
+            },
+            {
+                "platform": "steam",
+                "platformItemId": "duplicate",
+                "sellPrice": "0",
+                "sellCount": 7,
+                "updateTime": "opaque",
+            },
+        ],
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    mock_http_client.request.return_value = _response_with_request(200, payload)
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    result = asyncio.run(client.get_price_single_candidates("AK-47 | Redline"))
+
+    assert [candidate.platform for candidate in result] == ["steam", "steam"]
+    assert [candidate.platform_item_id for candidate in result] == [
+        "first",
+        "duplicate",
+    ]
+    assert result[0].sell_price_cny == Decimal("12.3400")
+    assert result[0].sell_count == 0
+    assert result[0].bidding_price_cny == Decimal("11.2500")
+    assert result[0].bidding_count == 2
+    assert result[0].update_time == 123456
+    assert result[1].sell_price_cny == Decimal("0")
+    assert result[1].update_time == "opaque"
+    mock_http_client.request.assert_awaited_once()
+    _, kwargs = mock_http_client.request.call_args
+    assert kwargs["url"] == "/open/cs2/v1/price/single"
+    assert kwargs["params"] == {"marketHashName": "AK-47 | Redline"}
+
+
+def test_steamdt_http_client_get_price_single_candidates_accepts_empty_and_unselectable() -> None:
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    mock_http_client.request.side_effect = [
+        _response_with_request(200, {"success": True, "data": []}),
+        _response_with_request(
+            200,
+            {
+                "success": True,
+                "data": [{"platform": "steam", "sellPrice": "0"}],
+            },
+        ),
+    ]
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    empty = asyncio.run(client.get_price_single_candidates("A"))
+    unselectable = asyncio.run(client.get_price_single_candidates("A"))
+
+    assert empty == []
+    assert len(unselectable) == 1
+    assert unselectable[0].sell_price_cny == Decimal("0")
+    assert mock_http_client.request.await_count == 2
+
+
+def test_candidates_acquire_single_bucket_before_each_transport_retry() -> None:
+    payload = {
+        "success": True,
+        "data": [{"platform": "steam", "sellPrice": "12.34"}],
+    }
+    limiter = RecordingRateLimiter()
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=1)
+    mock_http_client = AsyncMock()
+    mock_http_client.request.side_effect = [
+        httpx.ReadTimeout("timeout"),
+        _response_with_request(200, payload),
+    ]
+    client = SteamDTHttpClient(config, http_client=mock_http_client, rate_limiter=limiter)
+
+    result = asyncio.run(client.get_price_single_candidates("A"))
+
+    assert len(result) == 1
+    assert limiter.acquired == [
+        SteamDTEndpoint.PRICE_SINGLE,
+        SteamDTEndpoint.PRICE_SINGLE,
+    ]
+    assert mock_http_client.request.await_count == 2
+
+
+def test_candidates_5xx_retry_uses_single_endpoint_budget() -> None:
+    payload = {
+        "success": True,
+        "data": [{"platform": "steam", "sellPrice": "12.34"}],
+    }
+    limiter = RecordingRateLimiter()
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=1)
+    mock_http_client = AsyncMock()
+    mock_http_client.request.side_effect = [
+        _response_with_request(500, {"success": False}),
+        _response_with_request(200, payload),
+    ]
+    client = SteamDTHttpClient(config, http_client=mock_http_client, rate_limiter=limiter)
+
+    result = asyncio.run(client.get_price_single_candidates("A"))
+
+    assert len(result) == 1
+    assert limiter.acquired == [
+        SteamDTEndpoint.PRICE_SINGLE,
+        SteamDTEndpoint.PRICE_SINGLE,
+    ]
+    assert mock_http_client.request.await_count == 2
+
+
+def test_candidates_wrapper_4005_records_cooldown_without_retry() -> None:
+    payload = {
+        "success": False,
+        "errorCode": 4005,
+        "errorMsg": "limit",
+        "errorCodeStr": "RATE_LIMIT",
+        "data": None,
+    }
+    limiter = RecordingRateLimiter()
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=3)
+    mock_http_client = AsyncMock()
+    mock_http_client.request.return_value = _response_with_request(200, payload)
+    client = SteamDTHttpClient(config, http_client=mock_http_client, rate_limiter=limiter)
+
+    with pytest.raises(SteamDTRateLimitError):
+        asyncio.run(client.get_price_single_candidates("A"))
+
+    assert limiter.server_limits == [(SteamDTEndpoint.PRICE_SINGLE, None)]
+    mock_http_client.request.assert_awaited_once()
+
+
+def test_candidates_http_429_records_cooldown_without_retry() -> None:
+    limiter = RecordingRateLimiter()
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=3)
+    mock_http_client = AsyncMock()
+    response = _response_with_request(429, {"success": False})
+    response.headers["Retry-After"] = "2.5"
+    mock_http_client.request.return_value = response
+    client = SteamDTHttpClient(config, http_client=mock_http_client, rate_limiter=limiter)
+
+    with pytest.raises(SteamDTRateLimitError):
+        asyncio.run(client.get_price_single_candidates("A"))
+
+    assert limiter.server_limits == [(SteamDTEndpoint.PRICE_SINGLE, 2.5)]
+    mock_http_client.request.assert_awaited_once()
+
+
+def test_candidates_local_limiter_rejection_skips_transport() -> None:
+    limiter = RecordingRateLimiter(reject_on_acquire=True)
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    client = SteamDTHttpClient(config, http_client=mock_http_client, rate_limiter=limiter)
+
+    with pytest.raises(SteamDTRateLimitError):
+        asyncio.run(client.get_price_single_candidates("A"))
+
+    mock_http_client.request.assert_not_called()
+
+
+def test_selected_single_price_preserves_original_payload_after_shared_fetch_refactor() -> None:
+    payload = {
+        "success": True,
+        "data": [{"platform": "steam", "sellPrice": "12.34", "sellCount": 2}],
+    }
+    config = SteamDTClientConfig(api_key="secret-key", dry_run=False, max_retries=0)
+    mock_http_client = AsyncMock()
+    mock_http_client.request.return_value = _response_with_request(200, payload)
+    client = SteamDTHttpClient(config, http_client=mock_http_client)
+
+    result = asyncio.run(client.get_price_single("A"))
+
+    assert result.raw is not None
+    assert result.raw["original_payload"] == payload
+    mock_http_client.request.assert_awaited_once()
+
+
 
 def test_steamdt_http_client_get_price_single_selects_lowest_positive_sell_price() -> None:
     payload = {

@@ -765,9 +765,20 @@ class SteamDTHttpClient:
 
         if self._closed:
             return
-        self._closed = True
         if self.http_client is not None:
             await self.http_client.aclose()
+        self._closed = True
+
+    async def get_price_single_candidates(
+        self,
+        market_hash_name: str,
+    ) -> list[SteamDTPlatformPrice]:
+        """Fetch every selector-before candidate from the official single endpoint."""
+
+        platform_prices, _payload = await self._get_price_single_candidates_and_payload(
+            market_hash_name
+        )
+        return platform_prices
 
     async def get_price_single_with_selection(
         self,
@@ -777,6 +788,29 @@ class SteamDTHttpClient:
         avg_price_cny: Decimal | None = None,
     ) -> SteamDTPriceQuote:
         """Fetch a single price quote and apply a caller-provided selection strategy."""
+
+        platform_prices, payload = await self._get_price_single_candidates_and_payload(
+            market_hash_name
+        )
+        selected_result = select_steamdt_price_quote(
+            market_hash_name,
+            platform_prices,
+            config=selection_config or SteamDTPriceSelectionConfig(),
+            avg_price_cny=avg_price_cny,
+            original_payload=payload,
+        )
+        if selected_result.quote is None:
+            raise RuntimeError(
+                "SteamDT single price response did not contain any acceptable sellPrice "
+                f"values; reason_codes={selected_result.reason_codes}"
+            )
+        return selected_result.quote
+
+    async def _get_price_single_candidates_and_payload(
+        self,
+        market_hash_name: str,
+    ) -> tuple[list[SteamDTPlatformPrice], dict[str, Any]]:
+        """Request and parse one complete selector-before single-price response."""
 
         if not market_hash_name.strip():
             raise ValueError("market_hash_name cannot be empty")
@@ -807,19 +841,7 @@ class SteamDTHttpClient:
             raise
         except ValueError as exc:
             raise SteamDTResponseParseError(str(exc), endpoint=path) from exc
-        selected_result = select_steamdt_price_quote(
-            market_hash_name,
-            platform_prices,
-            config=selection_config or SteamDTPriceSelectionConfig(),
-            avg_price_cny=avg_price_cny,
-            original_payload=payload,
-        )
-        if selected_result.quote is None:
-            raise RuntimeError(
-                "SteamDT single price response did not contain any acceptable sellPrice "
-                f"values; reason_codes={selected_result.reason_codes}"
-            )
-        return selected_result.quote
+        return platform_prices, payload
 
     async def get_price_single(self, market_hash_name: str) -> SteamDTPriceQuote:
         """Fetch one official read-only SteamDT price quote via the single-price endpoint."""

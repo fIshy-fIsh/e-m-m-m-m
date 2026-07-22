@@ -1007,7 +1007,27 @@ Results, errors, ordering, and boundaries:
 - Concurrent calls are neither locked nor coalesced. Each source fetch and put runs independently, while cache atomic ordering preserves the newest observation and equal observations retain the first writer. D4A implements no single-flight behavior.
 - Typed source transport/status/API/rate-limit/parser errors, adapter invariant errors, backend errors, codec corruption, and backend future-observation errors propagate without retry, fallback, repair, or false success. Item/source/return-contract mismatches use one fixed non-sensitive refresh validation error.
 - D4A runs no selector, constructs no quote, reads/administers no cache entry, creates no Redis or HTTP client, reads no env/config, and starts no task. It is not imported by provider, resolver, valuation, pipeline, scheduler, FastAPI, or alerts.
-- There is no concrete SteamDT source, real Redis/SteamDT validation, batch refresh, planner, worker, warming, retry, background refresh, scheduler integration, live fallback, or production deployment. The next phase owns the concrete read-only SteamDT source and smoke path.
+- There is no concrete SteamDT source, real Redis/SteamDT validation, batch refresh, planner, worker, warming, retry, background refresh, scheduler integration, live fallback, or production deployment. Phase 12D4B adds only the isolated concrete source and manual smoke below.
+
+## Phase 12D4B Concrete Read-Only Snapshot Source and Manual Smoke
+
+Client and source boundary:
+- `SteamDTHttpClient.get_price_single_candidates()` now exposes the complete ordered result of the confirmed official `GET /open/cs2/v1/price/single` path before selector policy is applied. A shared private request/parser helper keeps authentication, endpoint-specific limiter acquisition, wrapper-4005 cooldown recording, typed errors, and normal transport/5xx retry ownership in the existing client.
+- Existing `get_price_single_with_selection()` reuses that same helper and still passes the exact original response payload into `select_steamdt_price_quote()`. `get_price_single()`, `SteamDTClient`, mock/dry-run clients, and provider-facing behavior remain selected-quote compatible; no request is duplicated and no undocumented endpoint is added.
+- `SteamDTSinglePriceSnapshotSource` depends on a narrow candidate-client protocol, borrows rather than closes the client, makes one candidates call, validates the collection, then constructs the D4A fetched snapshot with fixed source `steamdt`. It never selects, reads/writes cache, requests avg price, retries independently, or reads environment/config.
+
+Observation and data semantics:
+- Source `observed_at` is the injected aware UTC clock reading taken once after successful HTTP completion and response parsing. It is the local client observation-completion time, not provider publication time.
+- Candidate `updateTime` remains opaque `int | str | None` metadata because its unit and semantics are unconfirmed. It is preserved per candidate but never used to infer `observed_at`, ordering, freshness, or TTL.
+- The D4A fetched model remains the raw-data boundary: candidate order, duplicates, exact Decimal values, counts, platform IDs, and opaque update times survive, while mutable record `raw` mappings and the full HTTP payload do not enter the fetched/cached snapshot.
+
+Manual smoke safety and flow:
+- `scripts/steamdt_price_snapshot_smoke.py` is disabled by default through dedicated `STEAMDT_RUN_PRICE_SNAPSHOT_SMOKE=false`. Only explicit `true` enables this harness; the gate is checked before API-key/base-URL reads or client construction. The supplied D4B command therefore needs no additional `STEAMDT_DRY_RUN=false`; older SteamDT smoke scripts retain their existing gate behavior.
+- After opt-in, the smoke requires `STEAMDT_API_KEY` and one `STEAMDT_SMOKE_MARKET_HASH_NAME`. It directly constructs an owned SteamDT HTTP client with the existing default in-memory endpoint limiter, a concrete source, D4A refresh service, one `InMemoryPriceCache`, and D3B cached resolver.
+- This quota-sensitive harness sets `max_retries=0` and disables redirects without changing normal client defaults. An HTTPX request hook counts actual outbound attempts, the flow invokes one `refresh_one()` and one cache-only `resolve()`, and output reports `SteamDT requests sent: 1` only when exactly one attempt occurred. A failure is not automatically retried or repeated through the alternate entrypoint.
+- Output is restricted to item, candidate count, UTC observation time, exact cache write outcome, cache state, selected platform/price, `needs_refresh`, typed statuses, fixed/redacted error type, and request count. It never prints API keys, Authorization headers, raw candidates, full responses, quote raw data, config/runtime reprs, or traceback payloads. Owned HTTP resources close on success and failure.
+- Empty candidate responses remain normal D4A `NO_CANDIDATES`; no empty snapshot is written and cached resolution reports a miss. Typed SteamDT business/transport/parser failures remain distinct internally and are not converted into fallback data.
+- Automated D4B tests use fake clients or local HTTPX transports only. The smoke imports neither cache nor limiter Redis composition, connects no Redis, and changes no provider, pipeline, scheduler, FastAPI, alerts, background work, batch refresh, market action, or production deployment wiring.
 
 ## Safety Notes
 
