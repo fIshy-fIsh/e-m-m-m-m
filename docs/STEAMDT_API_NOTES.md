@@ -986,7 +986,28 @@ Results, errors, and boundaries:
 - The thin result retains the complete `PriceCacheLookup` plus the existing `SteamDTPriceSelectionResult` when selection ran, and exposes the existing `SteamDTPriceQuote` without duplicating provider-specific `PriceQuote` or batch `PriceLookupResult` behavior.
 - `PriceCacheBackendError` and `PriceCacheCodecError` propagate unchanged and fail closed. Adapter invariant errors and unexpected selector errors remain distinct; none is converted to a miss or selection failure.
 - D3B directly creates no Redis or HTTP client, reads no environment variables, creates no task, invokes no cache write/administration method, refreshes nothing, and owns no runtime lifecycle. The default selector is local and network-free; externally injected cache readers/selectors retain responsibility for their own side effects. It is not imported by provider, valuation, pipeline, scheduler, FastAPI, or alerts.
-- The next cache phase owns refresh/write behavior. D3B does not claim production deployment and changes no provider protocol, cache factory, Redis codec/Lua/harness, selector behavior, pipeline, or scheduler behavior.
+- Phase 12D4A adds only the isolated single-item write core below. D3B does not claim production deployment and changes no provider protocol, cache factory, Redis codec/Lua/harness, selector behavior, pipeline, or scheduler behavior.
+
+## Phase 12D4A Single-Item Refresh / Write Service Core
+
+Source contract:
+- `SteamDTPriceSnapshotSource` is a narrow async port that receives the canonical `PriceCacheKey.market_hash_name` and returns one `SteamDTFetchedPriceSnapshot`. D4A defines no concrete HTTP implementation and does not modify `SteamDTClient`, `SteamDTHttpClient`, parsers, or `SteamDTPriceProvider`.
+- Existing public price methods return already-selected quotes and do not expose both the complete selector-before platform candidate sequence and an explicit observation timestamp, so they do not satisfy this source contract.
+- A fetched snapshot contains canonical item/source identity, an aware source-owned `observed_at`, and an ordered tuple of defensive `SteamDTPlatformPrice` clones with `raw=None`. Input order, duplicate candidates, Decimal values, counts, platform IDs, and opaque `update_time` values are retained without preserving mutable HTTP metadata.
+- Source `observed_at` defines the snapshot observation. Candidate `updateTime` remains an unconfirmed per-record field and is never parsed, combined, or promoted to cache freshness time.
+
+Refresh/write and time semantics:
+- `SteamDTPriceRefreshService.refresh_one()` builds the same version-1 `cs2`/`CNY`/`steamdt`/`platform_prices` key used by D1 and D3B, validates exact returned item/source identity, converts all candidates through the D3B adapter, and submits one nonempty snapshot through a write-only cache port.
+- Empty candidate observations return normal `NO_CANDIDATES`, retain key and observation metadata, and do not read the service clock, build an empty snapshot, or call `cache.put()`.
+- The service clock is read once only for provisional incoming `stored_at`; it never supplies or changes `observed_at`. If that local clock lags the source observation, the observation is used as the minimum model-valid placeholder so local skew cannot preempt the backend check. The cache backend remains authoritative: in-memory writes stamp their cache clock and Redis writes stamp server `TIME`; either can still reject an observation later than its own authority.
+- Freshness and write ordering remain based only on `observed_at`. Candidate source timestamps, candidate payload, policy changes, provisional storage time, arrival order, and task completion order do not make an observation newer.
+
+Results, errors, ordering, and boundaries:
+- A nonempty refresh returns `CACHE_PUT_COMPLETED` plus the exact cache result: `CREATED`, `REPLACED`, `IGNORED_OLDER`, or `UNCHANGED_EQUAL`. The status only means `put()` returned normally; ignored/equal outcomes do not claim that incoming data or policy was stored.
+- Concurrent calls are neither locked nor coalesced. Each source fetch and put runs independently, while cache atomic ordering preserves the newest observation and equal observations retain the first writer. D4A implements no single-flight behavior.
+- Typed source transport/status/API/rate-limit/parser errors, adapter invariant errors, backend errors, codec corruption, and backend future-observation errors propagate without retry, fallback, repair, or false success. Item/source/return-contract mismatches use one fixed non-sensitive refresh validation error.
+- D4A runs no selector, constructs no quote, reads/administers no cache entry, creates no Redis or HTTP client, reads no env/config, and starts no task. It is not imported by provider, resolver, valuation, pipeline, scheduler, FastAPI, or alerts.
+- There is no concrete SteamDT source, real Redis/SteamDT validation, batch refresh, planner, worker, warming, retry, background refresh, scheduler integration, live fallback, or production deployment. The next phase owns the concrete read-only SteamDT source and smoke path.
 
 ## Safety Notes
 

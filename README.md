@@ -223,7 +223,15 @@
 - `MISS`, `POLICY_BLOCKED`, `EXPIRED`, and `SELECTION_FAILURE` are typed normal outcomes with no live fallback. Allowed stale and stale-grace hits retain their state, age, and `needs_refresh=true` advice but never start refresh work.
 - Redis backend failures and corrupt codec records continue to fail closed; adapter invariant failures remain a separate non-sensitive error type. D3B itself invokes no cache write/administration method, refresh, Redis/HTTP client creation, env read, or background task; the existing cache `get()` contract may remove an expired entry, and injected collaborators retain responsibility for their own side effects.
 - The current selector does not implement a preferred-platform option. Policy-independent cache reuse is validated with its existing strategy and liquidity controls instead of inventing a new selector setting.
-- Phase 12D3B is not wired into `PriceProvider`, `ValuationService`, pipeline, scheduler, FastAPI, alerts, or production deployment. A later phase will own the refresh/write path.
+- Phase 12D3B is not wired into `PriceProvider`, `ValuationService`, pipeline, scheduler, FastAPI, alerts, or production deployment. Phase 12D4A adds only the isolated single-item write core below.
+
+### Phase 12D4A Single-Item Refresh / Write Service Core
+- `SteamDTPriceSnapshotSource` is an injected selector-before source port. Existing SteamDT client/provider methods return selected quotes and do not provide the complete candidate set plus source-owned `observed_at`, so no concrete HTTP source is wired in this phase.
+- `SteamDTFetchedPriceSnapshot` carries canonical item/source identity, an aware source-provided observation time, and ordered defensive candidate clones with `raw=None`. Candidate `updateTime` remains opaque and never determines snapshot freshness.
+- `SteamDTPriceRefreshService.refresh_one()` builds the same D1/D3B key, converts every candidate, and calls the injected cache writer once. It never selects a quote, reads/administers the cache, retries, or falls back to live data.
+- Empty candidate observations return `NO_CANDIDATES` and do not write an empty snapshot. Nonempty refreshes return `CACHE_PUT_COMPLETED` plus the exact cache result: `CREATED`, `REPLACED`, `IGNORED_OLDER`, or `UNCHANGED_EQUAL`.
+- The service clock supplies only provisional incoming `stored_at`; when it lags the source observation, the observation itself is used as the minimum valid placeholder so only the backend authority decides whether it is future. In-memory cache time or Redis server `TIME` remains authoritative. Concurrent refreshes are not coalesced and the cache resolves races exclusively by `observed_at`.
+- Source, adapter, backend, and codec failures remain distinct and fail closed. There is no concrete SteamDT source, Redis construction, batch refresh, planner, scheduler, background task, retry, single-flight, pipeline/FastAPI wiring, or production deployment; the next phase owns the concrete read-only source and smoke path.
 
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
