@@ -1093,6 +1093,15 @@ Outcome, output, and cancellation contract:
 - Request count must be an exact nonnegative integer; unreadable or invalid runtime counters are reported as `unavailable` and cause exit 1. `max_concurrency` remains only a bound on active refresh operations and is not a rate limiter or official batch-size rule.
 - D5C is the first complete SteamDT manual integration milestone, but it is not production-ready and is not wired into provider, valuation, pipeline, scheduler, FastAPI, Discord, BUFF, or background work. The next product priority returns to real BUFF listing input; D5C does not begin that work.
 
+## BUFF Listing Input Contract
+
+- `app/services/buff_listing.py` establishes only the immutable data boundary from `BuffListingObservation` to `BuffTradableCandidate`. It does not define or guess a BUFF endpoint, request parameter, response mapping, authentication/signature method, or account/session behavior.
+- Observations retain normalized listing identity, exact finite `Decimal` CNY price, exact nonnegative quantity, optional bounded Decimal float, optional normalized wear, optional exact paint seed, defensively copied string-pair sticker metadata, and aware UTC observation time. They retain no Cookie, Authorization value, session/account information, seller-private data, URL, raw HTTP response, or raw payload.
+- `normalize_buff_listing()` revalidates the public observation and creates a detached immutable candidate. Candidates intentionally omit sticker metadata and all transport/provider data; quantity zero remains valid at this domain-contract boundary.
+- Normalization performs no price decision, EV or trade-up calculation, SteamDT call, cache lookup, risk filter, selection, or market operation. Fixed field-only errors and disabled model repr prevent raw listing values or hostile exception text from being exposed.
+- `BuffListingSource.fetch_listings()` is a protocol only. This phase implements no BUFF HTTP client, live BUFF connection, real listing data, API authentication, crawler/scraper, login, Cookie capture, captcha handling, risk-control bypass, browser automation, or automatic purchase.
+- The contract is not imported by or wired into provider, valuation, pipeline, scheduler, FastAPI, config, Redis, SteamDT, Discord, or background work. It is not production-ready; confirmed official BUFF transport details remain tracked separately in `docs/BUFF_API_NOTES.md`.
+
 ## Safety Notes
 
 - Do not implement auto-buying.

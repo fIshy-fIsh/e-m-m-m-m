@@ -269,6 +269,13 @@
 - Output is allowlisted and control-escaped: no API key, Authorization value, Redis URL/password, raw payload, exception message, or traceback. The command is not connected to provider, valuation, pipeline, scheduler, FastAPI, Discord, BUFF, or any background worker.
 - With this SteamDT integration seam established, the next product priority returns to real BUFF listing input; that work is not part of D5C.
 
+### BUFF Listing Input Contract
+- `app/services/buff_listing.py` defines only the immutable boundary from a provider observation to a normalized tradable candidate. It validates canonical listing identity, exact `Decimal` CNY price/float values, exact integer quantities/seeds, optional wear and sticker metadata, and aware UTC observation time without carrying a raw payload.
+- `normalize_buff_listing()` performs validation, normalization, and field conversion only. It does not judge price, calculate EV, run trade-up logic, call SteamDT, read cache, or apply risk policy. Quantity zero remains valid contract data.
+- `BuffListingSource` is only an async protocol returning observations. There is no BUFF HTTP client, live BUFF connection, API mapping, authentication, login, Cookie handling, crawler, captcha handling, seller-private data, or real listing data in this phase.
+- Candidates intentionally omit sticker metadata and all provider transport data. Public validation errors use fixed field-only messages, and observation/candidate repr is disabled to avoid exposing listing or credential-shaped data.
+- This input contract is not wired into provider, valuation, pipeline, scheduler, FastAPI, Redis, SteamDT, Discord, or automatic purchasing. It is not a scraper and is not production-ready.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.
@@ -312,10 +319,11 @@
 - metadata normalize / trade-up / EV / risk filter
 - mock pipeline / alert / scheduler
 - Docker / 24h dry-run deployment hardening
+- isolated BUFF listing observation → normalized candidate contract（无真实 BUFF 连接）
 
 当前阶段**不**包含：
-- 真实 BUFF API mapping
-- 真实 SteamDT integration implementation
+- 真实 BUFF API mapping、client、scraper 或 listing data
+- SteamDT production wiring（只提供显式启用的只读 manual integration）
 - 自动购买相关能力
 - 真实 Discord Webhook 发送
 - 数据库持久化调度状态
