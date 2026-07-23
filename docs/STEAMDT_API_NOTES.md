@@ -1071,7 +1071,27 @@ Failure and cancellation contract:
 
 Current boundary and next integration seam:
 - D5B performs no cache read, selector/resolver call, quote construction, avg-price lookup, cache-warming policy, retry/backoff/sleep, new limiter, single-flight, metrics, alerts, market operation, scheduler/pipeline/FastAPI/background-worker wiring, or production deployment.
-- Automated tests use fake refreshers and existing domain models only; D5B connects neither real SteamDT nor Redis. A later independent manual command may compose `items → planner → executor → source → cache → resolver` without changing this executor's local-chunk and borrowed-ownership contract.
+- Automated tests use fake refreshers and existing domain models only; D5B connects neither real SteamDT nor Redis. D5C provides the independent manual composition seam below without changing this executor's local-chunk and borrowed-ownership contract.
+
+## Phase 12D5C Manual End-to-End Refresh Integration Command
+
+Command and orchestration contract:
+- `scripts/steamdt_refresh_integration.py` is a standalone manual CLI supporting direct-file and module execution. It accepts repeatable raw `--item` values, `--chunk-size` (default 5), `--max-concurrency` (default 2), and `--mode fake|live` (default fake). At least one item is required.
+- The CLI does not trim, filter, deduplicate, or chunk item values. The real D5A planner remains the sole canonicalization and stable-deduplication authority, then D5B runs its local chunks. After the complete executor report exists, one cached resolver reads the same `InMemoryPriceCache` once per unique item in plan order.
+- The command composes the existing planner, executor, concrete/live or synthetic/fake snapshot source, D4A refresh service, one shared in-memory cache, and D3B resolver. It does not copy their concurrency, failure-isolation, adapter, cache, or selection logic.
+
+Fake and live safety contract:
+- Fake mode is deterministic, completely offline, and visibly marked synthetic. Its script-local source returns two selector-before candidates per item with string-constructed `Decimal` prices. These values are fixtures and do not represent market prices. Fake mode reads no API key or Redis URL and creates no HTTP, SteamDT, or Redis client; its request count is zero.
+- Live mode requires both `--mode live` and `STEAMDT_RUN_REFRESH_INTEGRATION=true`. A disabled gate exits 2 before reading the API key or creating runtime/request state. After the gate, a nonblank API key is required.
+- Enabled live mode reuses the existing SteamDT client runtime composition with the in-memory endpoint limiter, configured client retry policy, parser, typed errors, and concrete official single-price snapshot source. D5C adds no retry, limiter, sleep, batch request, fake fallback, or live resolver fallback. Every client-owned retry still acquires the existing limiter and counts as an outbound request attempt.
+- Both modes always use one process-local `InMemoryPriceCache`; the command never imports or composes the Redis price cache or Redis limiter. The owned live runtime closes on success, ordinary failure, and cancellation. The enabled real online integration was intentionally not executed during D5C validation.
+
+Outcome, output, and cancellation contract:
+- `NO_CANDIDATES` remains a successful refresh and resolves to a normal cache miss when no earlier entry exists. Any isolated executor item failure causes command exit 1 after a complete ordered summary; orchestration/runtime/cleanup failure also exits 1. CLI/planner/live-gate validation exits 2; `KeyboardInterrupt` exits 130.
+- Cancellation propagates rather than becoming an item or command failure. Current executor children are cancelled and joined, resolution does not start after cancelled execution, the owned live runtime closes, and no partial summary or detached command task is returned.
+- Output is an allowlisted aggregate plus per-item plan-order summary. External item/platform text is redacted and JSON-escaped; failures expose only safe exception class names. API keys, Authorization values, Redis URLs/passwords, base URLs, raw payloads/candidates, exception messages, object reprs, and tracebacks are not printed.
+- Request count must be an exact nonnegative integer; unreadable or invalid runtime counters are reported as `unavailable` and cause exit 1. `max_concurrency` remains only a bound on active refresh operations and is not a rate limiter or official batch-size rule.
+- D5C is the first complete SteamDT manual integration milestone, but it is not production-ready and is not wired into provider, valuation, pipeline, scheduler, FastAPI, Discord, BUFF, or background work. The next product priority returns to real BUFF listing input; D5C does not begin that work.
 
 ## Safety Notes
 

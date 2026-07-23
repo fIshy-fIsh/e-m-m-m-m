@@ -1,5 +1,4 @@
 import asyncio
-import json
 import os
 import sys
 from collections.abc import Awaitable, Callable, Mapping
@@ -22,11 +21,12 @@ from app.services.steamdt_price_snapshot_source import (
     SteamDTSinglePriceCandidateClient,
     SteamDTSinglePriceSnapshotSource,
 )
-
-if __package__:
-    from .steamdt_smoke_utils import parse_bool_env, print_guard_exit, redact_message
-else:
-    from steamdt_smoke_utils import parse_bool_env, print_guard_exit, redact_message
+from scripts.steamdt_smoke_utils import (
+    parse_bool_env,
+    print_guard_exit,
+    safe_error_type,
+    safe_external_text,
+)
 
 RUN_GATE_ENV = "STEAMDT_RUN_PRICE_SNAPSHOT_SMOKE"
 SMOKE_POLICY = PriceCachePolicy(fresh_ttl=timedelta(minutes=5))
@@ -169,7 +169,7 @@ async def async_main(
         )
         summary_lines = [
             "smoke script: steamdt_price_snapshot_smoke",
-            f"item: {_safe_external_text(refresh_result.key.market_hash_name, api_key=api_key)}",
+            f"item: {safe_external_text(refresh_result.key.market_hash_name, api_key=api_key)}",
             f"candidate count: {refresh_result.candidate_count}",
             f"observed_at: {refresh_result.observed_at.isoformat()}",
             "cache write result: "
@@ -177,7 +177,7 @@ async def async_main(
             "cache state: "
             f"{None if resolution.lookup.state is None else resolution.lookup.state.value}",
             "selected platform: "
-            f"{_safe_external_text(selected_platform, api_key=api_key)}",
+            f"{safe_external_text(selected_platform, api_key=api_key)}",
             f"selected price: {None if quote is None else quote.price_cny}",
             f"needs_refresh: {resolution.lookup.needs_refresh}",
             f"refresh status: {refresh_result.status.value}",
@@ -202,12 +202,12 @@ async def async_main(
     if operation_error is not None:
         printer(
             "SteamDT price snapshot smoke failed: "
-            f"{_safe_error_type(operation_error)}"
+            f"{safe_error_type(operation_error)}"
         )
     if close_error is not None:
         printer(
             "SteamDT price snapshot smoke close failed: "
-            f"{_safe_error_type(close_error)}"
+            f"{safe_error_type(close_error)}"
         )
     printer(
         "SteamDT requests sent: "
@@ -221,19 +221,6 @@ def _read_request_count(runtime: SteamDTPriceSnapshotSmokeRuntime) -> int:
     if type(request_count) is not int or request_count < 0:
         raise TypeError("snapshot smoke runtime returned an invalid request count")
     return request_count
-
-
-def _safe_external_text(value: str | None, *, api_key: str) -> str:
-    if value is None:
-        return "None"
-    return json.dumps(redact_message(value, api_key=api_key))
-
-
-def _safe_error_type(error: Exception) -> str:
-    name = type(error).__name__
-    if not name.isascii() or not name.isidentifier():
-        return "InternalError"
-    return name
 
 
 def main() -> None:

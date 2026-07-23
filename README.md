@@ -68,7 +68,7 @@
 - BUFF 仍负责可购买 listing / material scanning。
 - SteamDT 主要用于 output price estimation / historical sanity check / metadata fallback / wear support。
 - 当前仍处于设计与受控 dry-run 阶段。
-- 当前没有真实请求 SteamDT，除非手动运行官方 smoke script 并显式设置 `STEAMDT_DRY_RUN=false`。
+- 当前没有真实请求 SteamDT，除非手动运行显式启用的只读 smoke / integration command。
 - `STEAMDT_API_KEY` 不应 commit。
 - 后续将在 `feature/steamdt-data-source` 分支开发。
 - 当前 V1 dry-run baseline 可通过 `v1-dry-run-baseline` tag 回滚。
@@ -255,7 +255,19 @@
 - `max_concurrency` is only an executor work bound. It does not throttle request rate, encode provider quota, add a token bucket, or replace the SteamDT client limiter, which remains the only authority for endpoint acquisition and retry attempts.
 - Reports are immutable and always follow zero-based plan order rather than task completion order. Each item retains its plan key and indices plus the exact D4A result, so normal `NO_CANDIDATES` and `CREATED`/`REPLACED`/`IGNORED_OLDER`/`UNCHANGED_EQUAL` meanings remain auditable without reinterpretation.
 - Ordinary item exceptions are isolated and retained without appearing in normal result/report repr; siblings and later chunks continue. Caller cancellation instead propagates, cancels and joins current workers, starts no later chunk, and returns no partial report or detached task. Refreshes completed before cancellation are not transactionally rolled back.
-- D5B does not call SteamDT's official batch endpoint, connect real SteamDT or Redis, create or close runtimes, retry, sleep, select/resolve quotes, warm cache, or wire provider, pipeline, scheduler, FastAPI, background work, or production deployment. A later phase may add a separate manual integration command for `items → planner → executor → source → cache → resolver`.
+- D5B does not call SteamDT's official batch endpoint, connect real SteamDT or Redis, create or close runtimes, retry, sleep, select/resolve quotes, warm cache, or wire provider, pipeline, scheduler, FastAPI, background work, or production deployment. D5C provides the separate manual integration command below.
+
+### Phase 12D5C Manual End-to-End Refresh Integration Command
+- `scripts/steamdt_refresh_integration.py` is the first manual end-to-end SteamDT milestone, composing the real planner, controlled executor, single-item source, refresh service, one shared `InMemoryPriceCache`, and cache-backed resolver. It is not production wiring.
+- Fake mode is the default, deterministic, fully offline, visibly synthetic, and needs no API key. Fake prices do not represent market values. Both forms are supported: `py -3.13 -m scripts.steamdt_refresh_integration --item "AK-47 | Redline (Field-Tested)"` and `py -3.13 scripts/steamdt_refresh_integration.py --item "AK-47 | Redline (Field-Tested)"`.
+- The CLI requires one or more repeated `--item` values and accepts `--chunk-size` (default 5) and `--max-concurrency` (default 2). It passes raw names to the real planner, which alone performs canonicalization, stable deduplication, and local chunking.
+- Live read-only execution requires both `--mode live` and `STEAMDT_RUN_REFRESH_INTEGRATION=true`, then a `STEAMDT_API_KEY`. Without both gates it exits 2 before creating runtime state or sending a request. This phase did not execute the enabled online path.
+- Live mode reuses the existing SteamDT client runtime, endpoint limiter, retry policy, parser, and official single-price source. It uses only an in-memory cache, never Redis or the official batch endpoint, adds no command-level retry, and never falls back to fake.
+- Executor `max_concurrency` bounds simultaneous refresh work; it is not a rate limiter. The existing client limiter remains authoritative for every request attempt, including retries.
+- Resolution starts only after the executor returns a complete report, then follows unique plan order. `NO_CANDIDATES` is a normal successful refresh; ordinary item failures are summarized safely and cause exit 1.
+- Exit codes are 0 for all refreshes completed, 1 for item/orchestration/runtime/cleanup failure, 2 for CLI/validation/live-gate errors, and 130 for `KeyboardInterrupt`. Cancellation propagates after owned-runtime cleanup and emits no partial summary.
+- Output is allowlisted and control-escaped: no API key, Authorization value, Redis URL/password, raw payload, exception message, or traceback. The command is not connected to provider, valuation, pipeline, scheduler, FastAPI, Discord, BUFF, or any background worker.
+- With this SteamDT integration seam established, the next product priority returns to real BUFF listing input; that work is not part of D5C.
 
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.

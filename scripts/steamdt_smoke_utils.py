@@ -1,3 +1,4 @@
+import json
 import re
 from collections.abc import Callable, Mapping
 from decimal import Decimal, InvalidOperation
@@ -76,6 +77,23 @@ def redact_message(message: str, *, api_key: str | None = None) -> str:
     if len(message) > 300:
         return f"{message[:300]}..."
     return message
+
+
+def safe_external_text(value: str | None, *, api_key: str | None = None) -> str:
+    """Redact external text, then JSON-escape control characters."""
+
+    if value is None:
+        return "None"
+    return json.dumps(redact_message(value, api_key=api_key))
+
+
+def safe_error_type(error: BaseException) -> str:
+    """Return an allowlisted class name without exposing exception text."""
+
+    name = type(error).__name__
+    if not name.isascii() or not name.isidentifier():
+        return "InternalError"
+    return name
 
 
 def safe_error_message(exc: Exception, *, api_key: str | None) -> str:
