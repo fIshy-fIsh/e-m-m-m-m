@@ -249,6 +249,14 @@
 - A D5A chunk is only a local execution grouping for a future controlled D5B executor. It is not a request to SteamDT's official `POST /open/cs2/v1/price/batch` endpoint, does not imply that endpoint will be used, and encodes no official batch-size or quota limit.
 - Invalid items, source, chunk size, or contradictory public model data fail closed; no invalid item is silently discarded. D5A adds no concurrency, tasks, sleep, retry, limiter logic, environment settings, HTTP/Redis access, provider/pipeline/scheduler/FastAPI wiring, or production deployment.
 
+### Phase 12D5B Controlled Batch Refresh Executor Core
+- `SteamDTRefreshExecutor` consumes only an existing, fully validated D5A plan and one explicit `PriceCachePolicy`. Because D4A `refresh_one()` constructs the default SteamDT cache key, custom-source plans fail before any work rather than silently losing their full-key identity.
+- Plan chunks execute sequentially: every item in chunk 0 completes before chunk 1 starts. Inside one chunk, a fixed worker pool limits active single-item refreshes to `min(max_concurrency, chunk size)` and does not create tasks for the whole plan at once.
+- `max_concurrency` is only an executor work bound. It does not throttle request rate, encode provider quota, add a token bucket, or replace the SteamDT client limiter, which remains the only authority for endpoint acquisition and retry attempts.
+- Reports are immutable and always follow zero-based plan order rather than task completion order. Each item retains its plan key and indices plus the exact D4A result, so normal `NO_CANDIDATES` and `CREATED`/`REPLACED`/`IGNORED_OLDER`/`UNCHANGED_EQUAL` meanings remain auditable without reinterpretation.
+- Ordinary item exceptions are isolated and retained without appearing in normal result/report repr; siblings and later chunks continue. Caller cancellation instead propagates, cancels and joins current workers, starts no later chunk, and returns no partial report or detached task. Refreshes completed before cancellation are not transactionally rolled back.
+- D5B does not call SteamDT's official batch endpoint, connect real SteamDT or Redis, create or close runtimes, retry, sleep, select/resolve quotes, warm cache, or wire provider, pipeline, scheduler, FastAPI, background work, or production deployment. A later phase may add a separate manual integration command for `items → planner → executor → source → cache → resolver`.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.

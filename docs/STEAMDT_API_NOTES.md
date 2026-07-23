@@ -1047,6 +1047,32 @@ Local-only meaning and boundaries:
 - D5A performs no refresh, source/client call, cache read/write/administration, Redis construction, selection, quote creation, avg-price lookup, endpoint limiter action, retry, sleep, concurrency, thread, task, environment/config read, or lifecycle ownership. It changes no parser, HTTP path, authentication, rate limit, or D4A/D4B behavior.
 - The planner is not imported by provider, valuation, pipeline, scheduler, FastAPI, alerts, config, factories, clients, sources, refresh services, or dry-run scripts. It is not production wiring. Phase 12D5B may add a controlled executor that consumes these immutable local plans without changing D5A's endpoint-neutral chunk semantics.
 
+## Phase 12D5B Controlled Batch Refresh Executor Core
+
+Input, identity, and ownership contract:
+- `SteamDTRefreshExecutor.execute()` accepts only an existing `SteamDTRefreshPlan` and an explicit valid `PriceCachePolicy`; it never accepts raw item names and never canonicalizes, deduplicates, or chunks work again. Every unique plan item is passed at most once to the injected narrow `refresh_one(market_hash_name, policy)` protocol with its canonical name and the same policy object.
+- D5A deliberately permits custom `PriceCacheKey.source` values, while the current D4A service always constructs the default version-1 `cs2`/`CNY`/`steamdt`/`platform_prices` key. This SteamDT-specific executor therefore rejects every non-default-source plan, including an empty one, before task creation or collaborator calls; it never discards or rewrites full planned identity.
+- The injected refresher is borrowed. The executor creates no source, HTTP client, cache, Redis client, limiter, factory, or runtime; reads no environment/configuration; and neither closes nor otherwise owns any collaborator.
+
+Chunk and concurrency contract:
+- Chunks execute in their existing contiguous zero-based order. A per-chunk `asyncio.TaskGroup` with at most `min(max_concurrency, chunk size)` fixed workers is fully joined before the next chunk starts, and no tasks are created in advance for the complete plan. Empty plans return a complete empty report without workers or refresh calls.
+- `max_concurrency` must be an exact positive integer and explicitly rejects `bool`. It limits simultaneously active full `refresh_one()` operations only. It is not a request-rate limit, provider batch size, quota, token bucket, or retry policy; the existing SteamDT client endpoint limiter remains the sole authority and every client-owned retry continues to acquire it normally.
+- A D5B chunk remains a local execution boundary. The executor never calls or implies use of official `POST /open/cs2/v1/price/batch`, never combines item names into one source request, and encodes no undocumented provider limit.
+
+Ordered result and aggregate contract:
+- Frozen `SteamDTRefreshItemExecutionResult` records the original plan item, zero-based chunk and unique-item indices, `SUCCEEDED` or `FAILED`, and exactly one of the original `SteamDTPriceRefreshResult` or ordinary exception. Its canonical key/name are derived from the plan item. An explicit `error_type` exposes only the exception class name, while the actual exception is available to trusted callers but excluded from dataclass repr.
+- Frozen `SteamDTRefreshExecutionReport` owns a defensive tuple of item results in plan order, independent of completion order. Public invariants reject missing, extra, duplicate/reordered, wrong-item, wrong-key, wrong-chunk, wrong-index, or contradictory success/failure records.
+- `total_count`, success/failure counts, `NO_CANDIDATES`, `CACHE_PUT_COMPLETED`, each `CREATED`/`REPLACED`/`IGNORED_OLDER`/`UNCHANGED_EQUAL` count, chunk count, and completed chunk count are derived. A returned report is complete even when ordinary items fail, so completed chunk count equals plan chunk count. No duration, tracing, or independently supplied parallel counts exist.
+- A valid D4A return is retained exactly. `NO_CANDIDATES` remains a normal success without a write result, and ignored/equal cache outcomes never claim incoming data was written. A non-result or wrong-key collaborator return fails closed as an isolated `SteamDTPriceRefreshValidationError`; no fake success is generated.
+
+Failure and cancellation contract:
+- Only ordinary `Exception` values are isolated per item. The exact typed SteamDT transport/status/API/rate-limit/parser error, adapter error, cache backend/codec error, refresh contract error, or other ordinary exception remains available by identity; it is not retried, stringified into the public model, replaced by fallback data, or allowed to cancel siblings. Remaining items in that chunk and all later chunks continue.
+- `asyncio.CancelledError` is never caught as an item failure. Caller cancellation propagates through the task group, cancels and joins current workers, starts no later chunk, returns no partial report, and leaves no executor-owned detached task. Work that completed its source/cache side effects before cancellation is not rolled back; D5B is not a transaction or single-flight coordinator.
+
+Current boundary and next integration seam:
+- D5B performs no cache read, selector/resolver call, quote construction, avg-price lookup, cache-warming policy, retry/backoff/sleep, new limiter, single-flight, metrics, alerts, market operation, scheduler/pipeline/FastAPI/background-worker wiring, or production deployment.
+- Automated tests use fake refreshers and existing domain models only; D5B connects neither real SteamDT nor Redis. A later independent manual command may compose `items → planner → executor → source → cache → resolver` without changing this executor's local-chunk and borrowed-ownership contract.
+
 ## Safety Notes
 
 - Do not implement auto-buying.
