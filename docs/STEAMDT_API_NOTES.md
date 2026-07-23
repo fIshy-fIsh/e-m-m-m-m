@@ -1029,6 +1029,24 @@ Manual smoke safety and flow:
 - Empty candidate responses remain normal D4A `NO_CANDIDATES`; no empty snapshot is written and cached resolution reports a miss. Typed SteamDT business/transport/parser failures remain distinct internally and are not converted into fallback data.
 - Automated D4B tests use fake clients or local HTTPX transports only. The smoke imports neither cache nor limiter Redis composition, connects no Redis, and changes no provider, pipeline, scheduler, FastAPI, alerts, background work, batch refresh, market action, or production deployment wiring.
 
+## Phase 12D5A Batch Refresh Planner, Deduplication, and Chunking Core
+
+Planning and identity contract:
+- `SteamDTRefreshPlanner` is a synchronous pure planner over an `Iterable[str]`. It traverses the caller's iterable exactly once and constructs `PriceCacheKey(market_hash_name=raw_item, source=canonical_source)` directly for every encountered entry; it does not duplicate item normalization or pre-validate with a second pass.
+- Full canonical key equality defines duplicate identity. Leading/trailing item and source whitespace is therefore stripped by `PriceCacheKey`, while case and all other key dimensions retain existing semantics. The first canonical occurrence establishes output order and a zero-based `first_seen_input_index`; later equivalent occurrences increment that item's exact positive `occurrence_count` and never enter another chunk.
+- `steamdt` is the default source, not a planner-specific allowlist. Any nonempty source accepted and canonicalized by `PriceCacheKey` is valid, including for an empty plan. Non-string or blank item/source values fail closed through a planner validation error that records the field and, for items, the zero-based input index without including the raw value.
+
+Immutable plan and chunk invariants:
+- `SteamDTRefreshPlanItem`, `SteamDTRefreshPlanChunk`, `SteamDTRefreshPlan`, and the planner are frozen. Collection inputs are defensively converted to tuples. Plan input count is the sum of occurrence counts, unique count is the item tuple length, and duplicate count is their difference; ordered key/name projections are derived rather than independently supplied.
+- Public constructors reject contradictory key, source, count, occurrence, first-seen index, chunk index, chunk start, size, order, or flattened-content combinations. Exact integers are required and `bool` is not accepted as an index, count, or chunk size. All plan/input/chunk indices are zero-based.
+- Caller-provided `chunk_size` must be positive. Unique items are partitioned continuously in first-seen order; each non-final chunk has exactly that size, the final chunk has at most that size, and an empty input produces zero counts, no items, and no chunks.
+- Input errors return no partial plan and invalid entries are never skipped. Infinite iterables are unsupported and are neither detected nor consumed in background work.
+
+Local-only meaning and boundaries:
+- A `SteamDTRefreshPlanChunk` is only an in-process partition of possible future work. It is not a request to the confirmed official `POST /open/cs2/v1/price/batch` endpoint, does not call or enable `SteamDTHttpClient.get_price_batch()`, does not imply D5B will use that endpoint, and does not encode or assert an official request-size or quota limit.
+- D5A performs no refresh, source/client call, cache read/write/administration, Redis construction, selection, quote creation, avg-price lookup, endpoint limiter action, retry, sleep, concurrency, thread, task, environment/config read, or lifecycle ownership. It changes no parser, HTTP path, authentication, rate limit, or D4A/D4B behavior.
+- The planner is not imported by provider, valuation, pipeline, scheduler, FastAPI, alerts, config, factories, clients, sources, refresh services, or dry-run scripts. It is not production wiring. Phase 12D5B may add a controlled executor that consumes these immutable local plans without changing D5A's endpoint-neutral chunk semantics.
+
 ## Safety Notes
 
 - Do not implement auto-buying.

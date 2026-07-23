@@ -242,6 +242,13 @@
 - Both disabled entrypoints are supported: `py -3.13 scripts/steamdt_price_snapshot_smoke.py` and `py -3.13 -m scripts.steamdt_price_snapshot_smoke`. A real read-only run uses `STEAMDT_RUN_PRICE_SNAPSHOT_SMOKE=true` and must be invoked manually only once after fake/default checks pass.
 - D4B does not add batch refresh, cache warming, provider/pipeline/scheduler/FastAPI wiring, background work, Redis, buying, login, or any production deployment claim.
 
+### Phase 12D5A Batch Refresh Planner, Deduplication, and Chunking Core
+- `SteamDTRefreshPlanner` is a synchronous pure planning layer: it consumes an item iterable once, constructs the existing complete `PriceCacheKey` for every entry, and returns an immutable `SteamDTRefreshPlan`. It executes no refresh and calls no source, client, cache, or selector.
+- Stable deduplication uses full canonical key equality and preserves the first-seen order. Surrounding item/source whitespace follows `PriceCacheKey` normalization, case remains significant, each item records its zero-based first input index and occurrence count, and plan input/unique/duplicate counts are derived from those immutable records.
+- Caller-supplied `chunk_size` must be an exact positive integer. Chunks continuously partition the unique items, use zero-based chunk and unique-item indices, and defend their count, size, order, key, source, and index invariants; empty input produces a valid empty plan.
+- A D5A chunk is only a local execution grouping for a future controlled D5B executor. It is not a request to SteamDT's official `POST /open/cs2/v1/price/batch` endpoint, does not imply that endpoint will be used, and encodes no official batch-size or quota limit.
+- Invalid items, source, chunk size, or contradictory public model data fail closed; no invalid item is silently discarded. D5A adds no concurrency, tasks, sleep, retry, limiter logic, environment settings, HTTP/Redis access, provider/pipeline/scheduler/FastAPI wiring, or production deployment.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.
