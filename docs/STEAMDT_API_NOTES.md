@@ -1101,6 +1101,7 @@ Outcome, output, and cancellation contract:
 - Normalization performs no price decision, EV or trade-up calculation, SteamDT call, cache lookup, risk filter, selection, or market operation. Fixed field-only errors and disabled model repr prevent raw listing values or hostile exception text from being exposed.
 - `BuffListingSource.fetch_listings()` is a protocol only. This phase implements no BUFF HTTP client, live BUFF connection, real listing data, API authentication, crawler/scraper, login, Cookie capture, captcha handling, risk-control bypass, browser automation, or automatic purchase.
 - The contract is not imported by or wired into provider, valuation, pipeline, scheduler, FastAPI, config, Redis, SteamDT, Discord, or background work. It is not production-ready; confirmed official BUFF transport details remain tracked separately in `docs/BUFF_API_NOTES.md`.
+- Phase 12E2A offline fixture/parser details now live in `docs/BUFF_LISTING_NOTES.md`; this SteamDT note intentionally does not define that BUFF fixture schema.
 
 ## Safety Notes
 

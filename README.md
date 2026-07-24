@@ -276,6 +276,16 @@
 - Candidates intentionally omit sticker metadata and all provider transport data. Public validation errors use fixed field-only messages, and observation/candidate repr is disabled to avoid exposing listing or credential-shaped data.
 - This input contract is not wired into provider, valuation, pipeline, scheduler, FastAPI, Redis, SteamDT, Discord, or automatic purchasing. It is not a scraper and is not production-ready.
 
+### Phase 12E2A Offline BUFF Fixture Parser Core
+- `app/services/buff_listing_parser.py` defines a strict parser for the project-owned `schema_version=1` fixture in `tests/fixtures/buff/listings_v1.json`. This synthetic contract is for offline tests and is not a BUFF official API response or a confirmed live field mapping.
+- The exact v1 top level is `schema_version`, canonical `source="buff"`, one aware ISO-8601 `observed_at`, and an ordered `listings` array. `Z` and explicit offsets normalize to UTC. Breaking schema changes require a new version rather than silently changing v1.
+- CNY price and optional float values must be JSON strings and convert directly to `Decimal`; JSON numbers are rejected. Exact integer quantity/paint seed rules, blank wear normalization, finite/range checks, and immutable sticker string pairs are delegated through the E1 `BuffListingObservation` boundary.
+- Mapping parsing and the thin UTF-8 file loader are strict/fail-closed. Missing or unknown fields, duplicate JSON keys, malformed JSON/timestamps/Decimals/stickers, wrong types, and domain-invalid values reject the entire fixture; no malformed record is skipped and no partial tuple is returned.
+- Listing order and duplicate listing IDs remain intact, as do sticker order and duplicate pairs. Quantity zero is retained, mutable input is defensively detached, and raw fixture payloads are not stored on observations. The parser does not deduplicate, filter, judge eligibility or price, compute EV/risk/trade-ups, or call another service.
+- Safe parser errors use fixed public text with stable file/JSON/schema/domain classification and optional zero-based record index. Rejected values, complete payloads, paths, nested exception messages, Cookie/Authorization/token values, seller data, and URLs are never rendered.
+- The older `tests/fixtures/pipeline/mock_buff_orders.json` remains a separate synthetic pipeline mock with legacy raw/seller-shaped fields; it is not copied or interpreted as this fixture schema or an official response.
+- See `docs/BUFF_LISTING_NOTES.md` for the complete offline contract. There is still no live BUFF payload adapter, HTTP/auth/login/Cookie/crawler/captcha behavior, SteamDT/Redis connection, runtime wiring, or automatic purchase. This milestone is not production-ready.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.
@@ -319,7 +329,7 @@
 - metadata normalize / trade-up / EV / risk filter
 - mock pipeline / alert / scheduler
 - Docker / 24h dry-run deployment hardening
-- isolated BUFF listing observation → normalized candidate contract（无真实 BUFF 连接）
+- isolated BUFF listing observation → normalized candidate contract and project-owned offline fixture parser（无真实 BUFF 连接或 payload mapping）
 
 当前阶段**不**包含：
 - 真实 BUFF API mapping、client、scraper 或 listing data
