@@ -59,11 +59,25 @@ The parser and file loader are strict and fail closed. Missing or unknown fields
 
 `OfflineBuffListingFactsProvider` is built only from immutable records and performs no I/O. It defensively reconstructs every record before publishing private state and independently enforces both uniqueness rules without last-write-wins behavior. `lookup_facts()` returns the existing `BuffListingEligibilityFacts` only when both candidate listing ID and canonical market name match. Unknown IDs and known IDs queried with the wrong name both return the same public `MISSING` status with `facts=None`, so unknown metadata is never treated as three safe false values and a name mismatch never receives another item's facts.
 
-Classification is authoritative only because the synthetic metadata says so. The provider does not inspect or infer from item names, paint seeds, wear, price, quantity, float, stickers, or listing-ID syntax. A StatTrak- or Souvenir-shaped name can map to false facts, and an explicit special-seed fact does not require a numeric paint seed. The provider does not call the fixture parser or eligibility evaluator; returned facts can be passed by a future caller to the existing evaluator as a separate step.
+Classification is authoritative only because the synthetic metadata says so. The provider does not inspect or infer from item names, paint seeds, wear, price, quantity, float, stickers, or listing-ID syntax. A StatTrak- or Souvenir-shaped name can map to false facts, and an explicit special-seed fact does not require a numeric paint seed. The provider does not call the fixture parser or eligibility evaluator; Phase 12E3B is the isolated caller that composes a returned fact with the existing evaluator as a separate step.
 
 Records, lookup results, and returned facts are immutable and defensively reconstructed. Fixed public errors retain only stable field/cause/index metadata and do not expose identities, rejected values, payloads, paths, seller data, credentials, URLs, or original exception text. The fixture contains no seller/account data, Cookie, token, Authorization value, password, URL, inspect link, endpoint, or raw transport field.
 
-There is no real BUFF facts adapter and no eligibility orchestration, solver, pipeline, scheduler, FastAPI, provider, valuation, SteamDT, Redis, cache, Discord, or production wiring. This offline seam is not production-ready. Breaking changes to facts fixture v1 require a new explicit schema version.
+There is no real BUFF facts adapter and E3A itself has no eligibility orchestration. The E3B service below adds only isolated qualification composition; neither phase is connected to solver, pipeline, scheduler, FastAPI, provider, valuation, SteamDT, Redis, cache, Discord, or production runtime. This offline seam is not production-ready. Breaking changes to facts fixture v1 require a new explicit schema version.
+
+## Phase 12E3B — Listing Qualification Service Core
+
+`BuffListingQualificationService` is a thin single-candidate orchestration boundary. It accepts the existing `BuffListingFactsProvider`, optionally accepts an evaluator callable that defaults to `evaluate_buff_listing_eligibility()`, and calls those collaborators in order. It owns neither collaborator, performs no setup or cleanup, and does not duplicate facts, policy, reasons, or eligibility rules.
+
+Candidate and policy inputs are validated and defensively snapshotted before any collaborator call. The provider is awaited exactly once with a detached candidate. Its result must be the exact existing `BuffListingFactsLookupResult`, must satisfy the existing `FOUND`/`MISSING` facts invariant, and must bind both canonical listing ID and market name to the current candidate. A valid `MISSING` result is a normal `MISSING_FACTS` outcome with `decision=None`; it is not rejection, does not call the evaluator, and never creates an all-false facts object.
+
+A valid `FOUND` result calls the existing or injected evaluator exactly once with detached candidate, facts, and policy. The returned value must be the exact existing `BuffListingEligibilityDecision` and must match the current candidate, found facts, and policy. Its canonical reasons remain owned by the existing eligibility module. No reasons derives `QUALIFIED`; one or more reasons derives `REJECTED`. Qualification status is not stored or accepted by the constructor, so contradictory caller-supplied status cannot exist.
+
+Qualification results are frozen, keyword-only, repr-suppressed defensive snapshots. Exact public model subclasses, non-result collaborator values, tampered nested state, identity mismatches, contradictory lookup/decision combinations, and mismatched decisions fail closed with fixed safe qualification validation. Public error text and repr retain no listing identity, market name, raw object, payload, reason, path, seller data, credential, URL, or nested exception text.
+
+Provider and evaluator invocation errors are not converted into business outcomes or wrapped as validation failures; ordinary typed errors, resource failures, cancellation, and control-flow exceptions propagate unchanged. There is no retry, fallback, alternate provider, facts inference from names or paint seeds, environment/config read, file or network I/O, batch operation, task/thread creation, or background work.
+
+This service is not reverse-wired into listing parsing, facts lookup, eligibility rules, scanner, solver, risk, valuation, pipeline, scheduler, FastAPI, Discord, BUFF, SteamDT, Redis, cache, or any runtime. There is no real metadata adapter or automatic purchase, and the seam is not production-ready.
 
 ## Existing Legacy Pipeline Mock
 
@@ -71,6 +85,6 @@ There is no real BUFF facts adapter and no eligibility orchestration, solver, pi
 
 ## Explicitly Not Implemented
 
-Phase 12E2A/E2B/E3A add no live BUFF mapping, HTTP client behavior, endpoint, authentication, signature, login, Cookie handling, crawler, captcha handling, risk-control bypass, browser automation, or automatic purchase. They do not connect SteamDT or Redis and are not wired into provider, valuation, pipeline, scheduler, FastAPI, Discord, config, or deployment.
+Phase 12E2A/E2B/E3A/E3B add no live BUFF mapping, HTTP client behavior, endpoint, authentication, signature, login, Cookie handling, crawler, captcha handling, risk-control bypass, browser automation, or automatic purchase. E3B adds only isolated single-listing qualification orchestration; these phases do not connect SteamDT or Redis and are not wired into provider, valuation, pipeline, scheduler, FastAPI, Discord, config, or deployment.
 
 An adapter for real BUFF payloads may only be designed after the project has a lawful, authorized, sanitized sample and confirmed official field semantics. Until then, all endpoint, authentication, request, response-field, and timestamp mapping questions remain tracked in `docs/BUFF_API_NOTES.md`. This fixture parser is not production-ready.

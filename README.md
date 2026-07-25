@@ -299,7 +299,14 @@
 - `tests/fixtures/buff/listing_facts_v1.json` is a synthetic project-owned `schema_version=1` contract with exact source `buff` and ordered `records`. It is not an official BUFF response or captured live metadata. The strict mapping parser and duplicate-key-aware UTF-8 loader reject missing/unknown fields, malformed records, non-boolean flags, duplicate identities, listing-ID/name collisions, and partial success.
 - `OfflineBuffListingFactsProvider` is deterministic and in-memory. A candidate receives `FOUND` only when both canonical `listing_id` and `market_hash_name` match. An absent ID or known ID with the wrong item name returns `MISSING` with `facts=None`; missing metadata never defaults to an all-false classification and wrong-name lookup never receives another item's facts.
 - Classification comes only from explicit records. StatTrak/Souvenir-shaped names and `paint_seed` values are never interpreted. Provider construction and lookup defensively detach input records, facts, and queried identity, and fixed safe errors/repr do not expose listing contents or nested failures.
-- There is still no real BUFF facts adapter, HTTP/auth/login/Cookie behavior, external metadata mapping, or eligibility/pipeline/solver/runtime wiring. This phase does not connect BUFF, SteamDT, or Redis and is not production-ready.
+- There is still no real BUFF facts adapter, HTTP/auth/login/Cookie behavior, or external metadata mapping. E3A itself performs no eligibility orchestration; the isolated E3B service below is its only current caller. Nothing is wired into pipeline, solver, or runtime, this phase does not connect BUFF, SteamDT, or Redis, and it is not production-ready.
+
+### Phase 12E3B BUFF Listing Qualification Service Core
+- `app/services/buff_listing_qualification.py` adds a thin async service that composes the existing facts-provider lookup with the existing eligibility evaluator for one `BuffTradableCandidate`. It does not define another facts model, policy, reason list, or eligibility rule.
+- A valid `MISSING` lookup produces the distinct derived status `MISSING_FACTS`, keeps `decision=None`, skips the evaluator, and never synthesizes all-false facts. A valid `FOUND` lookup is evaluated once and derives `QUALIFIED` when no existing reason applies or `REJECTED` with the existing canonical reasons.
+- Lookup listing ID and market name must both match the queried candidate, and evaluator decisions must match the current candidate, found facts, and policy. Invalid or tampered collaborator results fail closed with fixed redacted qualification validation; provider and evaluator invocation errors propagate rather than being degraded into missing or rejection outcomes.
+- Results are immutable, repr-suppressed defensive snapshots, and status is derived rather than constructor-supplied. The provider is called once and the evaluator at most once; there is no retry, fallback, name/paint-seed inference, I/O, task/thread creation, or collaborator lifecycle ownership.
+- This isolated composition seam is not connected to the scanner, solver, risk filter, valuation, pipeline, scheduler, FastAPI, Discord, BUFF, SteamDT, or Redis. There is no real facts adapter, metadata fetch, batch/background qualification, automatic purchase, or production wiring.
 
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
@@ -344,7 +351,7 @@
 - metadata normalize / trade-up / EV / risk filter
 - mock pipeline / alert / scheduler
 - Docker / 24h dry-run deployment hardening
-- isolated BUFF listing observation → normalized candidate contract, project-owned offline listing and facts fixture parsers, pure eligibility decision core, and deterministic in-memory facts lookup（无真实 BUFF 连接、payload mapping 或 runtime wiring）
+- isolated BUFF listing observation → normalized candidate contract, project-owned offline listing and facts fixture parsers, pure eligibility decision core, deterministic in-memory facts lookup, and isolated single-listing qualification orchestration（无真实 BUFF 连接、payload mapping 或 runtime wiring）
 
 当前阶段**不**包含：
 - 真实 BUFF API mapping、client、scraper 或 listing data
