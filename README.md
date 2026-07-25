@@ -294,6 +294,13 @@
 - Decisions defensively revalidate candidate, facts, policy, and the complete reason tuple. Public models are immutable and repr-suppressed, and validation errors use fixed redacted text. E1/E2A semantics remain unchanged: quantity zero, zero price, and a missing float are still format-valid input values before policy evaluation.
 - This core does not call or modify the legacy scanner, recipe solver, opportunity risk filter, providers, valuation, pipeline, scheduler, FastAPI, BUFF, SteamDT, Redis, or Discord. It is not wired into runtime and is not production-ready.
 
+### Phase 12E3A Offline BUFF Listing Facts Provider
+- `app/services/buff_listing_facts.py` adds the explicit offline boundary from project-owned metadata records to the existing `BuffListingEligibilityFacts`. Records contain only canonical listing ID, canonical market name, and exact-boolean StatTrak, Souvenir, and special-seed facts; they retain no raw payload.
+- `tests/fixtures/buff/listing_facts_v1.json` is a synthetic project-owned `schema_version=1` contract with exact source `buff` and ordered `records`. It is not an official BUFF response or captured live metadata. The strict mapping parser and duplicate-key-aware UTF-8 loader reject missing/unknown fields, malformed records, non-boolean flags, duplicate identities, listing-ID/name collisions, and partial success.
+- `OfflineBuffListingFactsProvider` is deterministic and in-memory. A candidate receives `FOUND` only when both canonical `listing_id` and `market_hash_name` match. An absent ID or known ID with the wrong item name returns `MISSING` with `facts=None`; missing metadata never defaults to an all-false classification and wrong-name lookup never receives another item's facts.
+- Classification comes only from explicit records. StatTrak/Souvenir-shaped names and `paint_seed` values are never interpreted. Provider construction and lookup defensively detach input records, facts, and queried identity, and fixed safe errors/repr do not expose listing contents or nested failures.
+- There is still no real BUFF facts adapter, HTTP/auth/login/Cookie behavior, external metadata mapping, or eligibility/pipeline/solver/runtime wiring. This phase does not connect BUFF, SteamDT, or Redis and is not production-ready.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.
@@ -337,7 +344,7 @@
 - metadata normalize / trade-up / EV / risk filter
 - mock pipeline / alert / scheduler
 - Docker / 24h dry-run deployment hardening
-- isolated BUFF listing observation → normalized candidate contract, project-owned offline fixture parser, and pure eligibility decision core（无真实 BUFF 连接、payload mapping 或 runtime wiring）
+- isolated BUFF listing observation → normalized candidate contract, project-owned offline listing and facts fixture parsers, pure eligibility decision core, and deterministic in-memory facts lookup（无真实 BUFF 连接、payload mapping 或 runtime wiring）
 
 当前阶段**不**包含：
 - 真实 BUFF API mapping、client、scraper 或 listing data

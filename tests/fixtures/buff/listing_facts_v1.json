@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "source": "buff",
+  "records": [
+    {
+      "listing_id": "synthetic-listing-001",
+      "market_hash_name": "AK-47 | Redline (Field-Tested)",
+      "is_stattrak": false,
+      "is_souvenir": false,
+      "has_special_seed": false
+    },
+    {
+      "listing_id": "synthetic-listing-002",
+      "market_hash_name": "Plain Synthetic Item Without Classification Hint",
+      "is_stattrak": true,
+      "is_souvenir": false,
+      "has_special_seed": false
+    },
+    {
+      "listing_id": "synthetic-listing-003",
+      "market_hash_name": "Synthetic Souvenir Metadata Record",
+      "is_stattrak": false,
+      "is_souvenir": true,
+      "has_special_seed": false
+    },
+    {
+      "listing_id": "synthetic-listing-004",
+      "market_hash_name": "Synthetic Explicit Seed Metadata Record",
+      "is_stattrak": false,
+      "is_souvenir": false,
+      "has_special_seed": true
+    }
+  ]
+}
