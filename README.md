@@ -286,6 +286,14 @@
 - The older `tests/fixtures/pipeline/mock_buff_orders.json` remains a separate synthetic pipeline mock with legacy raw/seller-shaped fields; it is not copied or interpreted as this fixture schema or an official response.
 - See `docs/BUFF_LISTING_NOTES.md` for the complete offline contract. There is still no live BUFF payload adapter, HTTP/auth/login/Cookie/crawler/captcha behavior, SteamDT/Redis connection, runtime wiring, or automatic purchase. This milestone is not production-ready.
 
+### Phase 12E2B BUFF Listing Eligibility Filter Core
+- `app/services/buff_listing_eligibility.py` adds a separate pure decision boundary after normalization: `BuffTradableCandidate` remains format-valid data, while `BuffListingEligibilityDecision` says whether that listing may proceed toward a future solver.
+- The caller must explicitly supply exact-boolean StatTrak, Souvenir, and special-seed facts. The evaluator does not infer classifications from `market_hash_name`, `paint_seed`, wear, stickers, or listing identifiers, and no real facts provider exists yet.
+- The default policy requires quantity of at least 1, a positive buy price, and a float value, while disallowing explicitly marked StatTrak, Souvenir, and special-seed listings. Policy fields are immutable, exact typed, and independent of environment or production configuration.
+- Every applicable rejection is retained in deterministic order: insufficient quantity, non-positive price, missing float, StatTrak disallowed, Souvenir disallowed, then special seed disallowed. No reasons means `is_eligible=True`.
+- Decisions defensively revalidate candidate, facts, policy, and the complete reason tuple. Public models are immutable and repr-suppressed, and validation errors use fixed redacted text. E1/E2A semantics remain unchanged: quantity zero, zero price, and a missing float are still format-valid input values before policy evaluation.
+- This core does not call or modify the legacy scanner, recipe solver, opportunity risk filter, providers, valuation, pipeline, scheduler, FastAPI, BUFF, SteamDT, Redis, or Discord. It is not wired into runtime and is not production-ready.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.
@@ -329,7 +337,7 @@
 - metadata normalize / trade-up / EV / risk filter
 - mock pipeline / alert / scheduler
 - Docker / 24h dry-run deployment hardening
-- isolated BUFF listing observation → normalized candidate contract and project-owned offline fixture parser（无真实 BUFF 连接或 payload mapping）
+- isolated BUFF listing observation → normalized candidate contract, project-owned offline fixture parser, and pure eligibility decision core（无真实 BUFF 连接、payload mapping 或 runtime wiring）
 
 当前阶段**不**包含：
 - 真实 BUFF API mapping、client、scraper 或 listing data
