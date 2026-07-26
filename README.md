@@ -308,6 +308,13 @@
 - Results are immutable, repr-suppressed defensive snapshots, and status is derived rather than constructor-supplied. The provider is called once and the evaluator at most once; there is no retry, fallback, name/paint-seed inference, I/O, task/thread creation, or collaborator lifecycle ownership.
 - This isolated composition seam is not connected to the scanner, solver, risk filter, valuation, pipeline, scheduler, FastAPI, Discord, BUFF, SteamDT, or Redis. There is no real facts adapter, metadata fetch, batch/background qualification, automatic purchase, or production wiring.
 
+### Phase 12E4A Manual Offline BUFF Qualification Integration
+- `scripts/buff_listing_qualification_integration.py` is a manual, fully offline command that executes the real strict listing loader → normalizer → strict facts loader → `OfflineBuffListingFactsProvider` → default eligibility policy → `BuffListingQualificationService` chain. It adds no second parser, domain, facts model, policy, evaluator, or eligibility rule.
+- Dedicated project-owned synthetic fixtures under `tests/fixtures/buff/qualification_*_v1.json` produce four ordered results: qualified, rejected, a duplicate identity qualified again, and missing facts. Expected counts are 4 listings, 2 qualified, 1 rejected, and 1 missing facts. Duplicates are not removed, rejection reasons remain canonical, and missing facts never become all-false facts or rejection.
+- Run it with `py -3.13 -m scripts.buff_listing_qualification_integration` or `py -3.13 scripts/buff_listing_qualification_integration.py`. Both fixture paths may be overridden explicitly with `--listings-fixture` and `--facts-fixture`; defaults are repository-anchored and importing the module reads no file or environment.
+- The immutable ordered run result derives all counts. Complete runs return 0 even when listings are rejected or missing facts; invalid paths/CLI return 2, processing failure returns 1 without a partial summary, and interruption returns 130. Output JSON-escapes/redacts the canonical market name and never prints listing IDs, raw payloads, paths, credentials, exception messages, or tracebacks.
+- This milestone uses synthetic data only. It sends zero BUFF and SteamDT requests, does not use Redis, and is not connected to solver, valuation, pipeline, scheduler, FastAPI, Discord, or automatic purchasing. It is not a real BUFF adapter and is not production-ready.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.
@@ -351,7 +358,7 @@
 - metadata normalize / trade-up / EV / risk filter
 - mock pipeline / alert / scheduler
 - Docker / 24h dry-run deployment hardening
-- isolated BUFF listing observation → normalized candidate contract, project-owned offline listing and facts fixture parsers, pure eligibility decision core, deterministic in-memory facts lookup, and isolated single-listing qualification orchestration（无真实 BUFF 连接、payload mapping 或 runtime wiring）
+- isolated BUFF listing observation → normalized candidate contract, project-owned offline listing and facts fixture parsers, pure eligibility decision core, deterministic in-memory facts lookup, isolated single-listing qualification orchestration, and a manual synthetic end-to-end qualification command（无真实 BUFF 连接、payload mapping 或 runtime wiring）
 
 当前阶段**不**包含：
 - 真实 BUFF API mapping、client、scraper 或 listing data

@@ -79,12 +79,24 @@ Provider and evaluator invocation errors are not converted into business outcome
 
 This service is not reverse-wired into listing parsing, facts lookup, eligibility rules, scanner, solver, risk, valuation, pipeline, scheduler, FastAPI, Discord, BUFF, SteamDT, Redis, cache, or any runtime. There is no real metadata adapter or automatic purchase, and the seam is not production-ready.
 
+## Phase 12E4A — Manual Offline Qualification Integration
+
+`scripts/buff_listing_qualification_integration.py` is the first manual surface that executes the complete existing offline listing chain. It loads a strict listing fixture, normalizes every observation in fixture order, loads a strict facts fixture, builds `OfflineBuffListingFactsProvider`, uses one default `BuffListingEligibilityPolicy`, builds `BuffListingQualificationService`, and sequentially qualifies every candidate once. The command owns only this composition and its summary; parsing, normalization, lookup, facts, policy, reasons, and qualification semantics remain in their existing modules.
+
+`tests/fixtures/buff/qualification_listings_v1.json` and `qualification_facts_v1.json` are dedicated project-owned synthetic integration inputs that reuse the existing schemas. They are not BUFF responses, captured market data, or evidence of an endpoint or field mapping. Four observations deliberately yield `QUALIFIED`, `REJECTED`, `QUALIFIED`, and `MISSING_FACTS`: the third observation repeats the first compound identity to prove that no listing is deduplicated, the rejected identity has explicit `is_stattrak=true` facts, and the missing identity has no facts record. Counts are therefore total 4, qualified 2, rejected 1, and missing facts 1.
+
+The run result stores immutable ordered candidate and qualification-result tuples and derives all counts. Candidate order and duplicates remain intact. The command does not join identities itself, infer classification from a market name or paint seed, synthesize all-false facts, reorder reasons, retry, fall back, run concurrently, continue after failure, or publish a partial success result. `REJECTED` retains the existing canonical reasons, while `MISSING_FACTS` remains a normal separate business outcome with `facts=None` and `decision=None`.
+
+Both direct and module entrypoints use repository-anchored fixture defaults and accept only explicit listing/facts fixture overrides. Importing the module reads no fixture or environment and creates no client, runtime, service, or task. Successful output includes fixed counts and ordered per-listing status/facts/reason fields; market names are credential/URL-redacted and JSON-escaped. Listing IDs, raw objects/payloads, facts objects, paths, credentials, URLs, exception messages, and tracebacks are never printed. Invalid CLI or non-file paths return 2, content or orchestration failures return 1 without partial output, complete runs return 0 even with rejection/missing facts, and interruption returns 130.
+
+This milestone sends no BUFF or SteamDT request and uses no Redis. It has no BUFF endpoint, auth, Cookie, login, crawler, metadata fetch, scanner, solver, risk, valuation, pipeline, scheduler, FastAPI, Discord, background worker, or automatic purchase. It remains a synthetic manual integration check and is not production-ready.
+
 ## Existing Legacy Pipeline Mock
 
 `tests/fixtures/pipeline/mock_buff_orders.json` is pre-existing synthetic pipeline input for the older `BuffSellOrder` mock path. It contains mock `seller_id`, inspect-link, raw-shaped fields, and JSON-number float values. It is not reused, copied, or treated as Phase 12E2A schema v1, and it is not evidence of an official BUFF response shape.
 
 ## Explicitly Not Implemented
 
-Phase 12E2A/E2B/E3A/E3B add no live BUFF mapping, HTTP client behavior, endpoint, authentication, signature, login, Cookie handling, crawler, captcha handling, risk-control bypass, browser automation, or automatic purchase. E3B adds only isolated single-listing qualification orchestration; these phases do not connect SteamDT or Redis and are not wired into provider, valuation, pipeline, scheduler, FastAPI, Discord, config, or deployment.
+Phase 12E2A/E2B/E3A/E3B/E4A add no live BUFF mapping, HTTP client behavior, endpoint, authentication, signature, login, Cookie handling, crawler, captcha handling, risk-control bypass, browser automation, or automatic purchase. E4A adds only a manual synthetic offline composition of the existing contracts; these phases do not connect SteamDT or Redis and are not wired into provider, valuation, pipeline, scheduler, FastAPI, Discord, config, or deployment.
 
 An adapter for real BUFF payloads may only be designed after the project has a lawful, authorized, sanitized sample and confirmed official field semantics. Until then, all endpoint, authentication, request, response-field, and timestamp mapping questions remain tracked in `docs/BUFF_API_NOTES.md`. This fixture parser is not production-ready.
