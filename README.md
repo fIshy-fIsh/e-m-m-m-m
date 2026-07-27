@@ -322,6 +322,13 @@
 - The manual qualification command now defaults to v2 listings with the existing v1 facts fixture; explicit v1 listings still work. Goods ID is never printed, and market names containing it are fail-closed redacted. The future solver adapter will require `QUALIFIED` plus nonempty goods ID, but no adapter or solver execution is added here.
 - This remains offline synthetic infrastructure with no BUFF, SteamDT, or Redis connection, no confirmed endpoint or field mapping, no pipeline/runtime wiring, and no production readiness.
 
+### Phase 12E4B Qualified BUFF Listing to Solver Candidate Adapter Core
+- `app/services/buff_listing_solver_adapter.py` adds one pure single-record boundary from the exact existing `BuffListingQualificationResult` to the existing solver-facing `CandidateListing`. It rebuilds the qualification snapshot through its public constructor and accepts only `QUALIFIED` results with `FOUND` facts, an eligible consistent decision, policy-satisfying quantity, a non-null float, and an explicitly supplied nonempty authoritative goods ID.
+- Goods ID, listing ID, market name, Decimal CNY buy price, paint seed, and observation time map directly. Decimal price never passes through float; Decimal float is converted exactly once and checked as finite and within `[0, 1]` only because the legacy candidate contract is float-based. Source is explicitly `buff`, while inspect link and raw payload remain `None`.
+- `REJECTED`, `MISSING_FACTS`, legacy-v1 null goods ID, missing float, wrong types, and tampered or inconsistent results fail closed with one fixed redacted error. Quantity is checked but not expanded, and wear, stickers, facts, policy, reasons, seller data, credentials, URLs, and transport payloads are not copied.
+- The adapter does not call a facts provider, eligibility evaluator, qualification service, metadata service, market scanner, or recipe solver. Importing the required existing `CandidateListing` loads its legacy market-scanner module and `BuffClient` type dependency, but constructs no client and performs no network or authentication work. `SkinMetadata` remains responsible for StatTrak, Souvenir, collection, rarity, and item float ranges.
+- This is not a live BUFF payload adapter and adds no BUFF, SteamDT, Redis, pipeline, scheduler, FastAPI, Discord, retry, background work, automatic purchase, or production wiring. Recipe solver execution remains unimplemented for this path.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.
@@ -365,7 +372,7 @@
 - metadata normalize / trade-up / EV / risk filter
 - mock pipeline / alert / scheduler
 - Docker / 24h dry-run deployment hardening
-- isolated BUFF listing observation → normalized candidate contract with optional authoritative goods ID, strict project-owned v1/v2 listing fixtures, a separate v1 facts fixture/parser, pure eligibility decision core, deterministic goods-ID-independent facts lookup, isolated single-listing qualification orchestration, and a manual synthetic end-to-end qualification command（无真实 BUFF 连接、payload mapping、solver adapter 或 runtime wiring）
+- isolated BUFF listing observation → normalized candidate contract with optional authoritative goods ID, strict project-owned v1/v2 listing fixtures, a separate v1 facts fixture/parser, pure eligibility decision core, deterministic goods-ID-independent facts lookup, isolated single-listing qualification orchestration, a manual synthetic end-to-end qualification command, and an isolated qualified-listing-to-existing-solver-candidate adapter（无真实 BUFF 连接、payload mapping、recipe solver execution 或 runtime wiring）
 
 当前阶段**不**包含：
 - 真实 BUFF API mapping、client、scraper 或 listing data
