@@ -729,8 +729,8 @@ def test_success_output_contains_required_safe_summary() -> None:
     ]
 
 
-def test_safe_external_text_escapes_control_characters() -> None:
-    rendered = command._safe_external_text(
+def test_render_safe_buff_candidate_market_name_escapes_control_characters() -> None:
+    rendered = command.render_safe_buff_candidate_market_name(
         _candidate(market_hash_name="line one\nline two\t\x1b[31m")
     )
 
@@ -762,30 +762,32 @@ def test_safe_external_text_escapes_control_characters() -> None:
         "https%3A%2F%2Fexample.com%2Fpath",
     ],
 )
-def test_safe_external_text_redacts_prohibited_segments(unsafe_value: str) -> None:
-    rendered = command._safe_external_text(
+def test_render_safe_buff_candidate_market_name_redacts_prohibited_segments(
+    unsafe_value: str,
+) -> None:
+    rendered = command.render_safe_buff_candidate_market_name(
         _candidate(market_hash_name=f"Synthetic {unsafe_value} Item")
     )
 
     assert rendered == '"[REDACTED]"'
 
 
-def test_safe_external_text_redacts_embedded_listing_id() -> None:
+def test_render_safe_buff_candidate_market_name_redacts_embedded_listing_id() -> None:
     candidate = _candidate(
         listing_id="private-listing-7f4c9",
         market_hash_name="Synthetic private-listing-7f4c9 Item",
     )
 
-    assert command._safe_external_text(candidate) == '"[REDACTED]"'
+    assert command.render_safe_buff_candidate_market_name(candidate) == '"[REDACTED]"'
 
 
-def test_safe_external_text_redacts_embedded_goods_id() -> None:
+def test_render_safe_buff_candidate_market_name_redacts_embedded_goods_id() -> None:
     candidate = _candidate(
         goods_id="private-goods-7f4c9",
         market_hash_name="Synthetic private-goods-7f4c9 Item",
     )
 
-    assert command._safe_external_text(candidate) == '"[REDACTED]"'
+    assert command.render_safe_buff_candidate_market_name(candidate) == '"[REDACTED]"'
 
 
 def test_output_does_not_include_listing_ids_goods_ids_or_fixture_paths() -> None:

@@ -329,6 +329,13 @@
 - The adapter does not call a facts provider, eligibility evaluator, qualification service, metadata service, market scanner, or recipe solver. Importing the required existing `CandidateListing` loads its legacy market-scanner module and `BuffClient` type dependency, but constructs no client and performs no network or authentication work. `SkinMetadata` remains responsible for StatTrak, Souvenir, collection, rarity, and item float ranges.
 - This is not a live BUFF payload adapter and adds no BUFF, SteamDT, Redis, pipeline, scheduler, FastAPI, Discord, retry, background work, automatic purchase, or production wiring. Recipe solver execution remains unimplemented for this path.
 
+### Phase 12E4C Offline Qualified Listing Adapter Integration
+- `scripts/buff_listing_solver_adapter_integration.py` is a manual, fully offline composition of the existing qualification integration and strict single-record solver adapter. It runs qualification exactly once, sends only `QUALIFIED` results to `adapt_qualified_buff_listing()` once each in source order, and treats `REJECTED` and `MISSING_FACTS` as normal skipped outcomes.
+- The immutable integration result stores only the complete qualification run and an ordered tuple of the existing `CandidateListing`. Its counts are derived. Qualified duplicate occurrences remain duplicated and ordered, available quantity is not expanded, and any adapter failure aborts atomically without returning or printing partial success.
+- Run it with `py -3.13 -m scripts.buff_listing_solver_adapter_integration` or `py -3.13 scripts/buff_listing_solver_adapter_integration.py`. Both fixture options and repository-anchored defaults match the qualification command. Default v2 fixtures produce 4 qualification results, 2 qualified/adapted candidates, 1 skipped rejection, and 1 skipped missing-facts result. Explicit legacy v1 listings remain qualification-valid but fail closed at the first qualified null-goods-ID adaptation and exit 1.
+- Output reuses the qualification command's public safe market-name renderer and prints only adapted index, safe name, source, float presence, fixed counts, and zero-external-use attestations. It never prints IDs, prices, numeric floats, seeds, raw/inspect values, paths, nested errors, credentials, URLs, or tracebacks.
+- The command does not execute the recipe solver, perform metadata lookup, call the scanner, or wire pipeline/scheduler/FastAPI. It creates no BUFF or SteamDT client, sends no external request, does not use Redis, and remains a synthetic manual check rather than production integration.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.
@@ -372,7 +379,7 @@
 - metadata normalize / trade-up / EV / risk filter
 - mock pipeline / alert / scheduler
 - Docker / 24h dry-run deployment hardening
-- isolated BUFF listing observation → normalized candidate contract with optional authoritative goods ID, strict project-owned v1/v2 listing fixtures, a separate v1 facts fixture/parser, pure eligibility decision core, deterministic goods-ID-independent facts lookup, isolated single-listing qualification orchestration, a manual synthetic end-to-end qualification command, and an isolated qualified-listing-to-existing-solver-candidate adapter（无真实 BUFF 连接、payload mapping、recipe solver execution 或 runtime wiring）
+- isolated BUFF listing observation → normalized candidate contract with optional authoritative goods ID, strict project-owned v1/v2 listing fixtures, a separate v1 facts fixture/parser, pure eligibility decision core, deterministic goods-ID-independent facts lookup, isolated single-listing qualification orchestration, a manual synthetic end-to-end qualification command, an isolated qualified-listing-to-existing-solver-candidate adapter, and a manual ordered offline qualification-to-adapter integration（无真实 BUFF 连接、payload mapping、recipe solver execution 或 runtime wiring）
 
 当前阶段**不**包含：
 - 真实 BUFF API mapping、client、scraper 或 listing data

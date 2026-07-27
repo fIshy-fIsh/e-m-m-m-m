@@ -317,7 +317,7 @@ def _build_summary_lines(
             [
                 f"Listing {index}:",
                 "  Market name: "
-                f"{_safe_external_text(qualification.candidate)}",
+                f"{render_safe_buff_candidate_market_name(qualification.candidate)}",
                 f"  Qualification status: {qualification.status.value}",
                 "  Rejection reasons: "
                 f"{', '.join(reasons) if reasons else 'none'}",
@@ -334,7 +334,11 @@ def _build_summary_lines(
     return tuple(lines)
 
 
-def _safe_external_text(candidate: BuffTradableCandidate) -> str:
+def render_safe_buff_candidate_market_name(
+    candidate: BuffTradableCandidate,
+) -> str:
+    """Render one candidate market name without exposing sensitive content."""
+
     value = candidate.market_hash_name
     lowered = value.casefold()
     if (
