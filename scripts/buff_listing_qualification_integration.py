@@ -33,7 +33,7 @@ from app.services.buff_listing_qualification import (
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_LISTINGS_FIXTURE = (
-    _PROJECT_ROOT / "tests" / "fixtures" / "buff" / "qualification_listings_v1.json"
+    _PROJECT_ROOT / "tests" / "fixtures" / "buff" / "qualification_listings_v2.json"
 )
 DEFAULT_FACTS_FIXTURE = (
     _PROJECT_ROOT / "tests" / "fixtures" / "buff" / "qualification_facts_v1.json"
@@ -339,6 +339,10 @@ def _safe_external_text(candidate: BuffTradableCandidate) -> str:
     lowered = value.casefold()
     if (
         candidate.listing_id.casefold() in lowered
+        or (
+            candidate.goods_id is not None
+            and candidate.goods_id.casefold() in lowered
+        )
         or any(marker in lowered for marker in _SENSITIVE_MARKERS)
         or any(character in value for character in _SENSITIVE_PUNCTUATION)
         or _URI_PATTERN.search(value) is not None

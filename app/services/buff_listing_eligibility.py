@@ -172,6 +172,9 @@ def _copy_candidate(candidate: object) -> BuffTradableCandidate:
             listing_id=_copy_string(
                 _stored_attribute(candidate, "listing_id", field="candidate")
             ),
+            goods_id=_copy_optional_string(
+                _stored_attribute(candidate, "goods_id", field="candidate")
+            ),
             market_hash_name=_copy_string(
                 _stored_attribute(candidate, "market_hash_name", field="candidate")
             ),

@@ -30,6 +30,7 @@ class BuffListingObservation:
     paint_seed: int | None = None
     sticker_metadata: Sequence[tuple[str, str]] | None = None
     observed_at: datetime
+    goods_id: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -67,6 +68,11 @@ class BuffListingObservation:
             "observed_at",
             _normalize_utc(self.observed_at, field="observed_at"),
         )
+        object.__setattr__(
+            self,
+            "goods_id",
+            _normalize_optional_identifier(self.goods_id, field="goods_id"),
+        )
 
 
 @dataclass(frozen=True, kw_only=True, repr=False)
@@ -81,6 +87,7 @@ class BuffTradableCandidate:
     wear_name: str | None
     paint_seed: int | None
     observed_at: datetime
+    goods_id: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -116,6 +123,11 @@ class BuffTradableCandidate:
             "observed_at",
             _normalize_utc(self.observed_at, field="observed_at"),
         )
+        object.__setattr__(
+            self,
+            "goods_id",
+            _normalize_optional_identifier(self.goods_id, field="goods_id"),
+        )
 
 
 class BuffListingSource(Protocol):
@@ -146,6 +158,7 @@ def normalize_buff_listing(
         paint_seed=observation.paint_seed,
         sticker_metadata=observation.sticker_metadata,
         observed_at=observation.observed_at,
+        goods_id=observation.goods_id,
     )
     return BuffTradableCandidate(
         listing_id=validated.listing_id,
@@ -156,6 +169,7 @@ def normalize_buff_listing(
         wear_name=validated.wear_name,
         paint_seed=validated.paint_seed,
         observed_at=validated.observed_at,
+        goods_id=validated.goods_id,
     )
 
 
@@ -164,6 +178,20 @@ def _normalize_required_string(value: object, *, field: str) -> str:
         raise BuffListingValidationError(field=field)
     try:
         normalized = value.strip()
+    except Exception:
+        raise BuffListingValidationError(field=field) from None
+    if not normalized:
+        raise BuffListingValidationError(field=field)
+    return normalized
+
+
+def _normalize_optional_identifier(value: object, *, field: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise BuffListingValidationError(field=field)
+    try:
+        normalized = str.strip(str.__str__(value))
     except Exception:
         raise BuffListingValidationError(field=field) from None
     if not normalized:

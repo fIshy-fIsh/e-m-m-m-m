@@ -91,12 +91,24 @@ Both direct and module entrypoints use repository-anchored fixture defaults and 
 
 This milestone sends no BUFF or SteamDT request and uses no Redis. It has no BUFF endpoint, auth, Cookie, login, crawler, metadata fetch, scanner, solver, risk, valuation, pipeline, scheduler, FastAPI, Discord, background worker, or automatic purchase. It remains a synthetic manual integration check and is not production-ready.
 
+## Phase 12E4B0 — Authoritative goods_id Contract Propagation
+
+The newer listing domain now retains `goods_id` only when a source supplies it explicitly. `BuffListingObservation.goods_id` and `BuffTradableCandidate.goods_id` are optional solely for backward compatibility: `None` means no authoritative goods ID was present. A supplied string is detached, stripped, and must remain nonempty. The domain never derives it from listing ID, market name, paint seed, the literal source `buff`, a hash, or a placeholder.
+
+Listing fixture schema v1 remains frozen and unchanged. Its exact record fields do not include `goods_id`, a v1 record that adds the field is rejected, and successfully parsed v1 observations have `goods_id=None`. Project-owned listing fixture schema v2 retains the same top-level contract and existing listing semantics but requires one nonblank string `goods_id` per record. Missing, unknown, wrong-type, and blank v2 values fail closed; malformed v2 never downgrades to legacy `None`. Fixture schema versions are internal offline contracts rather than BUFF API versions, and the synthetic v2 identifiers confirm no live response field or mapping.
+
+`tests/fixtures/buff/listings_v2.json` and `qualification_listings_v2.json` are synthetic v2 examples. The repeated qualification identity carries the same goods ID in both observations, while unrelated identities use distinct IDs. The unchanged `qualification_facts_v1.json` still produces `QUALIFIED`, `REJECTED`, `QUALIFIED`, and `MISSING_FACTS` with counts 4/2/1/1. Facts schema and lookup identity remain listing ID plus market name only: goods ID is not a facts field, provider key, eligibility fact, policy rule, reason, or qualification-status input.
+
+Normalization, eligibility decisions, qualification collaborator inputs, and returned qualification results preserve populated and legacy-null goods ID through defensive snapshots. The manual integration command now defaults to v2 listings and v1 facts, while an explicit v1 listing fixture still runs. Output never includes goods ID; a market name containing its non-null goods ID is completely redacted just like one containing its listing ID.
+
+This prerequisite resolves the provenance gap found before the solver adapter. A later adapter may require both `QUALIFIED` status and a nonempty goods ID; E4B0 does not create that adapter, change `CandidateListing`, or execute the recipe solver. It adds no live BUFF client, endpoint, auth, Cookie, login, crawler, SteamDT, Redis, pipeline, scheduler, FastAPI, Discord, background work, or automatic purchase, and it is not production-ready.
+
 ## Existing Legacy Pipeline Mock
 
 `tests/fixtures/pipeline/mock_buff_orders.json` is pre-existing synthetic pipeline input for the older `BuffSellOrder` mock path. It contains mock `seller_id`, inspect-link, raw-shaped fields, and JSON-number float values. It is not reused, copied, or treated as Phase 12E2A schema v1, and it is not evidence of an official BUFF response shape.
 
 ## Explicitly Not Implemented
 
-Phase 12E2A/E2B/E3A/E3B/E4A add no live BUFF mapping, HTTP client behavior, endpoint, authentication, signature, login, Cookie handling, crawler, captcha handling, risk-control bypass, browser automation, or automatic purchase. E4A adds only a manual synthetic offline composition of the existing contracts; these phases do not connect SteamDT or Redis and are not wired into provider, valuation, pipeline, scheduler, FastAPI, Discord, config, or deployment.
+Phase 12E2A/E2B/E3A/E3B/E4A/E4B0 add no live BUFF mapping, HTTP client behavior, endpoint, authentication, signature, login, Cookie handling, crawler, captcha handling, risk-control bypass, browser automation, or automatic purchase. E4A adds only a manual synthetic offline composition of the existing contracts; E4B0 adds only explicit project-owned goods-ID provenance and listing fixture v2 compatibility. These phases do not connect SteamDT or Redis and are not wired into provider, solver, valuation, pipeline, scheduler, FastAPI, Discord, config, or deployment.
 
 An adapter for real BUFF payloads may only be designed after the project has a lawful, authorized, sanitized sample and confirmed official field semantics. Until then, all endpoint, authentication, request, response-field, and timestamp mapping questions remain tracked in `docs/BUFF_API_NOTES.md`. This fixture parser is not production-ready.

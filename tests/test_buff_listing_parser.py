@@ -11,6 +11,7 @@ import pytest
 from app.services.buff_listing import normalize_buff_listing
 from app.services.buff_listing_parser import (
     BUFF_LISTING_FIXTURE_SCHEMA_VERSION,
+    BUFF_LISTING_FIXTURE_SCHEMA_VERSION_V1,
     BUFF_LISTING_FIXTURE_SOURCE,
     BuffListingParseCause,
     BuffListingParseError,
@@ -18,8 +19,11 @@ from app.services.buff_listing_parser import (
     parse_buff_listing_fixture,
 )
 
-FIXTURE_PATH = (
+FIXTURE_PATH_V1 = (
     Path(__file__).resolve().parent / "fixtures" / "buff" / "listings_v1.json"
+)
+FIXTURE_PATH_V2 = (
+    Path(__file__).resolve().parent / "fixtures" / "buff" / "listings_v2.json"
 )
 OBSERVED_AT = datetime(2026, 7, 23, 12, tzinfo=UTC)
 
@@ -27,6 +31,7 @@ OBSERVED_AT = datetime(2026, 7, 23, 12, tzinfo=UTC)
 def _listing(**changes: object) -> dict[str, object]:
     listing: dict[str, object] = {
         "listing_id": " listing-001 ",
+        "goods_id": " goods-001 ",
         "market_hash_name": " AK-47 | Redline (Field-Tested) ",
         "price_cny": "123.4500",
         "quantity": 1,
@@ -43,11 +48,22 @@ def _listing(**changes: object) -> dict[str, object]:
 
 def _payload(**changes: object) -> dict[str, object]:
     payload: dict[str, object] = {
-        "schema_version": 1,
+        "schema_version": BUFF_LISTING_FIXTURE_SCHEMA_VERSION,
         "source": "buff",
         "observed_at": "2026-07-23T12:00:00Z",
         "listings": [_listing()],
     }
+    payload.update(changes)
+    return payload
+
+
+def _v1_payload(**changes: object) -> dict[str, object]:
+    listing = _listing()
+    listing.pop("goods_id")
+    payload = _payload(
+        schema_version=BUFF_LISTING_FIXTURE_SCHEMA_VERSION_V1,
+        listings=[listing],
+    )
     payload.update(changes)
     return payload
 
@@ -67,18 +83,30 @@ def _assert_parse_error(
 
 
 def test_loads_project_owned_v1_fixture() -> None:
-    observations = load_buff_listing_fixture(FIXTURE_PATH)
+    observations = load_buff_listing_fixture(FIXTURE_PATH_V1)
 
     assert len(observations) == 2
     assert observations[0].listing_id == "listing-001"
+    assert observations[0].goods_id is None
+    assert observations[1].goods_id is None
     assert observations[0].observed_at == OBSERVED_AT
 
 
+def test_loads_project_owned_v2_fixture_with_authoritative_goods_id() -> None:
+    observations = load_buff_listing_fixture(FIXTURE_PATH_V2)
+
+    assert len(observations) == 2
+    assert [observation.goods_id for observation in observations] == [
+        "synthetic-goods-001",
+        "synthetic-goods-001",
+    ]
+
+
 def test_mapping_parser_and_file_loader_are_equivalent() -> None:
-    payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+    payload = json.loads(FIXTURE_PATH_V2.read_text(encoding="utf-8"))
 
     assert parse_buff_listing_fixture(payload) == load_buff_listing_fixture(
-        FIXTURE_PATH
+        FIXTURE_PATH_V2
     )
 
 
@@ -159,6 +187,7 @@ def test_parsed_observation_normalizes_to_candidate() -> None:
     candidate = normalize_buff_listing(observation)
 
     assert candidate.listing_id == "listing-001"
+    assert candidate.goods_id == "goods-001"
     assert candidate.buy_price_cny == Decimal("123.4500")
     assert candidate.available_quantity == 1
 
@@ -167,12 +196,59 @@ def test_empty_listing_array_returns_empty_tuple() -> None:
     assert parse_buff_listing_fixture(_payload(listings=[])) == ()
 
 
-@pytest.mark.parametrize("value", [2, 0, -1, True, False, "1", None])
-def test_schema_version_requires_exact_integer_one(value: object) -> None:
+@pytest.mark.parametrize("value", [3, 0, -1, True, False, "1", None])
+def test_schema_version_accepts_only_exact_integer_one_or_two(value: object) -> None:
     with pytest.raises(BuffListingParseError) as exc_info:
         parse_buff_listing_fixture(_payload(schema_version=value))
 
     _assert_parse_error(exc_info, field="schema_version")
+
+
+def test_v1_rejects_goods_id_as_an_unknown_field() -> None:
+    listing = _listing()
+
+    with pytest.raises(BuffListingParseError) as exc_info:
+        parse_buff_listing_fixture(
+            _v1_payload(listings=[listing])
+        )
+
+    _assert_parse_error(exc_info, field="listings", record_index=0)
+
+
+@pytest.mark.parametrize("value", [None, "", "   ", 1, True, [], {}])
+def test_v2_requires_a_nonblank_string_goods_id(value: object) -> None:
+    listing = _listing(goods_id=value)
+
+    with pytest.raises(BuffListingParseError) as exc_info:
+        parse_buff_listing_fixture(_payload(listings=[listing]))
+
+    assert exc_info.value.field == "goods_id"
+    assert exc_info.value.record_index == 0
+    assert exc_info.value.cause in {
+        BuffListingParseCause.FIXTURE_SCHEMA,
+        BuffListingParseCause.DOMAIN_VALIDATION,
+    }
+
+
+def test_v2_missing_goods_id_fails_closed() -> None:
+    listing = _listing()
+    listing.pop("goods_id")
+
+    with pytest.raises(BuffListingParseError) as exc_info:
+        parse_buff_listing_fixture(_payload(listings=[listing]))
+
+    _assert_parse_error(exc_info, field="listings", record_index=0)
+
+
+def test_v2_strips_goods_id_and_preserves_existing_field_semantics() -> None:
+    observation = parse_buff_listing_fixture(
+        _payload(listings=[_listing(goods_id=" goods-001 ")])
+    )[0]
+
+    assert observation.goods_id == "goods-001"
+    assert observation.price_cny == Decimal("123.4500")
+    assert observation.observed_at == OBSERVED_AT
+    assert observation.sticker_metadata == (("slot_0", "Example Sticker"),)
 
 
 @pytest.mark.parametrize("value", ["BUFF", " buff", "buff ", "", None, 1])
@@ -544,16 +620,22 @@ def test_runtime_modules_do_not_reverse_import_buff_listing_parser() -> None:
         assert "app.services.buff_listing_parser" not in _imported_modules(path)
 
 
-def test_fixture_is_project_owned_shape_without_private_or_transport_fields() -> None:
-    payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
-    serialized = json.dumps(payload).casefold()
+def test_fixtures_are_project_owned_shapes_without_private_transport_fields() -> None:
+    payloads = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in (FIXTURE_PATH_V1, FIXTURE_PATH_V2)
+    ]
 
-    assert payload["schema_version"] == BUFF_LISTING_FIXTURE_SCHEMA_VERSION
-    assert payload["source"] == BUFF_LISTING_FIXTURE_SOURCE
-    assert not {
-        "authorization",
-        "cookie",
-        "seller_id",
-        "token",
-        "url",
-    }.intersection(serialized)
+    assert payloads[0]["schema_version"] == BUFF_LISTING_FIXTURE_SCHEMA_VERSION_V1
+    assert payloads[1]["schema_version"] == BUFF_LISTING_FIXTURE_SCHEMA_VERSION
+    assert all(payload["source"] == BUFF_LISTING_FIXTURE_SOURCE for payload in payloads)
+    assert all(
+        not {
+            "authorization",
+            "cookie",
+            "seller_id",
+            "token",
+            "url",
+        }.intersection(json.dumps(payload).casefold())
+        for payload in payloads
+    )

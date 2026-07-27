@@ -1,0 +1,51 @@
+{
+  "schema_version": 2,
+  "source": "buff",
+  "observed_at": "2026-07-25T12:00:00Z",
+  "listings": [
+    {
+      "listing_id": "qualification-synthetic-001",
+      "goods_id": "qualification-synthetic-goods-001",
+      "market_hash_name": "Synthetic Qualification Eligible Item",
+      "price_cny": "100.25",
+      "quantity": 2,
+      "float_value": "0.125",
+      "wear_name": "Minimal Wear",
+      "paint_seed": 101,
+      "sticker_metadata": null
+    },
+    {
+      "listing_id": "qualification-synthetic-002",
+      "goods_id": "qualification-synthetic-goods-002",
+      "market_hash_name": "Synthetic Qualification Explicit Classification",
+      "price_cny": "80.50",
+      "quantity": 1,
+      "float_value": "0.250",
+      "wear_name": "Field-Tested",
+      "paint_seed": 202,
+      "sticker_metadata": null
+    },
+    {
+      "listing_id": "qualification-synthetic-001",
+      "goods_id": "qualification-synthetic-goods-001",
+      "market_hash_name": "Synthetic Qualification Eligible Item",
+      "price_cny": "99.75",
+      "quantity": 3,
+      "float_value": "0.135",
+      "wear_name": "Minimal Wear",
+      "paint_seed": 303,
+      "sticker_metadata": null
+    },
+    {
+      "listing_id": "qualification-synthetic-003",
+      "goods_id": "qualification-synthetic-goods-003",
+      "market_hash_name": "Synthetic Qualification Missing Facts Item",
+      "price_cny": "60.00",
+      "quantity": 1,
+      "float_value": "0.300",
+      "wear_name": "Field-Tested",
+      "paint_seed": 404,
+      "sticker_metadata": null
+    }
+  ]
+}

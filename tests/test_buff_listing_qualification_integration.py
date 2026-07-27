@@ -46,10 +46,12 @@ def _run[T](coroutine: Coroutine[Any, Any, T]) -> T:
 def _observation(
     *,
     listing_id: str = "test-listing",
+    goods_id: str | None = "test-goods",
     market_hash_name: str = "Synthetic Test Item",
 ) -> BuffListingObservation:
     return BuffListingObservation(
         listing_id=listing_id,
+        goods_id=goods_id,
         market_hash_name=market_hash_name,
         price_cny=Decimal("10.00"),
         quantity=1,
@@ -63,11 +65,13 @@ def _observation(
 def _candidate(
     *,
     listing_id: str = "test-listing",
+    goods_id: str | None = "test-goods",
     market_hash_name: str = "Synthetic Test Item",
 ) -> BuffTradableCandidate:
     return normalize_buff_listing(
         _observation(
             listing_id=listing_id,
+            goods_id=goods_id,
             market_hash_name=market_hash_name,
         )
     )
@@ -98,14 +102,19 @@ def _write_fixture(path: Path, payload: object) -> Path:
     return path
 
 
-def _listing_payload(*, name: str = "Synthetic Test Item") -> dict[str, object]:
+def _listing_payload(
+    *,
+    name: str = "Synthetic Test Item",
+    goods_id: str = "test-goods",
+) -> dict[str, object]:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "source": "buff",
         "observed_at": "2026-07-25T12:00:00Z",
         "listings": [
             {
                 "listing_id": "test-listing",
+                "goods_id": goods_id,
                 "market_hash_name": name,
                 "price_cny": "10.00",
                 "quantity": 1,
@@ -116,6 +125,17 @@ def _listing_payload(*, name: str = "Synthetic Test Item") -> dict[str, object]:
             }
         ],
     }
+
+
+def _v1_listing_payload(*, name: str = "Synthetic Test Item") -> dict[str, object]:
+    payload = _listing_payload(name=name)
+    payload["schema_version"] = 1
+    listings = payload["listings"]
+    assert isinstance(listings, list)
+    listing = listings[0]
+    assert isinstance(listing, dict)
+    listing.pop("goods_id")
+    return payload
 
 
 def _facts_payload(*, name: str = "Synthetic Test Item") -> dict[str, object]:
@@ -138,6 +158,7 @@ def test_parse_options_uses_repository_anchored_default_fixtures() -> None:
     options = command.parse_options([])
 
     assert options.listings_fixture == command.DEFAULT_LISTINGS_FIXTURE
+    assert options.listings_fixture.name == "qualification_listings_v2.json"
     assert options.facts_fixture == command.DEFAULT_FACTS_FIXTURE
     assert options.listings_fixture.is_absolute()
     assert options.facts_fixture.is_absolute()
@@ -253,8 +274,52 @@ def test_real_integration_preserves_duplicate_identity_and_input_order() -> None
     assert result.ordered_candidates[0].market_hash_name == (
         result.ordered_candidates[2].market_hash_name
     )
+    assert result.ordered_candidates[0].goods_id == "qualification-synthetic-goods-001"
+    assert result.ordered_candidates[2].goods_id == result.ordered_candidates[0].goods_id
+    assert [candidate.goods_id for candidate in result.ordered_candidates] == [
+        "qualification-synthetic-goods-001",
+        "qualification-synthetic-goods-002",
+        "qualification-synthetic-goods-001",
+        "qualification-synthetic-goods-003",
+    ]
+    assert all(
+        qualification.candidate.goods_id == candidate.goods_id
+        for candidate, qualification in zip(
+            result.ordered_candidates,
+            result.ordered_qualification_results,
+            strict=True,
+        )
+    )
     assert result.ordered_candidates[0].buy_price_cny == Decimal("100.25")
     assert result.ordered_candidates[2].buy_price_cny == Decimal("99.75")
+
+
+def test_explicit_v1_fixture_preserves_legacy_null_goods_id() -> None:
+    listings_v1 = (
+        PROJECT_ROOT
+        / "tests"
+        / "fixtures"
+        / "buff"
+        / "qualification_listings_v1.json"
+    )
+    result = _run(
+        command.run_qualification_integration(
+            listings_v1,
+            command.DEFAULT_FACTS_FIXTURE,
+        )
+    )
+
+    assert tuple(item.status for item in result.ordered_qualification_results) == (
+        BuffListingQualificationStatus.QUALIFIED,
+        BuffListingQualificationStatus.REJECTED,
+        BuffListingQualificationStatus.QUALIFIED,
+        BuffListingQualificationStatus.MISSING_FACTS,
+    )
+    assert all(candidate.goods_id is None for candidate in result.ordered_candidates)
+    assert all(
+        qualification.candidate.goods_id is None
+        for qualification in result.ordered_qualification_results
+    )
 
 
 def test_run_result_counts_are_derived_from_ordered_results() -> None:
@@ -714,13 +779,25 @@ def test_safe_external_text_redacts_embedded_listing_id() -> None:
     assert command._safe_external_text(candidate) == '"[REDACTED]"'
 
 
-def test_output_does_not_include_listing_ids_or_fixture_paths() -> None:
+def test_safe_external_text_redacts_embedded_goods_id() -> None:
+    candidate = _candidate(
+        goods_id="private-goods-7f4c9",
+        market_hash_name="Synthetic private-goods-7f4c9 Item",
+    )
+
+    assert command._safe_external_text(candidate) == '"[REDACTED]"'
+
+
+def test_output_does_not_include_listing_ids_goods_ids_or_fixture_paths() -> None:
     lines: list[str] = []
 
     assert _run(command.async_main([], printer=lines.append)) == 0
     output = "\n".join(lines)
 
     assert "qualification-synthetic-001" not in output
+    assert "qualification-synthetic-goods-001" not in output
+    assert "qualification-synthetic-goods-002" not in output
+    assert "qualification-synthetic-goods-003" not in output
     assert str(command.DEFAULT_LISTINGS_FIXTURE) not in output
     assert str(command.DEFAULT_FACTS_FIXTURE) not in output
     assert "BuffTradableCandidate" not in output
@@ -767,6 +844,8 @@ def test_direct_and_module_entrypoints_succeed(entrypoint: list[str]) -> None:
     assert "BUFF requests sent: 0" in completed.stdout
     assert "SteamDT requests sent: 0" in completed.stdout
     assert "Redis used: no" in completed.stdout
+    assert "qualification-synthetic-goods" not in completed.stdout
+    assert "qualification-synthetic-goods" not in completed.stderr
     assert completed.stderr == ""
 
 
@@ -787,6 +866,7 @@ def test_default_paths_are_independent_of_process_working_directory(
 
     assert completed.returncode == 0
     assert "Listings: 4" in completed.stdout
+    assert "qualification-synthetic-goods" not in completed.stdout
     assert completed.stderr == ""
 
 

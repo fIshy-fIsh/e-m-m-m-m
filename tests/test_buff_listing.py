@@ -21,6 +21,7 @@ OBSERVED_AT = datetime(2026, 7, 23, 12, 30, tzinfo=UTC)
 def _observation(**changes: object) -> BuffListingObservation:
     values: dict[str, object] = {
         "listing_id": " listing-1 ",
+        "goods_id": " goods-1 ",
         "market_hash_name": " AK-47 | Redline (Field-Tested) ",
         "price_cny": Decimal("123.4500"),
         "quantity": 2,
@@ -110,10 +111,60 @@ def test_paint_seed_requires_an_optional_exact_nonnegative_int(value: object) ->
     assert exc_info.value.field == "paint_seed"
 
 
-def test_strings_are_stripped_and_blank_optional_wear_becomes_none() -> None:
+def test_goods_id_defaults_to_none_for_legacy_domain_values() -> None:
+    observation = _observation(goods_id=None)
+    candidate = normalize_buff_listing(observation)
+
+    assert observation.goods_id is None
+    assert candidate.goods_id is None
+
+
+@pytest.mark.parametrize("model", [BuffListingObservation, BuffTradableCandidate])
+@pytest.mark.parametrize("value", ["", "   ", 7, True, b"goods-1"])
+def test_goods_id_rejects_blank_and_non_string_values(
+    model: type[BuffListingObservation] | type[BuffTradableCandidate],
+    value: object,
+) -> None:
+    values = {
+        "goods_id": value,
+        "listing_id": "listing-1",
+        "market_hash_name": "Example Item",
+        "float_value": Decimal("0.1"),
+        "wear_name": None,
+        "paint_seed": None,
+        "observed_at": OBSERVED_AT,
+    }
+    if model is BuffListingObservation:
+        values.update(price_cny=Decimal("1"), quantity=1)
+    else:
+        values.update(buy_price_cny=Decimal("1"), available_quantity=1)
+
+    with pytest.raises(BuffListingValidationError) as exc_info:
+        model(**values)  # type: ignore[arg-type]
+
+    assert exc_info.value.field == "goods_id"
+    assert str(exc_info.value) == "invalid BUFF listing field: goods_id"
+
+
+def test_goods_id_is_detached_from_hostile_string_subclass() -> None:
+    class HostileGoodsId(str):
+        def strip(self) -> object:
+            return 7
+
+    observation = _observation(goods_id=HostileGoodsId(" goods-1 "))
+    candidate = normalize_buff_listing(observation)
+
+    assert observation.goods_id == "goods-1"
+    assert type(observation.goods_id) is str
+    assert candidate.goods_id == "goods-1"
+    assert type(candidate.goods_id) is str
+
+
+def test_strings_and_goods_id_are_stripped_and_blank_wear_becomes_none() -> None:
     observation = _observation(wear_name="   ")
 
     assert observation.listing_id == "listing-1"
+    assert observation.goods_id == "goods-1"
     assert observation.market_hash_name == "AK-47 | Redline (Field-Tested)"
     assert observation.wear_name is None
 
@@ -173,6 +224,7 @@ def test_normalizer_produces_the_solver_candidate_contract() -> None:
 
     assert candidate == BuffTradableCandidate(
         listing_id="listing-1",
+        goods_id="goods-1",
         market_hash_name="AK-47 | Redline (Field-Tested)",
         buy_price_cny=Decimal("123.4500"),
         available_quantity=2,
@@ -207,6 +259,7 @@ def test_candidate_is_detached_and_carries_no_sticker_or_raw_payload() -> None:
     candidate_fields = {field.name for field in fields(candidate)}
     assert candidate_fields == {
         "listing_id",
+        "goods_id",
         "market_hash_name",
         "buy_price_cny",
         "available_quantity",
@@ -240,6 +293,16 @@ def test_normalizer_revalidates_a_tampered_public_observation() -> None:
     assert exc_info.value.field == "quantity"
 
 
+def test_normalizer_revalidates_a_tampered_goods_id() -> None:
+    observation = _observation()
+    object.__setattr__(observation, "goods_id", "   ")
+
+    with pytest.raises(BuffListingValidationError) as exc_info:
+        normalize_buff_listing(observation)
+
+    assert exc_info.value.field == "goods_id"
+
+
 def test_normalizer_rejects_non_observation_without_exposing_repr() -> None:
     class SecretObject:
         def __repr__(self) -> str:
@@ -255,6 +318,7 @@ def test_normalizer_rejects_non_observation_without_exposing_repr() -> None:
 def test_models_disable_repr_to_avoid_listing_data_disclosure() -> None:
     observation = _observation(
         listing_id="cookie=dummy-secret",
+        goods_id="credential-dummy-secret",
         market_hash_name="token=dummy-secret",
     )
     candidate = normalize_buff_listing(observation)

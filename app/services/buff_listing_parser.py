@@ -12,19 +12,25 @@ from app.services.buff_listing import (
     BuffListingValidationError,
 )
 
-BUFF_LISTING_FIXTURE_SCHEMA_VERSION = 1
+BUFF_LISTING_FIXTURE_SCHEMA_VERSION = 2
+BUFF_LISTING_FIXTURE_SCHEMA_VERSION_V1 = 1
 BUFF_LISTING_FIXTURE_SOURCE = "buff"
+_SUPPORTED_SCHEMA_VERSIONS = frozenset(
+    {BUFF_LISTING_FIXTURE_SCHEMA_VERSION_V1, BUFF_LISTING_FIXTURE_SCHEMA_VERSION}
+)
 
 _TOP_LEVEL_FIELDS = frozenset(
     {"schema_version", "source", "observed_at", "listings"}
 )
-_REQUIRED_LISTING_FIELDS = frozenset(
+_REQUIRED_LISTING_FIELDS_V1 = frozenset(
     {"listing_id", "market_hash_name", "price_cny", "quantity"}
 )
 _OPTIONAL_LISTING_FIELDS = frozenset(
     {"float_value", "wear_name", "paint_seed", "sticker_metadata"}
 )
-_LISTING_FIELDS = _REQUIRED_LISTING_FIELDS | _OPTIONAL_LISTING_FIELDS
+_LISTING_FIELDS_V1 = _REQUIRED_LISTING_FIELDS_V1 | _OPTIONAL_LISTING_FIELDS
+_REQUIRED_LISTING_FIELDS_V2 = _REQUIRED_LISTING_FIELDS_V1 | {"goods_id"}
+_LISTING_FIELDS_V2 = _LISTING_FIELDS_V1 | {"goods_id"}
 _STICKER_FIELDS = frozenset({"key", "value"})
 
 
@@ -111,8 +117,9 @@ def _parse_fixture(payload: object) -> tuple[BuffListingObservation, ...]:
     _require_exact_fields(payload, _TOP_LEVEL_FIELDS, field="payload")
 
     schema_version = payload["schema_version"]
-    if type(schema_version) is not int or (
-        schema_version != BUFF_LISTING_FIXTURE_SCHEMA_VERSION
+    if (
+        type(schema_version) is not int
+        or schema_version not in _SUPPORTED_SCHEMA_VERSIONS
     ):
         raise _parse_error(field="schema_version")
 
@@ -133,6 +140,7 @@ def _parse_fixture(payload: object) -> tuple[BuffListingObservation, ...]:
         observations.append(
             _parse_listing_record(
                 raw_record,
+                schema_version=schema_version,
                 record_index=record_index,
                 observed_at=observed_at,
             )
@@ -143,16 +151,18 @@ def _parse_fixture(payload: object) -> tuple[BuffListingObservation, ...]:
 def _parse_listing_record(
     raw_record: object,
     *,
+    schema_version: int,
     record_index: int,
     observed_at: datetime,
 ) -> BuffListingObservation:
     record_field = "listings"
     if not isinstance(raw_record, Mapping):
         raise _parse_error(field=record_field, record_index=record_index)
+    allowed_fields, required_fields = _listing_fields(schema_version)
     _require_exact_fields(
         raw_record,
-        _LISTING_FIELDS,
-        required=_REQUIRED_LISTING_FIELDS,
+        allowed_fields,
+        required=required_fields,
         field=record_field,
         record_index=record_index,
     )
@@ -178,6 +188,15 @@ def _parse_listing_record(
                 raw_record["listing_id"],
                 field="listing_id",
                 record_index=record_index,
+            ),
+            goods_id=(
+                None
+                if schema_version == BUFF_LISTING_FIXTURE_SCHEMA_VERSION_V1
+                else _require_string(
+                    raw_record["goods_id"],
+                    field="goods_id",
+                    record_index=record_index,
+                )
             ),
             market_hash_name=_require_string(
                 raw_record["market_hash_name"],
@@ -210,6 +229,14 @@ def _parse_listing_record(
             record_index=record_index,
             cause=BuffListingParseCause.DOMAIN_VALIDATION,
         ) from None
+
+
+def _listing_fields(
+    schema_version: int,
+) -> tuple[frozenset[str], frozenset[str]]:
+    if schema_version == BUFF_LISTING_FIXTURE_SCHEMA_VERSION_V1:
+        return _LISTING_FIELDS_V1, _REQUIRED_LISTING_FIELDS_V1
+    return _LISTING_FIELDS_V2, _REQUIRED_LISTING_FIELDS_V2
 
 
 def _parse_observed_at(value: object) -> datetime:

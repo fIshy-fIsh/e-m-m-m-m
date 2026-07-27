@@ -25,6 +25,7 @@ OBSERVED_AT = datetime(2026, 7, 24, 12, tzinfo=UTC)
 def _candidate(**changes: object) -> BuffTradableCandidate:
     values: dict[str, object] = {
         "listing_id": "listing-001",
+        "goods_id": "goods-001",
         "market_hash_name": "AK-47 | Redline (Field-Tested)",
         "buy_price_cny": Decimal("123.4500"),
         "available_quantity": 1,
@@ -326,11 +327,29 @@ def test_evaluation_does_not_modify_inputs() -> None:
     decision = evaluate_buff_listing_eligibility(candidate, facts, policy)
 
     assert decision.candidate == candidate
+    assert decision.candidate.goods_id == "goods-001"
     assert decision.facts == facts
     assert decision.policy == policy
     assert decision.candidate is not candidate
     assert decision.facts is not facts
     assert decision.policy is not policy
+
+
+def test_evaluation_preserves_legacy_null_goods_id_without_new_reason() -> None:
+    decision = _evaluate(candidate=_candidate(goods_id=None))
+
+    assert decision.candidate.goods_id is None
+    assert decision.reasons == ()
+
+
+def test_tampered_goods_id_fails_as_candidate_contract() -> None:
+    candidate = _candidate()
+    object.__setattr__(candidate, "goods_id", "   ")
+
+    with pytest.raises(BuffListingEligibilityValidationError) as exc_info:
+        _evaluate(candidate=candidate)
+
+    _assert_validation_error(exc_info, field="candidate")
 
 
 def test_candidate_fields_do_not_infer_facts_and_non_utc_candidate_fails_closed() -> None:
@@ -499,7 +518,11 @@ def test_evaluator_rejects_invalidly_tampered_policy() -> None:
 
 def test_public_repr_and_errors_do_not_leak_candidate_data() -> None:
     secret = "Cookie=Bearer-password-dummy-secret"
-    candidate = _candidate(listing_id=secret, market_hash_name=secret)
+    candidate = _candidate(
+        listing_id=secret,
+        goods_id=secret,
+        market_hash_name=secret,
+    )
     facts = _facts(is_stattrak=True)
     policy = _policy()
     decision = evaluate_buff_listing_eligibility(candidate, facts, policy)

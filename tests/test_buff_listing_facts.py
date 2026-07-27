@@ -81,10 +81,12 @@ def _candidate(
     *,
     listing_id: str = "listing-001",
     market_hash_name: str = "AK-47 | Redline (Field-Tested)",
+    goods_id: str | None = "goods-001",
     paint_seed: int | None = None,
 ) -> BuffTradableCandidate:
     return BuffTradableCandidate(
         listing_id=listing_id,
+        goods_id=goods_id,
         market_hash_name=market_hash_name,
         buy_price_cny=Decimal("12.34"),
         available_quantity=1,
@@ -708,6 +710,26 @@ def test_provider_returns_found_for_exact_identity() -> None:
         is_stattrak=True,
         is_souvenir=False,
         has_special_seed=True,
+    )
+
+
+def test_provider_identity_is_independent_of_candidate_goods_id() -> None:
+    provider = OfflineBuffListingFactsProvider([_record(is_stattrak=True)])
+
+    results = [
+        asyncio.run(provider.lookup_facts(_candidate(goods_id=goods_id)))
+        for goods_id in (None, "goods-001", "goods-002")
+    ]
+
+    assert all(result.status is BuffListingFactsLookupStatus.FOUND for result in results)
+    assert results[0] == results[1] == results[2]
+    assert not hasattr(results[0], "goods_id")
+    assert tuple(field.name for field in fields(BuffListingFactsRecord)) == (
+        "listing_id",
+        "market_hash_name",
+        "is_stattrak",
+        "is_souvenir",
+        "has_special_seed",
     )
 
 

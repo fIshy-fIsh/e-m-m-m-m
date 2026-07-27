@@ -1,0 +1,38 @@
+{
+  "schema_version": 2,
+  "source": "buff",
+  "observed_at": "2026-07-23T12:00:00Z",
+  "listings": [
+    {
+      "listing_id": "listing-001",
+      "goods_id": "synthetic-goods-001",
+      "market_hash_name": "AK-47 | Redline (Field-Tested)",
+      "price_cny": "123.4500000000000000000000001",
+      "quantity": 1,
+      "float_value": "0.234567890123456789",
+      "wear_name": "Field-Tested",
+      "paint_seed": 321,
+      "sticker_metadata": [
+        {
+          "key": "slot_0",
+          "value": "Example Sticker"
+        },
+        {
+          "key": "slot_0",
+          "value": "Example Sticker"
+        }
+      ]
+    },
+    {
+      "listing_id": "listing-001",
+      "goods_id": "synthetic-goods-001",
+      "market_hash_name": "AK-47 | Redline (Field-Tested)",
+      "price_cny": "0",
+      "quantity": 0,
+      "float_value": null,
+      "wear_name": "   ",
+      "paint_seed": null,
+      "sticker_metadata": null
+    }
+  ]
+}

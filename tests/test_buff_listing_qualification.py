@@ -41,6 +41,7 @@ def _run[T](coroutine: Coroutine[Any, Any, T]) -> T:
 def _candidate(**changes: object) -> BuffTradableCandidate:
     values: dict[str, object] = {
         "listing_id": "qualification-listing-001",
+        "goods_id": "qualification-goods-001",
         "market_hash_name": "Synthetic Qualification Item",
         "buy_price_cny": Decimal("12.50"),
         "available_quantity": 2,
@@ -496,12 +497,16 @@ def test_found_eligible_qualifies_with_single_calls_and_original_values() -> Non
     assert len(provider.calls) == 1
     assert len(evaluator.calls) == 1
     assert provider.calls[0] == candidate and provider.calls[0] is not candidate
+    assert provider.calls[0].goods_id == "qualification-goods-001"
     evaluated_candidate, evaluated_facts, evaluated_policy = evaluator.calls[0]
     assert evaluated_candidate == candidate and evaluated_candidate is not candidate
+    assert evaluated_candidate.goods_id == "qualification-goods-001"
     assert evaluated_facts == facts and evaluated_facts is not facts
     assert evaluated_policy == policy and evaluated_policy is not policy
     assert result.lookup_result == lookup and result.lookup_result is not lookup
+    assert result.candidate.goods_id == "qualification-goods-001"
     assert result.decision is not None
+    assert result.decision.candidate.goods_id == "qualification-goods-001"
 
 
 def test_found_ineligible_rejects_and_preserves_all_reasons() -> None:
@@ -522,7 +527,9 @@ def test_found_ineligible_rejects_and_preserves_all_reasons() -> None:
     )
 
     assert result.status is BuffListingQualificationStatus.REJECTED
+    assert result.candidate.goods_id == "qualification-goods-001"
     assert result.decision is not None
+    assert result.decision.candidate.goods_id == "qualification-goods-001"
     assert result.decision.reasons == (
         BuffListingIneligibilityReason.INSUFFICIENT_QUANTITY,
         BuffListingIneligibilityReason.NON_POSITIVE_PRICE,
@@ -545,6 +552,7 @@ def test_missing_facts_skips_evaluator_and_creates_no_facts() -> None:
     )
 
     assert result.status is BuffListingQualificationStatus.MISSING_FACTS
+    assert result.candidate.goods_id == "qualification-goods-001"
     assert result.lookup_result.facts is None
     assert result.decision is None
     assert len(provider.calls) == 1
@@ -564,6 +572,20 @@ def test_default_evaluator_is_used() -> None:
     assert result.decision.reasons == (
         BuffListingIneligibilityReason.SOUVENIR_DISALLOWED,
     )
+
+
+def test_legacy_null_goods_id_is_preserved_through_qualification() -> None:
+    candidate = _candidate(goods_id=None)
+    facts = _facts()
+    result = _run(
+        BuffListingQualificationService(
+            FakeFactsProvider(_lookup(candidate, facts=facts))  # type: ignore[arg-type]
+        ).qualify(candidate, _policy())
+    )
+
+    assert result.candidate.goods_id is None
+    assert result.decision is not None
+    assert result.decision.candidate.goods_id is None
 
 
 def test_repeated_qualification_is_deterministic_and_fresh() -> None:
@@ -927,6 +949,7 @@ def test_validation_error_and_repr_are_fixed_and_redacted() -> None:
     )
     candidate = _candidate(
         listing_id=secrets[0],
+        goods_id=secrets[4],
         market_hash_name=secrets[1],
     )
     lookup = _lookup(candidate)

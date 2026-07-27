@@ -315,6 +315,13 @@
 - The immutable ordered run result derives all counts. Complete runs return 0 even when listings are rejected or missing facts; invalid paths/CLI return 2, processing failure returns 1 without a partial summary, and interruption returns 130. Output JSON-escapes/redacts the canonical market name and never prints listing IDs, raw payloads, paths, credentials, exception messages, or tracebacks.
 - This milestone uses synthetic data only. It sends zero BUFF and SteamDT requests, does not use Redis, and is not connected to solver, valuation, pipeline, scheduler, FastAPI, Discord, or automatic purchasing. It is not a real BUFF adapter and is not production-ready.
 
+### Phase 12E4B0 Authoritative BUFF goods_id Contract Propagation
+- `BuffListingObservation` and `BuffTradableCandidate` now retain an explicitly supplied canonical `goods_id`. The value is optional only so frozen listing fixture schema v1 remains usable as `goods_id=None`; schema v2 requires a nonblank string on every listing. Neither the domain nor parser infers it from listing ID, market name, paint seed, source, hashes, or placeholders.
+- `tests/fixtures/buff/listings_v2.json` and `qualification_listings_v2.json` are project-owned synthetic v2 inputs, not live BUFF payloads or confirmed response mappings. Existing v1 files are unchanged and strict: v1 rejects a `goods_id` field, while v2 requires it. Decimal, timestamp, sticker, ordering, duplicate, and fail-closed behavior is otherwise unchanged.
+- Normalization, eligibility decisions, and qualification results preserve goods ID through detached snapshots. Facts records and lookups remain keyed only by listing ID plus market name, goods ID creates no eligibility reason, and `QUALIFIED`/`REJECTED`/`MISSING_FACTS` semantics are unchanged.
+- The manual qualification command now defaults to v2 listings with the existing v1 facts fixture; explicit v1 listings still work. Goods ID is never printed, and market names containing it are fail-closed redacted. The future solver adapter will require `QUALIFIED` plus nonempty goods ID, but no adapter or solver execution is added here.
+- This remains offline synthetic infrastructure with no BUFF, SteamDT, or Redis connection, no confirmed endpoint or field mapping, no pipeline/runtime wiring, and no production readiness.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.
@@ -358,7 +365,7 @@
 - metadata normalize / trade-up / EV / risk filter
 - mock pipeline / alert / scheduler
 - Docker / 24h dry-run deployment hardening
-- isolated BUFF listing observation → normalized candidate contract, project-owned offline listing and facts fixture parsers, pure eligibility decision core, deterministic in-memory facts lookup, isolated single-listing qualification orchestration, and a manual synthetic end-to-end qualification command（无真实 BUFF 连接、payload mapping 或 runtime wiring）
+- isolated BUFF listing observation → normalized candidate contract with optional authoritative goods ID, strict project-owned v1/v2 listing fixtures, a separate v1 facts fixture/parser, pure eligibility decision core, deterministic goods-ID-independent facts lookup, isolated single-listing qualification orchestration, and a manual synthetic end-to-end qualification command（无真实 BUFF 连接、payload mapping、solver adapter 或 runtime wiring）
 
 当前阶段**不**包含：
 - 真实 BUFF API mapping、client、scraper 或 listing data
