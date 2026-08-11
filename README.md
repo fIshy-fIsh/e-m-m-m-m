@@ -336,6 +336,12 @@
 - Output reuses the qualification command's public safe market-name renderer and prints only adapted index, safe name, source, float presence, fixed counts, and zero-external-use attestations. It never prints IDs, prices, numeric floats, seeds, raw/inspect values, paths, nested errors, credentials, URLs, or tracebacks.
 - The command does not execute the recipe solver, perform metadata lookup, call the scanner, or wire pipeline/scheduler/FastAPI. It creates no BUFF or SteamDT client, sends no external request, does not use Redis, and remains a synthetic manual check rather than production integration.
 
+### Phase 12E4D0 Recipe Construction Contract
+- `construct_recipes()` now exposes the existing deterministic recipe-construction stage separately from opportunity evaluation. It performs exact-name metadata matching, candidate eligibility, stable input selection, outcome-pool construction, and trade-up geometry, returning an immutable tuple-backed `ConstructedRecipe` without EV, ROI, profit metrics, or risk evaluation.
+- `ConstructedRecipe` stores only the ten ordered existing `InputItem` values, ordered existing `TradeupResult` values, and selected non-null paint seeds needed by later risk evaluation. Total input cost is derived; metrics, risk decisions, hash, timestamps, metadata, listings, valuation, and alert state are not stored or fabricated.
+- The existing `solve_recipes()` signature and `list[RecipeCandidate]` result remain compatible. It calls construction once, then computes the same metrics and risk decision once per construction, builds the same hash and aware timestamp, and keeps `RecipeCandidate` as a fully evaluated opportunity with mandatory metrics and risk. Pipeline, scheduler, and alerts continue to call this evaluated API unchanged.
+- This in-memory seam does not connect the offline BUFF adapter path to metadata or solver execution, does not add pipeline/FastAPI wiring, and performs no BUFF, SteamDT, Redis, valuation-provider, alert, or other external I/O. It enables but does not implement the later Phase 12E4D integration and is not production-ready.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.

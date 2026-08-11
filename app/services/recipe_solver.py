@@ -39,6 +39,42 @@ class RecipeSolverConfig:
             raise ValueError("max_candidates_per_collection must be greater than 0")
 
 
+@dataclass(frozen=True, kw_only=True, repr=False)
+class ConstructedRecipe:
+    """A complete recipe construction without opportunity evaluation."""
+
+    input_items: tuple[InputItem, ...]
+    tradeup_results: tuple[TradeupResult, ...]
+    paint_seeds: tuple[int, ...]
+
+    def __post_init__(self) -> None:
+        if type(self.input_items) is not tuple or any(
+            type(item) is not InputItem for item in self.input_items
+        ):
+            raise ValueError("input_items must be an exact tuple of InputItem values")
+        if len(self.input_items) != 10:
+            raise ValueError("input_items must contain exactly 10 items")
+        if type(self.tradeup_results) is not tuple or any(
+            type(result) is not TradeupResult for result in self.tradeup_results
+        ):
+            raise ValueError(
+                "tradeup_results must be an exact tuple of TradeupResult values"
+            )
+        if not self.tradeup_results:
+            raise ValueError("tradeup_results cannot be empty")
+        if type(self.paint_seeds) is not tuple or any(
+            type(seed) is not int for seed in self.paint_seeds
+        ):
+            raise ValueError("paint_seeds must be an exact tuple of integer values")
+
+    @property
+    def input_total_cost_cny(self) -> Decimal:
+        return sum(
+            (item.price_cny for item in self.input_items),
+            start=Decimal("0"),
+        )
+
+
 @dataclass(frozen=True)
 class RecipeCandidate:
     """A complete V1 recipe candidate with downstream calculation results."""
@@ -60,14 +96,12 @@ class RecipeCandidate:
 
 
 
-def solve_recipes(
+def construct_recipes(
     candidates: list[CandidateListing],
     skins: list[SkinMetadata],
     solver_config: RecipeSolverConfig,
-    risk_config: RiskFilterConfig,
-    liquidity_score: Decimal | None = None,
-) -> list[RecipeCandidate]:
-    """Build one deterministic greedy recipe and evaluate it end-to-end."""
+) -> list[ConstructedRecipe]:
+    """Build deterministic recipes without EV or risk evaluation."""
 
     skin_lookup = {skin.market_hash_name: skin for skin in skins}
     eligible_pairs = _build_eligible_pairs(candidates, skin_lookup, solver_config)
@@ -94,38 +128,66 @@ def solve_recipes(
         return []
 
     try:
-        tradeup_results = calculate_tradeup_results(input_items, output_candidates_by_collection)
+        tradeup_results = calculate_tradeup_results(
+            input_items,
+            output_candidates_by_collection,
+        )
     except ValueError:
         return []
 
-    metrics = calculate_opportunity_metrics(
-        input_items=input_items,
-        tradeup_results=tradeup_results,
-        sell_fee_rate=solver_config.sell_fee_rate,
-    )
-    risk_decision = evaluate_opportunity(
-        metrics=metrics,
-        input_items=input_items,
-        config=risk_config,
-        liquidity_score=liquidity_score,
-        paint_seeds=[
-            pair.candidate.paint_seed
-            for pair in selected_pairs
-            if pair.candidate.paint_seed is not None
-        ],
-    )
-    recipe_hash = build_recipe_hash(input_items)
-
     return [
-        RecipeCandidate(
-            input_items=input_items,
-            tradeup_results=tradeup_results,
-            metrics=metrics,
-            risk_decision=risk_decision,
-            recipe_hash=recipe_hash,
-            created_at=datetime.now(UTC),
+        ConstructedRecipe(
+            input_items=tuple(input_items),
+            tradeup_results=tuple(tradeup_results),
+            paint_seeds=tuple(
+                pair.candidate.paint_seed
+                for pair in selected_pairs
+                if pair.candidate.paint_seed is not None
+            ),
         )
     ]
+
+
+def solve_recipes(
+    candidates: list[CandidateListing],
+    skins: list[SkinMetadata],
+    solver_config: RecipeSolverConfig,
+    risk_config: RiskFilterConfig,
+    liquidity_score: Decimal | None = None,
+) -> list[RecipeCandidate]:
+    """Build deterministic recipes and evaluate each opportunity end-to-end."""
+
+    constructed_recipes = construct_recipes(candidates, skins, solver_config)
+    recipes: list[RecipeCandidate] = []
+
+    for construction in constructed_recipes:
+        input_items = list(construction.input_items)
+        tradeup_results = list(construction.tradeup_results)
+        metrics = calculate_opportunity_metrics(
+            input_items=input_items,
+            tradeup_results=tradeup_results,
+            sell_fee_rate=solver_config.sell_fee_rate,
+        )
+        risk_decision = evaluate_opportunity(
+            metrics=metrics,
+            input_items=input_items,
+            config=risk_config,
+            liquidity_score=liquidity_score,
+            paint_seeds=list(construction.paint_seeds),
+        )
+        recipe_hash = build_recipe_hash(input_items)
+        recipes.append(
+            RecipeCandidate(
+                input_items=input_items,
+                tradeup_results=tradeup_results,
+                metrics=metrics,
+                risk_decision=risk_decision,
+                recipe_hash=recipe_hash,
+                created_at=datetime.now(UTC),
+            )
+        )
+
+    return recipes
 
 
 @dataclass(frozen=True)
