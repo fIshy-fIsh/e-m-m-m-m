@@ -342,6 +342,11 @@
 - The existing `solve_recipes()` signature and `list[RecipeCandidate]` result remain compatible. It calls construction once, then computes the same metrics and risk decision once per construction, builds the same hash and aware timestamp, and keeps `RecipeCandidate` as a fully evaluated opportunity with mandatory metrics and risk. Pipeline, scheduler, and alerts continue to call this evaluated API unchanged.
 - This in-memory seam does not connect the offline BUFF adapter path to metadata or solver execution, does not add pipeline/FastAPI wiring, and performs no BUFF, SteamDT, Redis, valuation-provider, alert, or other external I/O. It enables but does not implement the later Phase 12E4D integration and is not production-ready.
 
+### Phase 13A Step 2A SteamApis Offer Domain
+- `parse_steamapis_message()` now validates one documented SteamApis JSON message into immutable, keyword-only, repr-suppressed subscribed/offer/ignored/error results. Target `Buff163` + `CS2` Added/Updated offers retain only the requested CNY, float, timestamp, paint, sticker, and opaque manual-link projection; unknown extra fields are discarded and malformed supported messages fail with fixed redacted errors.
+- `source_offer_id` is a project-owned lowercase SHA-256 digest over canonical source/game plus the opaque purchase link. It is stable across Added/Updated and economic changes, parses no URL component, and is explicitly not a BUFF goods/listing ID or SteamApis-documented marketplace ID.
+- This pure standard-library boundary creates no WebSocket client, dependency, pool, `CandidateListing` adapter, metadata lookup, solver, SteamDT/Redis use, runtime wiring, browser action, or purchase behavior. The supplied contract was re-verified from the three official documentation pages by read-only HTTP retrieval and is recorded with remaining unknowns in `docs/STEAMAPIS_MARKET_DATA_NOTES.md`. It is not production-ready.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.
