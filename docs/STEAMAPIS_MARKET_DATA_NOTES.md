@@ -150,6 +150,28 @@ It is explicitly **not**:
 
 The digest does not include an API key or other credentials and does not expose the purchase link itself.
 
+## Step 2B CandidateListing compatibility boundary
+
+`CandidateListing` is the project's existing source-agnostic solver input. The Step 2B adapter revalidates an exact observation and uses this explicit project-owned namespace to satisfy its mandatory identity fields:
+
+```text
+goods_id   = "steamapis:buff163:" + source_offer_id
+listing_id = "steamapis:buff163:" + source_offer_id
+source     = "steamapis:buff163"
+```
+
+These candidate values are **not** a BUFF goods ID, a BUFF listing ID, or a SteamApis-documented marketplace ID. They are a compatibility projection only. The adapter does not parse or canonicalize `purchaseLink`, extract its path/query, hash it again, or derive identity from market name, price, float, seed, event, or timestamp. It does not send the source-local values into the strict Phase 12 BUFF domain.
+
+The remaining candidate projection is:
+
+- `market_hash_name`, `paint_seed`, and documented `inspect_link` are preserved;
+- `price_cny` remains the exact `Decimal`;
+- the validated Decimal float is converted once to the existing legacy float contract and checked again;
+- envelope `message_timestamp` becomes `scanned_at`, rather than the original `found_at` discovery time;
+- `raw` is always `None`.
+
+`purchaseLink` remains only on `SteamApisListingObservation`. A later pool may retain observations and join `source_offer_id → purchase_link`; Step 2B creates no pool or second manual-link DTO. It creates no WebSocket client or dependency, metadata lookup, recipe solver execution, SteamDT/Redis call, runtime wiring, browser behavior, or purchase action, and it is not production-ready.
+
 ## Parser boundary
 
 `app/services/steamapis_listing.py` is a pure standard-library parser/domain module. It:
@@ -172,8 +194,9 @@ Phase 13A Step 2A includes no:
 - authentication/config/environment reading;
 - retry, reconnect, heartbeat, task, thread, service, factory, or runtime;
 - live candidate pool or removal behavior;
-- `CandidateListing` adapter;
 - metadata classification or facts provider;
 - recipe solver, trade-up, EV, ROI, risk, SteamDT, Redis/cache, pipeline, scheduler, FastAPI, Discord, database, browser, or purchase behavior.
+
+Step 2B adds only the isolated `SteamApisListingObservation`-to-`CandidateListing` adapter described above; it does not add any excluded runtime behavior.
 
 The parser is not production-ready. A later phase must re-check current official documentation in an environment that can access it before enabling any live transport.
