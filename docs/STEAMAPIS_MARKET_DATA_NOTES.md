@@ -191,6 +191,28 @@ Immutable tuple-backed snapshots sort by market name, Decimal CNY, Decimal float
 
 Step 2C is synchronous local state only. It adds no WebSocket dependency/client, external connection, metadata classification, recipe solver execution, SteamDT, Redis, pipeline, scheduler, FastAPI, Discord, task/thread, browser behavior, or purchase action. It is not production-ready.
 
+## Step 2D exact live metadata classification
+
+Step 2D adds only this synchronous in-memory chain:
+
+```text
+SteamApisOfferPoolSnapshot
+→ unchanged Step 2B CandidateListing adapter
+→ exact SkinMetadata catalog lookup
+→ eligible/rejected classification
+→ solver-compatible rarity/mode buckets
+```
+
+The catalog receives already-normalized `SkinMetadata`; it does not invoke a provider, read a file or environment variable, or fetch metadata. Each record is detached with `raw=None`. Lookup remains exact and case-sensitive, and any duplicate exact market name fails the complete catalog instead of inheriting the current recipe solver's silent dictionary-comprehension last-wins behavior.
+
+Every pool observation retains its own `source_offer_id` occurrence and is projected exactly once through Step 2B. Missing metadata is an explicit `metadata_not_found` rejection rather than a silent skip. The other structural rejection codes are `missing_collection`, `candidate_float_missing`, and `float_outside_skin_range`; skin float bounds are inclusive. No adjusted-float, recipe, output-probability, EV, ROI, risk, valuation, or profitability calculation runs here.
+
+Eligible candidates are grouped by exact input rarity, StatTrak mode, and Souvenir mode. Collection is deliberately not part of this solver bucket identity: the existing trade-up solver may mix multiple collections in one same-rarity/mode ten-item recipe, while collection determines output topology and which candidate universes a later incremental scanner must reconsider. Each bucket therefore retains an exact `affected_collections` frozenset.
+
+The opaque `purchaseLink` and `daysTradeLocked`, including `None`, remain only on the source observation/pool. `source_offer_id` is the sole join back to that provenance. Step 2D does not copy or interpret the purchase link, reject trade-locked offers, infer rarity/collection/StatTrak/Souvenir/special-seed facts from names or seeds, or treat an unknown trade lock as zero.
+
+Step 2D creates no WebSocket/client/network, SteamApis/BUFF/SteamDT/Redis connection, solver invocation, provider runtime, pipeline, scheduler, FastAPI, Discord, task/thread, browser, login, marketplace write, or purchase action. It is an offline structural boundary and is not production-ready.
+
 ## Parser boundary
 
 `app/services/steamapis_listing.py` is a pure standard-library parser/domain module. It:
@@ -215,6 +237,6 @@ Phase 13A Step 2A includes no:
 - metadata classification or facts provider;
 - recipe solver, trade-up, EV, ROI, risk, SteamDT, Redis/cache, pipeline, scheduler, FastAPI, Discord, database, browser, or purchase behavior.
 
-Step 2B adds only the isolated `SteamApisListingObservation`-to-`CandidateListing` adapter. Step 2C adds only the bounded local observation pool described above. Neither adds excluded external or runtime behavior.
+Step 2B adds only the isolated `SteamApisListingObservation`-to-`CandidateListing` adapter. Step 2C adds only the bounded local observation pool described above. Step 2D adds only detached exact metadata classification and solver-compatible bucket construction. None adds excluded external or runtime behavior.
 
 The parser is not production-ready. A later phase must re-check current official documentation in an environment that can access it before enabling any live transport.

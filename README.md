@@ -358,6 +358,12 @@
 - Frozen tuple-backed snapshots use a stable market/name/economics/time/ID order. Source-ID lookup preserves the observation and opaque manual purchase link, and `snapshot_candidates()` derives aligned candidates only through the Step 2B adapter without storing a second state copy.
 - Trade-lock data is retained but not filtered: `None` is not treated as zero. This state boundary creates no WebSocket client or dependency, metadata lookup, solver execution, SteamDT/Redis use, pipeline/runtime wiring, background work, browser action, or purchase behavior. It is not production-ready.
 
+### Phase 13A Step 2D Live Metadata Catalog
+- `SkinMetadataCatalog` accepts already-normalized metadata, detaches every record with `raw=None`, and builds immutable exact case-sensitive indexes by market name and by `(input_rarity, stattrak, souvenir)`. Empty metadata and any exact duplicate market name fail closed instead of inheriting the recipe solver's silent last-wins dictionary behavior.
+- `classify_steamapis_snapshot()` preserves immutable pool-snapshot order, reuses the Step 2B adapter exactly once per observation, and emits either a metadata-bound candidate or an explicit `metadata_not_found`, `missing_collection`, `candidate_float_missing`, or `float_outside_skin_range` rejection. Float bounds are inclusive and missing metadata is never silently skipped.
+- Stable solver buckets contain one rarity/StatTrak/Souvenir mode and retain eligible order. Collection is deliberately not a bucket-key field because the existing solver can mix collections in one same-mode ten-item recipe; each bucket instead exposes the exact affected collection set for later incremental recomputation.
+- `source_offer_id` remains the join to pool provenance, while the opaque purchase link and trade-lock value stay only on the observation. This offline boundary loads no provider data, infers no metadata facts from names, runs no solver/EV/risk/valuation, creates no external connection or background work, and adds no browser or purchase behavior. It is not production-ready.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.
