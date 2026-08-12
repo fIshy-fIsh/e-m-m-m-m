@@ -370,6 +370,12 @@
 - Solver-selected listing IDs map back only through the same bucket's exact `candidate.listing_id → LiveCandidateBinding` index. The ordered source IDs come from each binding's explicit `source_offer_id`; no compatibility prefix, purchase URL, name, price, float, or seed is parsed or approximately matched, and unknown or incomplete provenance fails closed.
 - The immutable result retains the complete eligible/rejected classification, existing construction geometry, and ten source IDs but no observation or purchase link. Operators can join each selected source ID back through the original pool for its opaque manual link. Output prices remain existing zero-valued metadata geometry placeholders: this step calls no `solve_recipes()`, EV/ROI/risk, SteamDT valuation, external service, runtime/background work, browser, or purchase action and is not production-ready.
 
+### Phase 13A Step 2F Offline Live Recipe Valuation
+- `value_live_recipes()` starts only from the Step 2E already-constructed recipes and processes them sequentially through an injected `ValuationService`; it never calls `solve_recipes()`, reconstructs candidates, reselects inputs, or recomputes trade-up geometry.
+- Every output must have a complete, exact provider quote. Provider errors, any missing output, fallback keep/zero/drop behavior, or changed output geometry rejects the whole affected recipe before EV/risk; metadata zero placeholders are never reused as live prices. Trusted valuation may change only output price and expected-value contribution.
+- Complete valued results enter the existing `calculate_opportunity_metrics()` with the configured sell fee and the existing `evaluate_opportunity()` with the construction recipe's actual paint seeds. A valid risk decision with `passed=False` remains a valued opportunity rather than becoming a valuation rejection.
+- Ordered selected source IDs are retained unchanged, while observations and purchase links remain in the pool. This boundary uses injected synthetic/fake prices only, creates no SteamDT/SteamApis/BUFF/Redis/WebSocket/Discord/network/runtime/background connection, performs no browser or purchase action, leaves the legacy fail-open pipeline unchanged, and is not production-ready.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.

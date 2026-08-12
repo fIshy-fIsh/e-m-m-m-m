@@ -236,6 +236,25 @@ The result stores only the complete classification, existing construction geomet
 
 Step 2E does not call `solve_recipes()`, opportunity metrics, risk evaluation, or valuation. It installs no WebSocket dependency and creates no provider/client/network, SteamApis/BUFF/SteamDT/Redis/Discord connection, runtime/pipeline/scheduler/FastAPI/database integration, task/thread, browser/login, marketplace write, or purchase action. It is an offline synthetic integration and is not production-ready.
 
+## Step 2F offline live recipe valuation
+
+Step 2F starts only from the already-constructed Step 2E result:
+
+```text
+LiveRecipeConstructionResult
+→ injected ValuationService once per recipe, sequentially
+→ complete provider-quote and unchanged-geometry gate
+→ existing calculate_opportunity_metrics()
+→ existing evaluate_opportunity() with construction paint seeds
+→ valued opportunity or stable valuation rejection
+```
+
+Every original output requires one exact aligned provider quote. A provider error, any declared or undeclared missing output, an existing keep/zero/drop fallback, or malformed/changed output geometry rejects the entire affected recipe before metrics or risk. The metadata zero price is never a live fallback, partial output probability is never evaluated, and no alternate source or currency is inferred. A trusted valuation can change only `estimated_price_cny` and `expected_value_contribution`.
+
+EV, ROI, profit distributions, and fee handling remain authoritative in the existing metrics service and use `RecipeSolverConfig.sell_fee_rate`. Risk remains authoritative in the existing risk filter, receives the exact compact non-null paint seeds retained by construction rather than `None`, and produces an opportunity even when `passed` is false. Valuation rejection means incomplete or untrusted pricing; it does not mean a complete opportunity failed configured risk thresholds.
+
+Selected source IDs remain exact and ordered in every final opportunity or rejection. The valuation module does not remap identity, access the offer pool, parse a URL, or copy `purchaseLink`; operators retain the Step 2E source-ID join to the original pool. Tests inject deterministic synthetic/fake price behavior only. This step creates no SteamDT client or real SteamDT/SteamApis/BUFF/Redis/WebSocket/Discord/network connection, no provider factory/cache/limiter, no runtime/pipeline/scheduler/FastAPI/database/background task, and no browser/login/marketplace write/purchase action. It deliberately leaves the legacy pipeline's existing fail-open valuation and `paint_seeds=None` reassessment unchanged and is not production-ready.
+
 ## Parser boundary
 
 `app/services/steamapis_listing.py` is a pure standard-library parser/domain module. It:
@@ -260,6 +279,6 @@ Phase 13A Step 2A includes no:
 - metadata classification or facts provider;
 - recipe solver, trade-up, EV, ROI, risk, SteamDT, Redis/cache, pipeline, scheduler, FastAPI, Discord, database, browser, or purchase behavior.
 
-Step 2B adds only the isolated `SteamApisListingObservation`-to-`CandidateListing` adapter. Step 2C adds only the bounded local observation pool described above. Step 2D adds only detached exact metadata classification and solver-compatible bucket construction. Step 2E adds only offline construction and exact selected-source provenance mapping. None adds excluded external or runtime behavior.
+Step 2B adds only the isolated `SteamApisListingObservation`-to-`CandidateListing` adapter. Step 2C adds only the bounded local observation pool described above. Step 2D adds only detached exact metadata classification and solver-compatible bucket construction. Step 2E adds only offline construction and exact selected-source provenance mapping. Step 2F adds only injected offline complete valuation plus existing EV/risk evaluation. None adds excluded external or runtime behavior.
 
 The parser is not production-ready. A later phase must re-check current official documentation in an environment that can access it before enabling any live transport.
