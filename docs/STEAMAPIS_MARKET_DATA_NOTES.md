@@ -129,7 +129,7 @@ The supplied official contract does not publish:
 - a stable marketplace offer ID;
 - a removal/deleted event.
 
-Step 2A therefore does not fabricate those identifiers and implements no removal, expiry, deletion, or pool semantics. Those concerns remain deferred to later explicitly specified phases.
+Step 2A therefore does not fabricate those identifiers or implement pool behavior. Step 2C adds only the project-owned local TTL and capacity policy documented below; it does not claim provider removal semantics.
 
 ## Project-owned source-local identity
 
@@ -170,7 +170,26 @@ The remaining candidate projection is:
 - envelope `message_timestamp` becomes `scanned_at`, rather than the original `found_at` discovery time;
 - `raw` is always `None`.
 
-`purchaseLink` remains only on `SteamApisListingObservation`. A later pool may retain observations and join `source_offer_id → purchase_link`; Step 2B creates no pool or second manual-link DTO. It creates no WebSocket client or dependency, metadata lookup, recipe solver execution, SteamDT/Redis call, runtime wiring, browser behavior, or purchase action, and it is not production-ready.
+`purchaseLink` remains only on `SteamApisListingObservation`. Step 2C retains that observation in a bounded pool and joins `source_offer_id → purchase_link`; Step 2B creates no second manual-link DTO. Neither step creates a WebSocket client or dependency, metadata lookup, recipe solver execution, SteamDT/Redis call, runtime wiring, browser behavior, or purchase action, and neither is production-ready.
+
+## Step 2C bounded in-memory offer pool
+
+Step 2C retains exact `SteamApisListingObservation` values in an instance-local dictionary keyed only by project-owned `source_offer_id`. The observation remains the source of truth for current event state and opaque purchase provenance; `CandidateListing` values are derived on demand through the unchanged Step 2B adapter and are never cached alongside it.
+
+Both Added and Updated may first-insert because a reconnect can expose an update before the local process has observed an add. For an existing ID, envelope `message_timestamp` alone determines ordering: newer replaces, older is ignored, identical equal-time input is idempotent, and differing equal-time content fails closed because there is no finer documented ordering authority. Event type itself does not override timestamp ordering.
+
+The pool applies two project-owned local retention policies:
+
+- positive TTL expiry occurs when `now - message_timestamp >= ttl` and is checked lazily on ingest, snapshot, provenance lookup, and candidate projection;
+- positive `max_size` bounds the live set by repeatedly evicting oldest message timestamp, then lexical-ascending source ID at a tie.
+
+TTL and capacity eviction are not marketplace removal events and do not assert that SteamApis or BUFF removed a listing. The documented contract still contains no Removed/Deleted event. Capacity never depends on price, float, market name, trade lock, or apparent profitability.
+
+Immutable tuple-backed snapshots sort by market name, Decimal CNY, Decimal float, message timestamp, and source ID. Different source IDs remain distinct even when market names match. Provenance lookup supports only `source_offer_id → observation` and `source_offer_id → purchase_link`; it creates no reverse link index and never parses, requests, opens, logs, or otherwise interprets the link.
+
+`daysTradeLocked` remains on the observation, including `None`, but Step 2C applies no eligibility filter and never interprets `None` as zero. Trade-lock policy is deferred to an explicit live eligibility/evaluation step.
+
+Step 2C is synchronous local state only. It adds no WebSocket dependency/client, external connection, metadata classification, recipe solver execution, SteamDT, Redis, pipeline, scheduler, FastAPI, Discord, task/thread, browser behavior, or purchase action. It is not production-ready.
 
 ## Parser boundary
 
@@ -193,10 +212,9 @@ Phase 13A Step 2A includes no:
 - dependency installation;
 - authentication/config/environment reading;
 - retry, reconnect, heartbeat, task, thread, service, factory, or runtime;
-- live candidate pool or removal behavior;
 - metadata classification or facts provider;
 - recipe solver, trade-up, EV, ROI, risk, SteamDT, Redis/cache, pipeline, scheduler, FastAPI, Discord, database, browser, or purchase behavior.
 
-Step 2B adds only the isolated `SteamApisListingObservation`-to-`CandidateListing` adapter described above; it does not add any excluded runtime behavior.
+Step 2B adds only the isolated `SteamApisListingObservation`-to-`CandidateListing` adapter. Step 2C adds only the bounded local observation pool described above. Neither adds excluded external or runtime behavior.
 
 The parser is not production-ready. A later phase must re-check current official documentation in an environment that can access it before enabling any live transport.

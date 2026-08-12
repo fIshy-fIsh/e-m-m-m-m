@@ -352,6 +352,12 @@
 - CNY remains the exact `Decimal`; the source float is checked, converted once to the legacy candidate float, and checked again. Market name, paint seed, documented inspect link, and message timestamp map explicitly, while raw data and purchase link do not enter the candidate. The observation keeps purchase provenance for a later pool join by `source_offer_id`.
 - This pure adapter creates no WebSocket client or dependency, live pool, metadata lookup, solver execution, SteamDT/Redis use, pipeline/runtime wiring, browser action, or purchase behavior. It is not production-ready.
 
+### Phase 13A Step 2C Bounded SteamApis Offer Pool
+- `SteamApisOfferPool` keeps exact immutable observations as its only in-memory source of truth, keyed by project-owned `source_offer_id`. Added and Updated can both first-insert; a newer message timestamp replaces, an older one is ignored, and equal-time conflicting content fails closed.
+- A positive local TTL lazily removes stale observations at the exact expiry boundary, while `max_size` deterministically evicts oldest message time then lexical source ID. These are local retention policies, not SteamApis/BUFF removal events; no Removed/Deleted event is currently documented.
+- Frozen tuple-backed snapshots use a stable market/name/economics/time/ID order. Source-ID lookup preserves the observation and opaque manual purchase link, and `snapshot_candidates()` derives aligned candidates only through the Step 2B adapter without storing a second state copy.
+- Trade-lock data is retained but not filtered: `None` is not treated as zero. This state boundary creates no WebSocket client or dependency, metadata lookup, solver execution, SteamDT/Redis use, pipeline/runtime wiring, background work, browser action, or purchase behavior. It is not production-ready.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.
