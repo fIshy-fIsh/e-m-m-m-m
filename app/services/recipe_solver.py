@@ -75,6 +75,34 @@ class ConstructedRecipe:
         )
 
 
+@dataclass(frozen=True, kw_only=True, repr=False)
+class ConstructedRecipeSelection:
+    """A constructed recipe paired with its exact selected listing identities."""
+
+    recipe: ConstructedRecipe
+    selected_listing_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if type(self.recipe) is not ConstructedRecipe:
+            raise ValueError("recipe must be an exact ConstructedRecipe")
+        if type(self.selected_listing_ids) is not tuple or any(
+            not isinstance(listing_id, str) or not listing_id.strip()
+            for listing_id in self.selected_listing_ids
+        ):
+            raise ValueError(
+                "selected_listing_ids must be an exact tuple of non-empty strings"
+            )
+        if len(self.selected_listing_ids) != len(self.recipe.input_items):
+            raise ValueError(
+                "selected_listing_ids must align exactly with recipe input_items"
+            )
+        object.__setattr__(
+            self,
+            "selected_listing_ids",
+            tuple(str.__str__(listing_id) for listing_id in self.selected_listing_ids),
+        )
+
+
 @dataclass(frozen=True)
 class RecipeCandidate:
     """A complete V1 recipe candidate with downstream calculation results."""
@@ -102,6 +130,23 @@ def construct_recipes(
     solver_config: RecipeSolverConfig,
 ) -> list[ConstructedRecipe]:
     """Build deterministic recipes without EV or risk evaluation."""
+
+    return [
+        selection.recipe
+        for selection in construct_recipe_selections(
+            candidates,
+            skins,
+            solver_config,
+        )
+    ]
+
+
+def construct_recipe_selections(
+    candidates: list[CandidateListing],
+    skins: list[SkinMetadata],
+    solver_config: RecipeSolverConfig,
+) -> list[ConstructedRecipeSelection]:
+    """Build recipes with exact source-agnostic selected listing identities."""
 
     skin_lookup = {skin.market_hash_name: skin for skin in skins}
     eligible_pairs = _build_eligible_pairs(candidates, skin_lookup, solver_config)
@@ -135,14 +180,20 @@ def construct_recipes(
     except ValueError:
         return []
 
+    recipe = ConstructedRecipe(
+        input_items=tuple(input_items),
+        tradeup_results=tuple(tradeup_results),
+        paint_seeds=tuple(
+            pair.candidate.paint_seed
+            for pair in selected_pairs
+            if pair.candidate.paint_seed is not None
+        ),
+    )
     return [
-        ConstructedRecipe(
-            input_items=tuple(input_items),
-            tradeup_results=tuple(tradeup_results),
-            paint_seeds=tuple(
-                pair.candidate.paint_seed
-                for pair in selected_pairs
-                if pair.candidate.paint_seed is not None
+        ConstructedRecipeSelection(
+            recipe=recipe,
+            selected_listing_ids=tuple(
+                pair.candidate.listing_id for pair in selected_pairs
             ),
         )
     ]

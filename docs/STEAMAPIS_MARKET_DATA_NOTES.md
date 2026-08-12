@@ -213,6 +213,29 @@ The opaque `purchaseLink` and `daysTradeLocked`, including `None`, remain only o
 
 Step 2D creates no WebSocket/client/network, SteamApis/BUFF/SteamDT/Redis connection, solver invocation, provider runtime, pipeline, scheduler, FastAPI, Discord, task/thread, browser, login, marketplace write, or purchase action. It is an offline structural boundary and is not production-ready.
 
+## Step 2E offline live recipe construction
+
+Step 2E adds this synchronous synthetic chain:
+
+```text
+SteamApisOfferPoolSnapshot
+→ Step 2D classification once
+→ matching exact rarity/StatTrak/Souvenir bucket
+→ construction-only recipe solver
+→ selected CandidateListing listing-ID trace
+→ exact LiveCandidateBinding source_offer_id mapping
+```
+
+The existing construction result intentionally contains normalized `InputItem` values rather than listing identity. Step 2E therefore adds a source-agnostic solver wrapper that retains the ten exact `CandidateListing.listing_id` values directly from the same selected internal pairs used to build those inputs. The existing `ConstructedRecipe` three-field contract, `construct_recipes()` output, and evaluated `solve_recipes()` flow remain compatible, and trade-up calculation is not repeated.
+
+Live construction uses only Step 2D eligible bindings. It processes exact input rarity, StatTrak, and Souvenir buckets independently; `None` mode targets may match both boolean values but never combine them. Collection remains outside the bucket key so eligible candidates from multiple collections may enter one ten-input recipe. Exact input metadata and only same-mode next-rarity output metadata are supplied to construction.
+
+Selected listing IDs map back through an exact index over the same bucket's `binding.candidate.listing_id`. Each resulting source ID comes from the matched binding's explicit `source_offer_id`. The integration does not strip or parse the project-owned `steamapis:buff163:` compatibility namespace, parse a purchase link, or match identity by market name, price, float, seed, or iteration order. Unknown, repeated, incomplete, or cross-bucket selected identity fails the complete operation.
+
+The result stores only the complete classification, existing construction geometry, and ordered source IDs. The opaque `purchaseLink` remains solely on the original observation/pool and can be joined manually through `source_offer_id`; it is not copied into a recipe or result. Existing output `estimated_price_cny` values are still zero-valued metadata geometry placeholders, not SteamDT or live marketplace valuation, so this step produces no profitable-opportunity conclusion.
+
+Step 2E does not call `solve_recipes()`, opportunity metrics, risk evaluation, or valuation. It installs no WebSocket dependency and creates no provider/client/network, SteamApis/BUFF/SteamDT/Redis/Discord connection, runtime/pipeline/scheduler/FastAPI/database integration, task/thread, browser/login, marketplace write, or purchase action. It is an offline synthetic integration and is not production-ready.
+
 ## Parser boundary
 
 `app/services/steamapis_listing.py` is a pure standard-library parser/domain module. It:
@@ -237,6 +260,6 @@ Phase 13A Step 2A includes no:
 - metadata classification or facts provider;
 - recipe solver, trade-up, EV, ROI, risk, SteamDT, Redis/cache, pipeline, scheduler, FastAPI, Discord, database, browser, or purchase behavior.
 
-Step 2B adds only the isolated `SteamApisListingObservation`-to-`CandidateListing` adapter. Step 2C adds only the bounded local observation pool described above. Step 2D adds only detached exact metadata classification and solver-compatible bucket construction. None adds excluded external or runtime behavior.
+Step 2B adds only the isolated `SteamApisListingObservation`-to-`CandidateListing` adapter. Step 2C adds only the bounded local observation pool described above. Step 2D adds only detached exact metadata classification and solver-compatible bucket construction. Step 2E adds only offline construction and exact selected-source provenance mapping. None adds excluded external or runtime behavior.
 
 The parser is not production-ready. A later phase must re-check current official documentation in an environment that can access it before enabling any live transport.

@@ -11,9 +11,11 @@ from app.services.market_scan_service import CandidateListing
 from app.services.metadata_models import SkinMetadata
 from app.services.recipe_solver import (
     ConstructedRecipe,
+    ConstructedRecipeSelection,
     RecipeCandidate,
     RecipeSolverConfig,
     build_recipe_hash,
+    construct_recipe_selections,
     construct_recipes,
     solve_recipes,
 )
@@ -150,6 +152,25 @@ def test_recipe_solver_public_signatures_remain_exact() -> None:
     )
     assert signature(construct_recipes).return_annotation == list[ConstructedRecipe]
 
+    selection_parameters = list(
+        signature(construct_recipe_selections).parameters.values()
+    )
+    assert [parameter.name for parameter in selection_parameters] == [
+        "candidates",
+        "skins",
+        "solver_config",
+    ]
+    assert all(
+        parameter.kind is Parameter.POSITIONAL_OR_KEYWORD
+        for parameter in selection_parameters
+    )
+    assert all(
+        parameter.default is Parameter.empty for parameter in selection_parameters
+    )
+    assert signature(construct_recipe_selections).return_annotation == list[
+        ConstructedRecipeSelection
+    ]
+
     solve_parameters = list(signature(solve_recipes).parameters.values())
     assert [parameter.name for parameter in solve_parameters] == [
         "candidates",
@@ -233,6 +254,158 @@ def test_constructed_recipe_rejects_invalid_state(
 
     with pytest.raises((TypeError, ValueError), match=message):
         ConstructedRecipe(**values)  # type: ignore[arg-type]
+
+
+def test_constructed_recipe_selection_has_strict_identity_contract() -> None:
+    candidates, skins = _build_basic_recipe_inputs()
+
+    selection = construct_recipe_selections(
+        candidates,
+        skins,
+        _make_solver_config(),
+    )[0]
+
+    assert [field.name for field in fields(selection)] == [
+        "recipe",
+        "selected_listing_ids",
+    ]
+    assert type(selection.recipe) is ConstructedRecipe
+    assert selection.selected_listing_ids == tuple(
+        f"listing-{index}" for index in range(10)
+    )
+    assert type(selection.selected_listing_ids) is tuple
+    assert "listing-0" not in repr(selection)
+    with pytest.raises(TypeError):
+        ConstructedRecipeSelection(  # type: ignore[misc]
+            selection.recipe,
+            selection.selected_listing_ids,
+        )
+    with pytest.raises(FrozenInstanceError):
+        selection.selected_listing_ids = ()  # type: ignore[misc]
+
+
+@pytest.mark.parametrize(
+    "listing_ids",
+    [[], (), tuple("" for _ in range(10)), tuple("id" for _ in range(9))],
+)
+def test_constructed_recipe_selection_rejects_invalid_listing_identity(
+    listing_ids: object,
+) -> None:
+    construction = _build_basic_construction()
+
+    with pytest.raises((TypeError, ValueError), match="selected_listing_ids"):
+        ConstructedRecipeSelection(
+            recipe=construction,
+            selected_listing_ids=listing_ids,  # type: ignore[arg-type]
+        )
+
+
+def test_construct_recipe_selections_distinguishes_identical_economics() -> None:
+    candidates = [
+        _make_candidate(
+            market_hash_name="Shared Input",
+            listing_id=f"listing-{index:02d}",
+            price_cny="10.00",
+            float_value=0.10,
+            paint_seed=123,
+        )
+        for index in reversed(range(11))
+    ]
+    skins = [
+        _make_skin(market_hash_name="Shared Input"),
+        _make_skin(
+            market_hash_name="Output Skin A",
+            rarity="Classified",
+            collection_name="Collection Alpha",
+        ),
+    ]
+
+    selection = construct_recipe_selections(
+        candidates,
+        skins,
+        _make_solver_config(),
+    )[0]
+
+    assert selection.selected_listing_ids == tuple(
+        f"listing-{index:02d}" for index in range(10)
+    )
+    assert len(set(selection.selected_listing_ids)) == 10
+    assert all(item.actual_float == 0.10 for item in selection.recipe.input_items)
+    assert all(item.price_cny == Decimal("10.00") for item in selection.recipe.input_items)
+    assert selection.recipe.paint_seeds == (123,) * 10
+
+
+def test_construct_recipes_preserves_str_subclass_listing_id_compatibility() -> None:
+    class ListingId(str):
+        pass
+
+    candidates, skins = _build_basic_recipe_inputs()
+    candidates = [
+        replace(candidate, listing_id=ListingId(candidate.listing_id))
+        for candidate in candidates
+    ]
+
+    selections = construct_recipe_selections(
+        candidates,
+        skins,
+        _make_solver_config(),
+    )
+    constructions = construct_recipes(candidates, skins, _make_solver_config())
+
+    assert len(selections) == 1
+    assert all(type(listing_id) is str for listing_id in selections[0].selected_listing_ids)
+    assert constructions == [selections[0].recipe]
+
+
+def test_construct_recipes_projects_authoritative_selection_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidates, skins = _build_basic_recipe_inputs()
+    expected = construct_recipe_selections(candidates, skins, _make_solver_config())
+    calls: list[tuple[object, ...]] = []
+
+    def select(
+        received_candidates: list[CandidateListing],
+        received_skins: list[SkinMetadata],
+        received_config: RecipeSolverConfig,
+    ) -> list[ConstructedRecipeSelection]:
+        calls.append((received_candidates, received_skins, received_config))
+        return expected
+
+    monkeypatch.setattr(recipe_solver_module, "construct_recipe_selections", select)
+    config = _make_solver_config()
+
+    assert construct_recipes(candidates, skins, config) == [
+        selection.recipe for selection in expected
+    ]
+    assert calls == [(candidates, skins, config)]
+
+
+def test_construct_recipe_selections_calculates_tradeup_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidates, skins = _build_basic_recipe_inputs()
+    original = recipe_solver_module.calculate_tradeup_results
+    calls = 0
+
+    def calculate(
+        input_items: list[InputItem],
+        outputs: dict[str, list[object]],
+    ) -> list[TradeupResult]:
+        nonlocal calls
+        calls += 1
+        return original(input_items, outputs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(recipe_solver_module, "calculate_tradeup_results", calculate)
+
+    selections = construct_recipe_selections(
+        candidates,
+        skins,
+        _make_solver_config(),
+    )
+
+    assert len(selections) == 1
+    assert calls == 1
 
 
 
