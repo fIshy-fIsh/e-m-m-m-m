@@ -282,7 +282,25 @@ Every exact text frame enters the unchanged Step 2A `parse_steamapis_message()` 
 
 After confirmation, parser-provided Added and Updated observations enter one async stream in receive order. Project-owned ignored outcomes produce no observation. A server error, malformed or unknown parser input, binary frame, or offer before confirmation fails with one fixed redacted client error. Normal close ends the stream; abnormal close fails. There is no Removed/Deleted semantic because none is documented by the current source contract.
 
-This phase adds no live smoke, real SteamApis connection, pool ingestion, candidate adapter, metadata lookup, construction, solver, SteamDT valuation, EV/risk, Redis, BUFF, Discord, scheduler, FastAPI, background task, browser behavior, marketplace write, or purchase action. The independent Step 2G blocker remains unchanged: official SteamDT documentation still does not establish that batch `sellPrice` / `biddingPrice` are CNY/RMB, so those values must not enter `PriceQuote.price_cny`. The client is not production-ready.
+This phase adds no live smoke, real SteamApis connection, candidate adapter, metadata lookup, construction, solver, SteamDT valuation, EV/risk, Redis, BUFF, Discord, scheduler, FastAPI, background task, browser behavior, marketplace write, or purchase action. Step 2I now provides only the separately documented foreground pool-ingest bridge. The independent Step 2G blocker remains unchanged: official SteamDT documentation still does not establish that batch `sellPrice` / `biddingPrice` are CNY/RMB, so those values must not enter `PriceQuote.price_cny`. The client is not production-ready.
+
+## Step 2I foreground offer-pool session
+
+Step 2I adds no new SteamApis provider fact. It composes two existing authorities only:
+
+```text
+one confirmed Step 2H observation stream
+→ foreground sequential Step 2C ingest
+→ normal-completion consumed count
+```
+
+The WebSocket client remains the sole authority for connection, subscription, SUBSCRIBED gating, parser use, receive order, normal close, and transport/parser errors. The offer pool remains the sole authority for Added/Updated handling, source-local identity validation, message-time ordering, equal-time conflict handling, TTL eviction, capacity eviction, and retained opaque provenance. The session runner does not inspect event types, timestamps, source IDs, purchase links, prices, floats, or seeds and does not reproduce either authority.
+
+`observations_consumed` counts observations that the client yielded and whose synchronous `pool.ingest()` call returned normally. Because pool ingest returns no write status, older, identical, already-expired, or capacity-evicted observations still count. The value is not an inserted, accepted, retained, mutation, unique-offer, or final-pool-size count.
+
+The loop takes no pool snapshot or lookup. Normal WebSocket close appears as normal iterator completion and returns the count, including zero. An ordinary client, pool, or collaborator failure becomes one fixed redacted session error and returns no partial result. Earlier successful pool mutations and policy-driven evictions remain: the caller-owned streaming pool has no transaction or rollback contract, and the runner does not copy, clear, recreate, replay, or undo it. Cancellation, memory failure, and other non-ordinary process-control exceptions propagate unchanged.
+
+The runner calls the client iterator once and ingests one observation completely before requesting the next. It adds no reconnect, retry, backoff, second session, queue, task, thread, worker, scheduler, background service, metadata classification, candidate projection, construction, solver, valuation, EV/risk, alerting, persistence, or runtime wiring. Offline tests use synthetic frames, a fake connector, the real parser path, and a real pool; they create no real SteamApis, SteamDT, BUFF, Redis, Discord, or PostgreSQL connection. There is no browser/login/marketplace-write/purchase behavior. The SteamDT batch-price currency blocker remains unchanged, Step 2G remains paused, and this session bridge is not production-ready.
 
 ## Parser boundary
 
@@ -308,6 +326,6 @@ Phase 13A Step 2A includes no:
 - metadata classification or facts provider;
 - recipe solver, trade-up, EV, ROI, risk, SteamDT, Redis/cache, pipeline, scheduler, FastAPI, Discord, database, browser, or purchase behavior.
 
-Step 2B adds only the isolated `SteamApisListingObservation`-to-`CandidateListing` adapter. Step 2C adds only the bounded local observation pool described above. Step 2D adds only detached exact metadata classification and solver-compatible bucket construction. Step 2E adds only offline construction and exact selected-source provenance mapping. Step 2F adds only injected offline complete valuation plus existing EV/risk evaluation. None adds excluded external or runtime behavior.
+Step 2B adds only the isolated `SteamApisListingObservation`-to-`CandidateListing` adapter. Step 2C adds only the bounded local observation pool described above. Step 2D adds only detached exact metadata classification and solver-compatible bucket construction. Step 2E adds only offline construction and exact selected-source provenance mapping. Step 2F adds only injected offline complete valuation plus existing EV/risk evaluation. Step 2H adds only the single-session transport, and Step 2I adds only its foreground sequential bridge into the caller-owned pool. None adds excluded provider/runtime orchestration, background ownership, or trade behavior.
 
 The parser is not production-ready. A later phase must re-check current official documentation in an environment that can access it before enabling any live transport.
