@@ -255,6 +255,35 @@ EV, ROI, profit distributions, and fee handling remain authoritative in the exis
 
 Selected source IDs remain exact and ordered in every final opportunity or rejection. The valuation module does not remap identity, access the offer pool, parse a URL, or copy `purchaseLink`; operators retain the Step 2E source-ID join to the original pool. Tests inject deterministic synthetic/fake price behavior only. This step creates no SteamDT client or real SteamDT/SteamApis/BUFF/Redis/WebSocket/Discord/network connection, no provider factory/cache/limiter, no runtime/pipeline/scheduler/FastAPI/database/background task, and no browser/login/marketplace write/purchase action. It deliberately leaves the legacy pipeline's existing fail-open valuation and `paint_seeds=None` reassessment unchanged and is not production-ready.
 
+## Step 2H single-session WebSocket transport
+
+The official WebSocket, offer, and reference pages were rechecked on 2026-08-13. They currently confirm:
+
+- `wss://marketplaceapi.steamapis.com/ws/v2/offers`;
+- authentication by the `apiKey` query parameter;
+- required `websocketAccess` permission;
+- required `permessage-deflate` negotiation;
+- no more than two concurrent connections per API key;
+- documented `subscribed`, `offer`, and `error` messages;
+- documented `Added` and `Updated` offer events;
+- current support for exact `Buff163` and `CS2` reference names.
+
+Step 2H adds a single-session transport with one fixed subscription:
+
+```json
+{"subscribeTo":["Buff163"],"games":["CS2"],"newFloorOnly":false}
+```
+
+The endpoint is fixed rather than caller-overridable so the query API key cannot be forwarded to another host. Query construction uses standard encoding. Config/client repr, fixed errors, documentation, and tests do not expose a real key, full connection URI, raw frame, server text, or underlying WebSocket exception. Tests use a clearly synthetic dummy key and injected connector only.
+
+The selected `websockets>=17,<18` client explicitly passes `compression="deflate"`, a 10-second open timeout, and a 1 MiB incoming-message limit. It retains library defaults for ping, close timeout, and receive queue and does not manually add `Sec-WebSocket-Extensions`. Each consumed iterator calls the connector once, enters one connection, sends the subscription once, and never reconnects or retries.
+
+Every exact text frame enters the unchanged Step 2A `parse_steamapis_message()` authority. A parsed `SUBSCRIBED` outcome is required before any offer is yielded. The parser deliberately retains only that kind and discards documented confirmation fields such as marketplaces and games; the transport does not violate the single-parser boundary by reparsing raw JSON to validate them. A later phase may revise the parser contract if confirmation-field validation becomes required.
+
+After confirmation, parser-provided Added and Updated observations enter one async stream in receive order. Project-owned ignored outcomes produce no observation. A server error, malformed or unknown parser input, binary frame, or offer before confirmation fails with one fixed redacted client error. Normal close ends the stream; abnormal close fails. There is no Removed/Deleted semantic because none is documented by the current source contract.
+
+This phase adds no live smoke, real SteamApis connection, pool ingestion, candidate adapter, metadata lookup, construction, solver, SteamDT valuation, EV/risk, Redis, BUFF, Discord, scheduler, FastAPI, background task, browser behavior, marketplace write, or purchase action. The independent Step 2G blocker remains unchanged: official SteamDT documentation still does not establish that batch `sellPrice` / `biddingPrice` are CNY/RMB, so those values must not enter `PriceQuote.price_cny`. The client is not production-ready.
+
 ## Parser boundary
 
 `app/services/steamapis_listing.py` is a pure standard-library parser/domain module. It:

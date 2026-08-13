@@ -376,6 +376,12 @@
 - Complete valued results enter the existing `calculate_opportunity_metrics()` with the configured sell fee and the existing `evaluate_opportunity()` with the construction recipe's actual paint seeds. A valid risk decision with `passed=False` remains a valued opportunity rather than becoming a valuation rejection.
 - Ordered selected source IDs are retained unchanged, while observations and purchase links remain in the pool. This boundary uses injected synthetic/fake prices only, creates no SteamDT/SteamApis/BUFF/Redis/WebSocket/Discord/network/runtime/background connection, performs no browser or purchase action, leaves the legacy fail-open pipeline unchanged, and is not production-ready.
 
+### Phase 13A Step 2H SteamApis Single-Session WebSocket Client
+- `SteamApisWebSocketClient` opens one session to the official `wss://marketplaceapi.steamapis.com/ws/v2/offers` endpoint with the API key in the documented encoded `apiKey` query parameter. The key requires `websocketAccess`; config/client repr and fixed errors never expose it or the connection URI.
+- The client explicitly negotiates required `permessage-deflate`, bounds opening to 10 seconds and incoming messages to 1 MiB, and sends exactly one fixed `Buff163` + `CS2` subscription with `newFloorOnly=false`. SteamApis permits two concurrent connections per key; this implementation opens only one per consumed iterator.
+- Every text frame is delegated to the unchanged Step 2A parser. A parsed subscribed outcome gates the stream; Added and Updated offers yield the same immutable observation type in receive order, ignored outcomes are skipped, and server error, malformed, unknown, binary, or pre-confirmation offer input fails with one redacted error. Because Step 2A intentionally discards subscription confirmation fields, this client does not reparse raw JSON to verify those fields.
+- Normal close ends the iterator; abnormal close fails. There is no reconnect, retry, live smoke, pool/candidate/metadata/solver/valuation/runtime wiring, background work, BUFF/SteamDT/Redis/Discord connection, browser behavior, or purchase action. The separate SteamDT batch-price currency blocker remains unresolved, Step 2G is not resumed, and this transport is not production-ready.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.
