@@ -388,6 +388,12 @@
 - The runner takes no snapshot or pool lookup. An ordinary client or pool failure becomes one fixed redacted session error and returns no partial result, while earlier successful pool mutations remain because the pool has no transaction or rollback contract. Cancellation, memory failure, and other non-ordinary process control propagate unchanged.
 - There is no reconnect, retry, second iterator, queue, task, thread, scheduler, background ownership, live smoke, metadata/candidate/solver/valuation/EV/risk/runtime wiring, SteamDT/BUFF/Redis/Discord connection, browser behavior, or purchase action. Tests use an injected fake connector and synthetic data only; the SteamDT currency blocker remains unchanged and this bridge is not production-ready.
 
+### Phase 13A Step 2J Current Live Pool Recipe Construction
+- `construct_live_recipes_from_pool()` evaluates caller-owned current state now: it takes exactly one pool snapshot, records that post-TTL observation count, and passes the exact snapshot once to the existing Step 2E construction authority. It does not run Step 2I, wait for WebSocket session close, or establish a runtime trigger policy.
+- The pool snapshot remains authoritative for deterministic ordering and existing lazy TTL eviction. This boundary performs no ingest, lookup, custom eviction, or rollback; if later construction fails, a completed snapshot TTL eviction remains in the pool.
+- Step 2D/2E still own classification, buckets, construction-only solver use, recipe order, and selected source IDs. Empty, rejected-only, and no-recipe current states are valid. The wrapper returns only the post-TTL snapshot count plus the complete detached Step 2E result and adds no recipe-count cap, duplicate provenance, observation, or purchase-link presentation.
+- Ordinary snapshot/construction failures become one fixed redacted error with no partial result. There is no WebSocket/session coupling, valuation, EV/risk, SteamDT, metadata provider I/O, external connection, retry, task, scheduler, background ownership, browser behavior, or purchase action. Later TTL advancement may remove source provenance from the pool; this offline boundary does not pin it and is not production-ready.
+
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.
 - It is disabled by default; it only runs when `STEAMDT_RUN_REDIS_INTEGRATION_TESTS=true` is explicitly set.

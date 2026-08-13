@@ -302,6 +302,27 @@ The loop takes no pool snapshot or lookup. Normal WebSocket close appears as nor
 
 The runner calls the client iterator once and ingests one observation completely before requesting the next. It adds no reconnect, retry, backoff, second session, queue, task, thread, worker, scheduler, background service, metadata classification, candidate projection, construction, solver, valuation, EV/risk, alerting, persistence, or runtime wiring. Offline tests use synthetic frames, a fake connector, the real parser path, and a real pool; they create no real SteamApis, SteamDT, BUFF, Redis, Discord, or PostgreSQL connection. There is no browser/login/marketplace-write/purchase behavior. The SteamDT batch-price currency blocker remains unchanged, Step 2G remains paused, and this session bridge is not production-ready.
 
+## Step 2J current-pool recipe construction
+
+Step 2J adds no new SteamApis provider fact and does not extend the WebSocket or session lifecycle. It composes current project-owned state only:
+
+```text
+caller-owned SteamApisOfferPool
+→ snapshot() exactly once
+→ existing Step 2D/2E construction exactly once
+→ post-TTL observation count plus complete construction
+```
+
+This boundary evaluates current state now. It does not run the Step 2I session runner, wait for WebSocket close, reconnect, or choose a debounce/recompute schedule. A future runtime may independently let a foreground session mutate the pool and trigger this synchronous evaluator when appropriate.
+
+The pool remains authoritative for deterministic snapshot ordering and lazy TTL eviction. `snapshot_observation_count` is the exact size of that one post-eviction snapshot and must equal Step 2E eligible plus rejected classification counts. Snapshot may delete observations whose age has reached TTL; that existing side effect remains if later construction fails because this boundary performs no rollback, pool copy, custom eviction, lookup, or ingest.
+
+The exact captured snapshot enters unchanged `construct_live_recipes()`. Step 2D/2E remain authoritative for candidate projection, metadata classification, solver buckets, construction-only solver calls, recipe order, and ordered selected source IDs. Empty, rejected-only, insufficient-candidate, and other existing no-recipe states are normal. The wrapper adds no recipe cap and copies no snapshot observation, candidate, source-ID list, purchase link, inspect link, or economic field; selected provenance remains only in each existing Step 2E recipe.
+
+A result is point-in-time construction, not a retention or actionable-link guarantee. Later clock advancement may cause pool TTL eviction before an operator joins selected source IDs back to opaque provenance. Step 2J does not pin observations or present purchase links.
+
+Ordinary snapshot, clock, construction, or malformed-result failures become one fixed redacted error and return no partial result. Memory, cancellation, and other non-ordinary process-control failures propagate unchanged. The boundary adds no direct classifier/solver call, valuation, EV/risk, SteamDT, provider I/O, WebSocket/session import, retry, task, thread, scheduler, background service, persistence, browser/login/marketplace-write, or purchase behavior. Offline tests use synthetic observations only and create no real SteamApis, SteamDT, BUFF, Redis, Discord, or PostgreSQL connection. The SteamDT batch-price currency blocker remains unchanged, Step 2G stays paused, and this boundary is not production-ready.
+
 ## Parser boundary
 
 `app/services/steamapis_listing.py` is a pure standard-library parser/domain module. It:
@@ -326,6 +347,6 @@ Phase 13A Step 2A includes no:
 - metadata classification or facts provider;
 - recipe solver, trade-up, EV, ROI, risk, SteamDT, Redis/cache, pipeline, scheduler, FastAPI, Discord, database, browser, or purchase behavior.
 
-Step 2B adds only the isolated `SteamApisListingObservation`-to-`CandidateListing` adapter. Step 2C adds only the bounded local observation pool described above. Step 2D adds only detached exact metadata classification and solver-compatible bucket construction. Step 2E adds only offline construction and exact selected-source provenance mapping. Step 2F adds only injected offline complete valuation plus existing EV/risk evaluation. Step 2H adds only the single-session transport, and Step 2I adds only its foreground sequential bridge into the caller-owned pool. None adds excluded provider/runtime orchestration, background ownership, or trade behavior.
+Step 2B adds only the isolated `SteamApisListingObservation`-to-`CandidateListing` adapter. Step 2C adds only the bounded local observation pool described above. Step 2D adds only detached exact metadata classification and solver-compatible bucket construction. Step 2E adds only offline construction and exact selected-source provenance mapping. Step 2F adds only injected offline complete valuation plus existing EV/risk evaluation. Step 2H adds only the single-session transport, Step 2I adds only its foreground sequential bridge into the caller-owned pool, and Step 2J adds only one current-state snapshot-to-existing-construction boundary. None adds excluded provider/runtime orchestration, background ownership, or trade behavior.
 
 The parser is not production-ready. A later phase must re-check current official documentation in an environment that can access it before enabling any live transport.
