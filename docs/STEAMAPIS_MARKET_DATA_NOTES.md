@@ -323,6 +323,31 @@ A result is point-in-time construction, not a retention or actionable-link guara
 
 Ordinary snapshot, clock, construction, or malformed-result failures become one fixed redacted error and return no partial result. Memory, cancellation, and other non-ordinary process-control failures propagate unchanged. The boundary adds no direct classifier/solver call, valuation, EV/risk, SteamDT, provider I/O, WebSocket/session import, retry, task, thread, scheduler, background service, persistence, browser/login/marketplace-write, or purchase behavior. Offline tests use synthetic observations only and create no real SteamApis, SteamDT, BUFF, Redis, Discord, or PostgreSQL connection. The SteamDT batch-price currency blocker remains unchanged, Step 2G stays paused, and this boundary is not production-ready.
 
+## Step 2K explicit opt-in live offer smoke
+
+Step 2K adds no provider schema, field mapping, identifier, or parser behavior. It is one manual composition of existing authorities:
+
+```text
+official SteamApis WebSocket
+→ existing Step 2H client and Step 2A parser
+→ existing Step 2I foreground session runner
+→ existing Step 2C in-memory pool
+→ one post-stop current snapshot
+→ aggregate-only safe summary
+```
+
+The script is disabled unless inherited `ENABLE_LIVE_STEAMAPIS_SMOKE`, after trimming and case-folding, is exactly `true`. Only then does it read a nonblank inherited `STEAMAPIS_API_KEY`; it never loads `.env`, discovers credentials, puts the key on the command line, or renders it. The key still requires the officially documented `websocketAccess` permission.
+
+The existing client remains the only authority for the fixed official endpoint, encoded `apiKey` query, required compression, 10-second opening limit, 1 MiB incoming-message limit, fixed Buff163 + CS2/non-floor-only subscription, SUBSCRIBED gating, parser use, normal close, and redacted abnormal failure. One process invokes one session runner and therefore opens at most one connection and sends one subscription. The smoke adds no retry, reconnect, second iterator, background task, or alternate provider contract; this remains below SteamApis' documented two-connections-per-key limit.
+
+The foreground session is bounded by one 5–60 second `asyncio.timeout()` context, defaulting to 15 seconds. Actual deadline expiry is the expected stop and cancels through the unchanged runner/client so the WebSocket context unwinds; natural normal close also stops without reopening. An abnormal session failure is fixed/redacted and is never retried.
+
+After either expected stop, the smoke calls the existing pool snapshot exactly once. The process-local smoke pool uses max size 5000 and TTL 10 minutes; these are smoke retention settings, not production defaults. Snapshot keeps its lazy TTL behavior. `retained_observations`, `retained_added`, and `retained_updated` describe only current post-TTL/post-capacity state and are not Step 2I's consumed event count. At least one retained observation is required to prove ingestion.
+
+Terminal output contains only fixed execution/result/stop fields, configured duration, and aggregate integer counts. It does not expose the URI/query, frames, raw JSON, source IDs, purchase/inspect links, market names, prices, floats, paint data, stickers, timestamps, seller/account information, or secrets and writes nothing to a log, database, Redis, or persistent cache.
+
+Step 2K intentionally does not call Step 2J, classify metadata, construct recipes, value outputs, invoke SteamDT/EV/risk, use a direct BUFF API, schedule work, or perform browser/login/marketplace-write/purchase behavior. Production metadata composition and current recipe construction remain Step 2L work. The SteamDT batch-price currency blocker remains unchanged, Step 2G stays paused, and this manual smoke is not production-ready.
+
 ## Parser boundary
 
 `app/services/steamapis_listing.py` is a pure standard-library parser/domain module. It:
@@ -347,6 +372,6 @@ Phase 13A Step 2A includes no:
 - metadata classification or facts provider;
 - recipe solver, trade-up, EV, ROI, risk, SteamDT, Redis/cache, pipeline, scheduler, FastAPI, Discord, database, browser, or purchase behavior.
 
-Step 2B adds only the isolated `SteamApisListingObservation`-to-`CandidateListing` adapter. Step 2C adds only the bounded local observation pool described above. Step 2D adds only detached exact metadata classification and solver-compatible bucket construction. Step 2E adds only offline construction and exact selected-source provenance mapping. Step 2F adds only injected offline complete valuation plus existing EV/risk evaluation. Step 2H adds only the single-session transport, Step 2I adds only its foreground sequential bridge into the caller-owned pool, and Step 2J adds only one current-state snapshot-to-existing-construction boundary. None adds excluded provider/runtime orchestration, background ownership, or trade behavior.
+Step 2B adds only the isolated `SteamApisListingObservation`-to-`CandidateListing` adapter. Step 2C adds only the bounded local observation pool described above. Step 2D adds only detached exact metadata classification and solver-compatible bucket construction. Step 2E adds only offline construction and exact selected-source provenance mapping. Step 2F adds only injected offline complete valuation plus existing EV/risk evaluation. Step 2H adds only the single-session transport, Step 2I adds only its foreground sequential bridge into the caller-owned pool, Step 2J adds only one current-state snapshot-to-existing-construction boundary, and Step 2K adds only the explicit bounded manual live offer-to-pool smoke described above. None adds excluded provider/runtime orchestration, background ownership, or trade behavior.
 
-The parser is not production-ready. A later phase must re-check current official documentation in an environment that can access it before enabling any live transport.
+The parser remains unchanged by Step 2K. The manual live smoke is not production runtime wiring; production metadata composition and current recipe construction remain Step 2L work.
