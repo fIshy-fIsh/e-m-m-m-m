@@ -61,17 +61,15 @@
 
 在接入真实 BUFF API 之前，必须先补全 [docs/BUFF_API_NOTES.md](docs/BUFF_API_NOTES.md) 中的 TODO。
 
-## Planned V1.1: SteamDT Data Source
+## Current MVP Market Data: SteamDT Aggregate Source
 
-- SteamDT 将作为估值和历史价格数据源。
-- SteamDT 不替代 BUFF listing scanner。
-- BUFF 仍负责可购买 listing / material scanning。
-- SteamDT 主要用于 output price estimation / historical sanity check / metadata fallback / wear support。
-- 当前仍处于设计与受控 dry-run 阶段。
-- 当前没有真实请求 SteamDT，除非手动运行显式启用的只读 smoke / integration command。
-- `STEAMDT_API_KEY` 不应 commit。
-- 后续将在 `feature/steamdt-data-source` 分支开发。
-- 当前 V1 dry-run baseline 可通过 `v1-dry-run-baseline` tag 回滚。
+- SteamDT is the current primary item/platform aggregate market-data and valuation source.
+- SteamApis remains available as optional future listing-level infrastructure; it is not a required current MVP runtime source.
+- SteamDT `sellPrice` and `biddingPrice` are treated as CNY/RMB under an explicit user-approved project assumption. Current official SteamDT documentation is not represented as explicitly guaranteeing that currency.
+- Documented SteamDT price endpoints provide platform aggregate records, not proven individual buyable listings, purchase links, per-listing float/inspect data, or seller provenance.
+- Real SteamDT access remains limited to explicitly enabled read-only smoke/integration commands; normal tests and dry-runs are offline.
+- `STEAMDT_API_KEY` must never be committed or printed.
+- Current V1 dry-run baseline can be restored through the `v1-dry-run-baseline` tag.
 
 ### SteamDT official read-only smoke scripts
 - Single price:
@@ -380,13 +378,13 @@
 - `SteamApisWebSocketClient` opens one session to the official `wss://marketplaceapi.steamapis.com/ws/v2/offers` endpoint with the API key in the documented encoded `apiKey` query parameter. The key requires `websocketAccess`; config/client repr and fixed errors never expose it or the connection URI.
 - The client explicitly negotiates required `permessage-deflate`, bounds opening to 10 seconds and incoming messages to 1 MiB, and sends exactly one fixed `Buff163` + `CS2` subscription with `newFloorOnly=false`. SteamApis permits two concurrent connections per key; this implementation opens only one per consumed iterator.
 - Every text frame is delegated to the unchanged Step 2A parser. A parsed subscribed outcome gates the stream; Added and Updated offers yield the same immutable observation type in receive order, ignored outcomes are skipped, and server error, malformed, unknown, binary, or pre-confirmation offer input fails with one redacted error. Because Step 2A intentionally discards subscription confirmation fields, this client does not reparse raw JSON to verify those fields.
-- Normal close ends the iterator; abnormal close fails. There is no reconnect, retry, live smoke, candidate/metadata/solver/valuation/runtime wiring, background work, BUFF/SteamDT/Redis/Discord connection, browser behavior, or purchase action. The separate SteamDT batch-price currency blocker remains unresolved, Step 2G is not resumed, and this transport is not production-ready.
+- Normal close ends the iterator; abnormal close fails. There is no reconnect, retry, live smoke, candidate/metadata/solver/valuation/runtime wiring, background work, BUFF/SteamDT/Redis/Discord connection, browser behavior, or purchase action. This transport was implemented before the later Step 2L-PIVOT-R1 user-approved SteamDT CNY interpretation and remains not production-ready.
 
 ### Phase 13A Step 2I SteamApis Foreground Offer Session
 - `run_steamapis_offer_session()` consumes exactly one Step 2H observation iterator and synchronously hands each yielded observation to the caller-owned Step 2C pool in receive order. The client remains authoritative for transport, parsing, SUBSCRIBED gating, and normal close; the pool remains authoritative for Added/Updated, timestamps, TTL, and capacity.
 - Normal completion returns only `observations_consumed`: the count of yielded observations whose `pool.ingest()` call returned normally. Older, identical, expired, or capacity-evicted observations still count, so this value is not an inserted, retained, mutation, unique-ID, or final-size count.
 - The runner takes no snapshot or pool lookup. An ordinary client or pool failure becomes one fixed redacted session error and returns no partial result, while earlier successful pool mutations remain because the pool has no transaction or rollback contract. Cancellation, memory failure, and other non-ordinary process control propagate unchanged.
-- There is no reconnect, retry, second iterator, queue, task, thread, scheduler, background ownership, live smoke, metadata/candidate/solver/valuation/EV/risk/runtime wiring, SteamDT/BUFF/Redis/Discord connection, browser behavior, or purchase action. Tests use an injected fake connector and synthetic data only; the SteamDT currency blocker remains unchanged and this bridge is not production-ready.
+- There is no reconnect, retry, second iterator, queue, task, thread, scheduler, background ownership, live smoke, metadata/candidate/solver/valuation/EV/risk/runtime wiring, SteamDT/BUFF/Redis/Discord connection, browser behavior, or purchase action. Tests use an injected fake connector and synthetic data only. This bridge predates the later Step 2L-PIVOT-R1 user-approved SteamDT CNY interpretation and remains not production-ready.
 
 ### Phase 13A Step 2J Current Live Pool Recipe Construction
 - `construct_live_recipes_from_pool()` evaluates caller-owned current state now: it takes exactly one pool snapshot, records that post-TTL observation count, and passes the exact snapshot once to the existing Step 2E construction authority. It does not run Step 2I, wait for WebSocket session close, or establish a runtime trigger policy.
@@ -399,7 +397,16 @@
 - Networking requires `ENABLE_LIVE_STEAMAPIS_SMOKE=true` after trimming and case-folding plus a nonblank secret-only `STEAMAPIS_API_KEY`. Every other gate value exits safely with zero key access/network; an enabled smoke without a key fails closed. Use `py -3.13 scripts/run_live_steamapis_offer_smoke.py --seconds 15` or `py -3.13 -m scripts.run_live_steamapis_offer_smoke --seconds 15`; duration is an integer from 5 through 60 and defaults to 15.
 - Each process creates at most one client connection, one fixed Buff163 + CS2 subscription, and one foreground session-runner call under `asyncio.timeout()`. Deadline expiry is the expected bounded stop and cancels through the existing client so its WebSocket context closes; normal close also stops immediately. Neither path reconnects or retries, and an abnormal session failure is fixed and redacted.
 - After an expected stop, the script takes exactly one current pool snapshot using smoke-only process-local retention (`max_size=5000`, TTL 10 minutes). Success requires at least one retained observation. The summary reports only stop reason, configured duration, and post-TTL/post-capacity retained total/Added/Updated counts; these are not the session's consumed-event count and no key, URI, frame, link, ID, name, price, float, paint, sticker, seller, or account detail is printed or stored.
-- Step 2K intentionally does not call Step 2J, load metadata, construct recipes, value outputs, use SteamDT/BUFF direct APIs/Redis/persistence, schedule background work, or perform any login/browser/purchase action. Production metadata composition plus current recipe construction remains Step 2L; the SteamDT batch-price currency blocker remains unresolved and this manual smoke is not production-ready.
+- Step 2K intentionally does not call Step 2J, load metadata, construct recipes, value outputs, use SteamDT/BUFF direct APIs/Redis/persistence, schedule background work, or perform any login/browser/purchase action. Step 2L-PIVOT-R1 below changes current source priority without modifying this smoke; it is not production-ready.
+
+### Phase 13A Step 2L-PIVOT-R1 SteamDT Aggregate Market Data
+- `app/services/steamdt_market_data.py` exposes one thin aggregate boundary over the existing `SteamDTHttpClient.get_price_single_candidates()` path. It reuses `SteamDTPlatformPrice`, calls once, preserves exact provider order, duplicates, platform spelling/case, IDs, CNY-interpreted sell/bid values, counts, and opaque update time, while defensively discarding raw payload mappings.
+- SteamDT `sellPrice` and `biddingPrice` are accepted as CNY/RMB only under the explicit user-approved project interpretation. This is not described as an explicit current SteamDT documentation guarantee, and no exchange-rate conversion is performed.
+- SteamDT is now the current primary aggregate market-data and valuation source. SteamApis remains unchanged as optional future listing-level infrastructure. SteamDT's documented price endpoint still does not establish individual listing IDs, purchase links, per-listing float/inspect data, or seller provenance, so aggregate records are not synthesized into buyable listings.
+- The manual probe uses the existing `STEAMDT_RUN_PRICE_SNAPSHOT_SMOKE`, `STEAMDT_API_KEY`, and `STEAMDT_SMOKE_MARKET_HASH_NAME` contract. Run `py -3.13 scripts/run_live_steamdt_market_smoke.py` or `py -3.13 -m scripts.run_live_steamdt_market_smoke` only after explicitly opting in.
+- Each enabled process creates one client with `max_retries=0`, sends exactly one `GET /open/cs2/v1/price/single` request for one item, and never falls back to batch/base/avg/kline/wear or Redis. Empty platform data fails without retry.
+- Safe output reports provider-order exact platform strings plus aggregate CNY-interpreted values/counts and presence flags. It omits the requested item text, provider item IDs, update-time values, raw responses, headers, credentials, nested errors, and listing synthesis.
+- This phase does not call full Step 2F live recipe valuation, EV, or risk. Complete valuation runtime wiring remains Step 2M; no automatic purchase or production runtime is added.
 
 ### SteamDT Redis Limiter Integration Harness
 - `scripts/steamdt_redis_limiter_smoke.py` is an opt-in harness for validating the Redis limiter and Lua contract against a real test Redis server.

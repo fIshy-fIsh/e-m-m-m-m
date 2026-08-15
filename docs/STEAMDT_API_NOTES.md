@@ -1029,6 +1029,23 @@ Manual smoke safety and flow:
 - Empty candidate responses remain normal D4A `NO_CANDIDATES`; no empty snapshot is written and cached resolution reports a miss. Typed SteamDT business/transport/parser failures remain distinct internally and are not converted into fallback data.
 - Automated D4B tests use fake clients or local HTTPX transports only. The smoke imports neither cache nor limiter Redis composition, connects no Redis, and changes no provider, pipeline, scheduler, FastAPI, alerts, background work, batch refresh, market action, or production deployment wiring.
 
+## Phase 13A Step 2L-PIVOT-R1 Aggregate Market Data and CNY Assumption
+
+Source priority and price interpretation:
+- SteamDT is now the current MVP primary source for item/platform aggregate market data and valuation input. Completed SteamApis modules remain unchanged as optional future listing-level infrastructure and are not a required current runtime source.
+- Official SteamDT price documentation names `sellPrice` and `biddingPrice` but does not currently make an explicit CNY/RMB guarantee. The user has expressly approved a project interpretation that both fields are treated as CNY/RMB. Existing `SteamDTPlatformPrice.sell_price_cny`, `bidding_price_cny`, selector, and `PriceQuote.price_cny` contracts therefore remain unchanged; this assumption must not be cited as an official provider guarantee and no exchange-rate conversion is added.
+
+Aggregate service contract:
+- `get_steamdt_market_data()` borrows a narrow existing single-candidate client, validates one canonical requested `market_hash_name`, calls `get_price_single_candidates()` exactly once, and returns an immutable `SteamDTMarketDataResult` containing defensive `SteamDTPlatformPrice` clones with `raw=None`.
+- Provider order, duplicate platform records, exact platform spelling/case, optional platform-local item IDs, CNY-interpreted Decimal values, optional counts, and opaque `update_time` values are preserved. The service does not sort, deduplicate, select, cache, value recipes, or synthesize listing identities or links.
+- Documented price records are item/platform aggregates. They do not establish individual buyable listing IDs, purchase links, per-listing float/inspect data, or seller/account provenance. `platformItemId` remains only an opaque provider platform-local identity.
+
+Explicit one-request probe:
+- `scripts/run_live_steamdt_market_smoke.py` reuses `STEAMDT_RUN_PRICE_SNAPSHOT_SMOKE`, `STEAMDT_API_KEY`, and `STEAMDT_SMOKE_MARKET_HASH_NAME`. Exact normalized `true` is required before key, item, base URL, runtime, or network access.
+- One enabled process creates one owned HTTP client and one existing SteamDT client with `max_retries=0`, invokes the aggregate service once, and attempts exactly one official `GET /open/cs2/v1/price/single` request. It never calls batch, base, avg, kline, or wear, never requires Redis, and has no retry, fallback, second item, scheduler, or background task.
+- A parsed empty platform collection is a fixed failure without retry. Success output preserves safely escaped exact platform strings and reports only platform-ID/update-time presence plus aggregate CNY-interpreted price/count values. It omits the requested item text, item IDs, update-time values, key, Authorization/header data, raw response/mapping, and nested exception text.
+- Offline tests also exercise the existing `SteamDTHttpClient → SteamDTPriceProvider → PriceQuote.price_cny` chain as the explicit project assumption. This phase does not call Step 2F live recipe valuation, EV, or risk; full valuation runtime wiring remains Step 2M. It adds no automatic buying, login, Cookie handling, browser automation, marketplace write, or production deployment.
+
 ## Phase 12D5A Batch Refresh Planner, Deduplication, and Chunking Core
 
 Planning and identity contract:
