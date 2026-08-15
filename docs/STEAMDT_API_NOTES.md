@@ -1046,6 +1046,18 @@ Explicit one-request probe:
 - A parsed empty platform collection is a fixed failure without retry. Success output preserves safely escaped exact platform strings and reports only platform-ID/update-time presence plus aggregate CNY-interpreted price/count values. It omits the requested item text, item IDs, update-time values, key, Authorization/header data, raw response/mapping, and nested exception text.
 - Offline tests also exercise the existing `SteamDTHttpClient → SteamDTPriceProvider → PriceQuote.price_cny` chain as the explicit project assumption. This phase does not call Step 2F live recipe valuation, EV, or risk; full valuation runtime wiring remains Step 2M. It adds no automatic buying, login, Cookie handling, browser automation, marketplace write, or production deployment.
 
+## Phase 13A Step 2M-A1 BUFF-only Output Price Policy
+
+Project policy and selection boundary:
+- The exact, case-sensitive provider platform literal `BUFF` is the only eligible record for this project policy. The selector does not trim, case-fold, normalize, translate, alias, or match values such as `buff`, `BUFF163`, or `网易BUFF`.
+- `select_buff_output_price()` is a synchronous, offline policy over one existing `SteamDTMarketDataResult`. It requires exactly one exact BUFF record and a finite, positive `sell_price_cny`; absent and duplicate exact records fail closed with stable reasons and no cross-platform fallback.
+- The returned immutable `SteamDTBuffOutputPrice` retains the requested market identity, exact BUFF platform, gross sell price, optional sell count, opaque platform-local item ID, and opaque update time. It retains no raw provider mapping or source quote.
+
+Price meaning and exclusions:
+- The gross sell value continues to use the user-approved project CNY/RMB interpretation; this is not represented as an explicit current provider currency guarantee. No fee, exchange-rate conversion, net proceeds, EV, ROI, profit, or risk calculation occurs here.
+- `bidding_price_cny` and `bidding_count` are not read or used. Aggregate bidding data may represent a special-condition order whose requirements are absent from the response, so a bid is never treated as unconditional output value and never substitutes for a missing or unusable sell price.
+- The selected aggregate sell price is not an exact executable listing price, guaranteed realized proceeds, buy order, recent sale, or special-condition order. This policy does not modify the generic SteamDT selector/provider and adds no network, cache, Redis, SteamApis, scheduler, live-smoke, valuation-runtime, or Step 2M-A2 wiring.
+
 ## Phase 12D5A Batch Refresh Planner, Deduplication, and Chunking Core
 
 Planning and identity contract:
