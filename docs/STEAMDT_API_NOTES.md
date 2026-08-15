@@ -1070,6 +1070,22 @@ Batch and failure contract:
 - Ordinary per-item failures create no quote, add one aligned missing name, and emit one fixed redacted error with the canonical unique-name index. A1 policy failures expose only the allowlisted reason value; other exceptions expose neither nested text nor type. Later ordinary items continue, while process-control failures propagate without a partial result.
 - Tests inject fakes only. The provider owns no HTTP/runtime client, limiter, environment/key access, Redis, scheduler, or lifecycle resource and is not imported by valuation, recipe, FastAPI, Discord, or production runtime. This step does not imply executable proceeds, automatic purchase, live validation, Step 2M-A3, or production readiness.
 
+## Phase 13A Step 2M-A3 Offline BUFF Live Recipe Valuation Composition
+
+Closed composition and source:
+- `value_live_recipes_with_steamdt_buff_prices()` accepts one existing live construction result, a borrowed narrow market-data client, and the existing solver/risk inputs. It constructs exactly one `SteamDTBuffPriceProvider`, wraps it in one existing `ValuationService`, and delegates once to the existing `value_live_recipes()` authority.
+- The API exposes no arbitrary provider, valuation service, factory, source, output-name mapping, or fallback configuration. Every accepted output quote therefore comes from the existing aggregate → exact BUFF sell policy and has transient source `steamdt:buff`. The unchanged final `LiveRecipeValuationResult` does not retain per-output quote source.
+- Output names remain the exact authoritative `TradeupResult.output_market_hash_name` values. Existing stable deduplication occurs per recipe, preserves valued-result geometry/order, and adds no global prefetch or cache; the same output in separate recipes is requested once per recipe.
+
+Strict valuation and price meaning:
+- A2 failures include both missing and a fixed safe error, so no-BUFF, duplicate-BUFF, missing/nonpositive sell, and ordinary client failures inherit Step 2F's `PRICE_PROVIDER_ERROR` precedence. The complete affected recipe is rejected before EV or risk, metadata zero placeholders never become fallback prices, and later ordinary recipes continue.
+- Accepted values remain gross BUFF aggregate sells under the project CNY interpretation. The existing metrics authority applies the configured sell fee exactly once and retains ownership of EV/ROI; existing risk evaluation receives the original selected paint seeds, provenance IDs, risk configuration, and optional liquidity score. A3 reads no bid and implements none of this math itself.
+- `ValuationService` now explicitly re-raises provider-originated `MemoryError` before its unchanged ordinary provider-error conversion. This lets the already-established A2 and Step 2F process-control contract hold across the complete composition; cancellation, keyboard interruption, and system exit continue to propagate naturally.
+
+Offline boundary and limitations:
+- A3 owns no concrete HTTP client, key/environment access, retry, limiter, cache/Redis, task/concurrency, scheduler, SteamApis connection, runtime, lifecycle, purchase/listing action, or network path. Automated tests fake only the narrow market-data client and invoke the real provider, policy, valuation, fee/EV, and risk authorities.
+- Aggregate BUFF sell values are not executable listings or guaranteed net proceeds and receive no slippage/liquidity haircut. Existing exact output-name geometry is trusted unchanged, including the pre-existing possibility that its wear-qualified name and computed wear could disagree. Selected source IDs are preserved, but this composition does not pin originating pool observations while asynchronous valuation runs.
+
 ## Phase 12D5A Batch Refresh Planner, Deduplication, and Chunking Core
 
 Planning and identity contract:
