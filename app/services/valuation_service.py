@@ -76,6 +76,8 @@ class ValuationService:
 
         try:
             price_lookup_result = await self.price_provider.get_prices(output_names)
+        except MemoryError:
+            raise
         except Exception as exc:
             return ValuationResult(
                 tradeup_results=list(tradeup_results),

@@ -177,6 +177,27 @@ def test_provider_error_does_not_crash_valuation() -> None:
 
 
 
+def test_provider_memory_error_propagates_by_identity() -> None:
+    failure = MemoryError("memory")
+
+    class MemoryFailingPriceProvider:
+        async def get_price(self, market_hash_name: str):
+            raise failure
+
+        async def get_prices(self, market_hash_names: list[str]):
+            raise failure
+
+    service = ValuationService(MemoryFailingPriceProvider())
+
+    try:
+        asyncio.run(service.value_tradeup_results([_make_tradeup_result()]))
+    except MemoryError as caught:
+        assert caught is failure
+    else:
+        raise AssertionError("MemoryError should propagate")
+
+
+
 def test_missing_market_hash_names_are_recorded_correctly() -> None:
     service = ValuationService(MockPriceProvider(quotes_by_name={}))
 
