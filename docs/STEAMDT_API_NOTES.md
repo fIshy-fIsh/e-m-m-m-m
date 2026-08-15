@@ -1086,6 +1086,21 @@ Offline boundary and limitations:
 - A3 owns no concrete HTTP client, key/environment access, retry, limiter, cache/Redis, task/concurrency, scheduler, SteamApis connection, runtime, lifecycle, purchase/listing action, or network path. Automated tests fake only the narrow market-data client and invoke the real provider, policy, valuation, fee/EV, and risk authorities.
 - Aggregate BUFF sell values are not executable listings or guaranteed net proceeds and receive no slippage/liquidity haircut. Existing exact output-name geometry is trusted unchanged, including the pre-existing possibility that its wear-qualified name and computed wear could disagree. Selected source IDs are preserved, but this composition does not pin originating pool observations while asynchronous valuation runs.
 
+## Phase 13A Step 2M-A4 Opt-in Live BUFF PriceProvider Smoke
+
+Manual provider proof and guards:
+- `scripts/run_live_steamdt_buff_price_provider_smoke.py` is a standalone, disabled-by-default operator harness gated only by `STEAMDT_RUN_BUFF_PROVIDER_SMOKE=true`. It then requires the existing inherited `STEAMDT_API_KEY` and one `STEAMDT_SMOKE_MARKET_HASH_NAME`, in that order, before reading `STEAMDT_BASE_URL` or constructing any runtime. It never loads `.env`, application settings, files, or history.
+- One enabled process owns one HTTPX client with redirects disabled and one existing `SteamDTHttpClient` configured with `max_retries=0` and `dry_run=False`. It constructs the real `SteamDTBuffPriceProvider` and calls `get_price()` once, thereby exercising the existing single-candidate parser, aggregate helper, exact BUFF selector, and fixed `steamdt:buff` quote construction without reproducing them.
+- The only permitted outbound attempt is one `GET /open/cs2/v1/price/single` with one `marketHashName`. A request hook must attest exactly one attempt. The harness has no command retry, fallback, loop, second item, provider batch, official batch/base/avg/kline/wear request, redirect follow, task, thread, scheduler, or background operation.
+
+Price and output meaning:
+- Success requires exactly one exact case-sensitive `BUFF` record with a finite positive gross `sell_price_cny`; `bidding_price_cny` and every other platform are ignored and never provide fallback. The value uses the project-approved CNY/RMB interpretation, not an explicit current provider currency guarantee, and is neither an executable listing nor guaranteed proceeds.
+- The success summary exposes only execution/result flags, name-requested presence, fixed source `steamdt:buff`, quote presence, exact Decimal price, and request count. It omits the actual market name, API key, Authorization/header data, base/request URL, raw response and platform records, platform item ID, update time, bids, account/listing information, and links.
+- Exact BUFF selection failures expose only the existing allowlisted `SteamDTBuffPriceSelectionReason` value. Other ordinary failures use fixed reasons without exception type or message. Output is buffered until owned cleanup completes; process-control failures propagate after cleanup with no partial summary.
+
+Current boundary:
+- Automated A4 validation uses fakes and local HTTPX transports only; implementation does not execute the real smoke. The harness connects no SteamApis, direct BUFF API, Redis/cache, recipe construction, Step 2F valuation, EV, ROI, risk, scheduler, Discord, FastAPI, database, or purchase path and is not production runtime wiring.
+
 ## Phase 12D5A Batch Refresh Planner, Deduplication, and Chunking Core
 
 Planning and identity contract:
