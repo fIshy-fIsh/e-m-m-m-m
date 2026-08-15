@@ -1101,6 +1101,19 @@ Price and output meaning:
 Current boundary:
 - Automated A4 validation uses fakes and local HTTPX transports only; implementation does not execute the real smoke. The harness connects no SteamApis, direct BUFF API, Redis/cache, recipe construction, Step 2F valuation, EV, ROI, risk, scheduler, Discord, FastAPI, database, or purchase path and is not production runtime wiring.
 
+## Phase 13A Step 2M-A5-PRE1 Deterministic One-output Recipe Fixture
+
+Synthetic construction contract:
+- `build_steamdt_buff_live_recipe_fixture()` creates a formal deterministic synthetic recipe fixture, not a current buyable opportunity, real listing set, executable trade-up, or marketplace observation. It owns no runtime and performs no provider, valuation, EV, ROI, risk-evaluation, or network operation.
+- The caller supplies one exact nonblank already-trimmed `output_market_hash_name`. PRE1 puts that value only into the single next-rarity output metadata record; this step neither selects a real item nor proves that SteamDT can query the supplied name.
+- Ten fixed candidates for one synthetic Restricted input skin plus one complete synthetic Classified output topology are passed through the existing public `construct_recipe_selections()` authority. The existing output-candidate builder and trade-up engine therefore derive the exact `TradeupResult` name, probability, output float, wear, zero price placeholder, and zero contribution; the fixture does not handwrite or override output geometry.
+- The resulting contract is exactly one recipe, ten inputs, and one canonical output. That topology implies a future A3 provider-lookup budget of one, while PRE1 itself performs zero lookup and zero request.
+
+Compatibility provenance and limits:
+- Current live DTO validation requires 64-character lowercase hexadecimal source tokens and the `steamapis:buff163` compatibility namespace. PRE1 uses ten fixed synthetic compatibility tokens aligned to the solver-selected input order. They are not real SteamApis source-offer IDs, BUFF listing IDs, provider observations, pool entries, purchase provenance, or evidence of marketplace availability.
+- The fixture creates no SteamApis observation, payload, pool, WebSocket event, purchase link, inspect link, API key, raw provider data, output price, quote, valuation result, or risk decision. Fixed input prices, floats, seeds, collection, names, timestamp, and configs exist only to make construction deterministic and reviewable; future economics and risk over them remain synthetic rather than a market recommendation.
+- Output wear is independently engine-derived and is not appended to or repaired in the caller-supplied market name. PRE1 intentionally defers choosing and auditing a real queryable wear-qualified output identity to a later step.
+
 ## Phase 12D5A Batch Refresh Planner, Deduplication, and Chunking Core
 
 Planning and identity contract:
