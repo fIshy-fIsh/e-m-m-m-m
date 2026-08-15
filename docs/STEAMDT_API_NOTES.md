@@ -1058,6 +1058,18 @@ Price meaning and exclusions:
 - `bidding_price_cny` and `bidding_count` are not read or used. Aggregate bidding data may represent a special-condition order whose requirements are absent from the response, so a bid is never treated as unconditional output value and never substitutes for a missing or unusable sell price.
 - The selected aggregate sell price is not an exact executable listing price, guaranteed realized proceeds, buy order, recent sale, or special-condition order. This policy does not modify the generic SteamDT selector/provider and adds no network, cache, Redis, SteamApis, scheduler, live-smoke, valuation-runtime, or Step 2M-A2 wiring.
 
+## Phase 13A Step 2M-A2 BUFF-only PriceProvider Adapter
+
+Composition and provenance:
+- `SteamDTBuffPriceProvider` is a standalone offline adapter that borrows the narrow aggregate client and composes `get_steamdt_market_data()` → `select_buff_output_price()` → the existing `PriceQuote`. It does not duplicate exact BUFF matching, sell-price validation, duplicate handling, or no-BUFF policy.
+- Successful quotes preserve the canonical requested identity and exact Decimal gross BUFF sell value, use fixed source `steamdt:buff`, and retain `raw=None`. The source describes SteamDT plus the BUFF aggregate policy; it is not a purchase/listing identity.
+- The price remains the project-approved CNY interpretation rather than an explicit current provider currency guarantee. The adapter does not read bidding data or calculate fees, net proceeds, EV, ROI, profit, probability, or risk.
+
+Batch and failure contract:
+- Batch input follows the existing SteamDT provider convention: strip names, drop blanks, and stable-deduplicate canonical names by first occurrence. Each canonical unique name is resolved sequentially through the same single-item composition once; no official batch endpoint, task/concurrency, retry, sleep, cache, or fallback is used.
+- Ordinary per-item failures create no quote, add one aligned missing name, and emit one fixed redacted error with the canonical unique-name index. A1 policy failures expose only the allowlisted reason value; other exceptions expose neither nested text nor type. Later ordinary items continue, while process-control failures propagate without a partial result.
+- Tests inject fakes only. The provider owns no HTTP/runtime client, limiter, environment/key access, Redis, scheduler, or lifecycle resource and is not imported by valuation, recipe, FastAPI, Discord, or production runtime. This step does not imply executable proceeds, automatic purchase, live validation, Step 2M-A3, or production readiness.
+
 ## Phase 12D5A Batch Refresh Planner, Deduplication, and Chunking Core
 
 Planning and identity contract:
