@@ -1114,6 +1114,18 @@ Compatibility provenance and limits:
 - The fixture creates no SteamApis observation, payload, pool, WebSocket event, purchase link, inspect link, API key, raw provider data, output price, quote, valuation result, or risk decision. Fixed input prices, floats, seeds, collection, names, timestamp, and configs exist only to make construction deterministic and reviewable; future economics and risk over them remain synthetic rather than a market recommendation.
 - Output wear is independently engine-derived and is not appended to or repaired in the caller-supplied market name. PRE1 intentionally defers choosing and auditing a real queryable wear-qualified output identity to a later step.
 
+## Phase 13A Step 2M-A5-PRE2 Verified Output Identity
+
+Versioned identity and provenance:
+- `STEAMDT_BUFF_LIVE_RECIPE_VERIFIED_OUTPUT_MARKET_HASH_NAME` freezes the exact identity `M4A4 | Desolate Space (Factory New)` for a future controlled A5 valuation-plumbing smoke. The user manually query-verified that exact name on 2026-08-15 through `SteamDTBuffPriceProvider`, source `steamdt:buff`, with one request and a successful result.
+- `build_verified_steamdt_buff_live_recipe_fixture()` accepts no arguments and only passes that constant to the unchanged generic `build_steamdt_buff_live_recipe_fixture()` authority. The name is not stripped, normalized, case-folded, aliased, parsed, assembled, refreshed, or selected by price.
+- The exact full name enters the output metadata and is propagated by the existing output-candidate, solver, and trade-up engine path. The engine independently derives output float `0.0625` and wear `Factory New`; PRE2 only locks agreement for this specific fixture and does not add a general market-hash-name wear parser or suffix repair.
+
+Synthetic topology and limits:
+- This is a **verified real output name plus synthetic topology**, suitable only for future end-to-end valuation plumbing. PRE1's input skin, collection, candidate prices, floats, paint seeds, compatibility provenance, rarity topology, and timestamp remain synthetic. The fixture does not prove the M4A4's real collection, that these ten inputs can produce it, or that the synthetic rarity topology represents the real item.
+- The exact one-recipe, ten-input, one-canonical-output invariant and derived future provider budget of one remain unchanged. PRE2 performs zero provider lookup, network request, valuation, EV, ROI, or risk evaluation and neither implements nor runs the A5 live valuation smoke.
+- Historical query success is not a permanent provider guarantee and proves no current availability, buyability, executable listing/proceeds, stable price, profitability, recommendation, or acceptable risk. No historical observed price is fixture data or an expected future price, and no API key, raw response, provider record, secret, listing, observation, pool entry, or purchase link is retained.
+
 ## Phase 12D5A Batch Refresh Planner, Deduplication, and Chunking Core
 
 Planning and identity contract:

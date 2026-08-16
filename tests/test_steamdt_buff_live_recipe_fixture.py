@@ -19,9 +19,11 @@ from app.services.recipe_solver import (
 )
 from app.services.risk_filter import RiskFilterConfig
 from app.services.steamdt_buff_live_recipe_fixture import (
+    STEAMDT_BUFF_LIVE_RECIPE_VERIFIED_OUTPUT_MARKET_HASH_NAME,
     SteamDTBuffLiveRecipeFixture,
     SteamDTBuffLiveRecipeFixtureError,
     build_steamdt_buff_live_recipe_fixture,
+    build_verified_steamdt_buff_live_recipe_fixture,
 )
 
 OUTPUT_NAME = "Fixture Output Skin"
@@ -43,8 +45,14 @@ def test_public_api_is_exact_and_narrow() -> None:
     assert fixture_module.__all__ == (
         "SteamDTBuffLiveRecipeFixtureError",
         "SteamDTBuffLiveRecipeFixture",
+        "STEAMDT_BUFF_LIVE_RECIPE_VERIFIED_OUTPUT_MARKET_HASH_NAME",
         "build_steamdt_buff_live_recipe_fixture",
+        "build_verified_steamdt_buff_live_recipe_fixture",
     )
+    assert STEAMDT_BUFF_LIVE_RECIPE_VERIFIED_OUTPUT_MARKET_HASH_NAME == (
+        "M4A4 | Desolate Space (Factory New)"
+    )
+    assert type(STEAMDT_BUFF_LIVE_RECIPE_VERIFIED_OUTPUT_MARKET_HASH_NAME) is str
     assert [field.name for field in fields(SteamDTBuffLiveRecipeFixture)] == [
         "construction_result",
         "solver_config",
@@ -60,7 +68,96 @@ def test_public_api_is_exact_and_narrow() -> None:
         inspect.Parameter.empty
     )
     assert signature.return_annotation == "SteamDTBuffLiveRecipeFixture"
+    verified_signature = inspect.signature(
+        build_verified_steamdt_buff_live_recipe_fixture
+    )
+    assert list(verified_signature.parameters) == []
+    assert verified_signature.return_annotation == "SteamDTBuffLiveRecipeFixture"
     assert issubclass(SteamDTBuffLiveRecipeFixtureError, ValueError)
+
+
+def test_verified_builder_only_delegates_with_exact_output_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sentinel = object()
+    calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def capture(*args: object, **kwargs: object) -> object:
+        calls.append((args, kwargs))
+        return sentinel
+
+    monkeypatch.setattr(
+        fixture_module,
+        "build_steamdt_buff_live_recipe_fixture",
+        capture,
+    )
+
+    result = build_verified_steamdt_buff_live_recipe_fixture()
+
+    assert result is sentinel
+    assert calls == [
+        (
+            (),
+            {
+                "output_market_hash_name": (
+                    STEAMDT_BUFF_LIVE_RECIPE_VERIFIED_OUTPUT_MARKET_HASH_NAME
+                )
+            },
+        )
+    ]
+
+
+def test_verified_fixture_locks_name_and_factory_new_wear() -> None:
+    fixture = build_verified_steamdt_buff_live_recipe_fixture()
+    construction = fixture.construction_result
+
+    assert len(construction.recipes) == 1
+    recipe = construction.recipes[0].recipe
+    assert len(recipe.input_items) == 10
+    assert len(recipe.tradeup_results) == 1
+    canonical_output_names = tuple(
+        dict.fromkeys(
+            result.output_market_hash_name for result in recipe.tradeup_results
+        )
+    )
+    assert canonical_output_names == (
+        STEAMDT_BUFF_LIVE_RECIPE_VERIFIED_OUTPUT_MARKET_HASH_NAME,
+    )
+    result = recipe.tradeup_results[0]
+    assert result.output_market_hash_name == (
+        STEAMDT_BUFF_LIVE_RECIPE_VERIFIED_OUTPUT_MARKET_HASH_NAME
+    )
+    assert STEAMDT_BUFF_LIVE_RECIPE_VERIFIED_OUTPUT_MARKET_HASH_NAME.endswith(
+        "(Factory New)"
+    )
+    assert result.output_wear == "Factory New"
+    assert result.estimated_price_cny == Decimal("0")
+    assert result.expected_value_contribution == Decimal("0")
+
+
+def test_repeated_verified_builds_remain_deterministic_and_synthetic() -> None:
+    first = build_verified_steamdt_buff_live_recipe_fixture()
+    second = build_verified_steamdt_buff_live_recipe_fixture()
+
+    assert first == second
+    assert first is not second
+    assert first.construction_result is not second.construction_result
+    assert first.solver_config is not second.solver_config
+    assert first.risk_config is not second.risk_config
+    eligible = first.construction_result.classification.eligible
+    assert len(eligible) == 10
+    assert all(binding.candidate.source == COMPATIBILITY_SOURCE for binding in eligible)
+    assert all(binding.candidate.inspect_link is None for binding in eligible)
+    future_lookup_budget = sum(
+        len(
+            dict.fromkeys(
+                result.output_market_hash_name
+                for result in live_recipe.recipe.tradeup_results
+            )
+        )
+        for live_recipe in first.construction_result.recipes
+    )
+    assert future_lookup_budget == 1
 
 
 def test_result_is_frozen_keyword_only_and_repr_suppressed() -> None:
@@ -415,6 +512,63 @@ def test_process_control_failures_propagate_by_identity(
         assert caught is failure
     else:
         raise AssertionError("process-control failure should propagate")
+
+
+def test_verified_wrapper_ast_is_exact_single_delegation() -> None:
+    source = MODULE_PATH.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    wrappers = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "build_verified_steamdt_buff_live_recipe_fixture"
+    ]
+
+    assert len(wrappers) == 1
+    wrapper = wrappers[0]
+    assert wrapper.args.posonlyargs == []
+    assert wrapper.args.args == []
+    assert wrapper.args.vararg is None
+    assert wrapper.args.kwonlyargs == []
+    assert wrapper.args.kw_defaults == []
+    assert wrapper.args.kwarg is None
+    executable_body = wrapper.body
+    if (
+        executable_body
+        and isinstance(executable_body[0], ast.Expr)
+        and isinstance(executable_body[0].value, ast.Constant)
+        and isinstance(executable_body[0].value.value, str)
+    ):
+        executable_body = executable_body[1:]
+    assert len(executable_body) == 1
+    assert isinstance(executable_body[0], ast.Return)
+    delegated = executable_body[0].value
+    assert isinstance(delegated, ast.Call)
+    assert isinstance(delegated.func, ast.Name)
+    assert delegated.func.id == "build_steamdt_buff_live_recipe_fixture"
+    assert delegated.args == []
+    assert len(delegated.keywords) == 1
+    keyword = delegated.keywords[0]
+    assert keyword.arg == "output_market_hash_name"
+    assert isinstance(keyword.value, ast.Name)
+    assert keyword.value.id == (
+        "STEAMDT_BUFF_LIVE_RECIPE_VERIFIED_OUTPUT_MARKET_HASH_NAME"
+    )
+
+
+def test_production_fixture_omits_historical_price_and_runtime_values() -> None:
+    source = MODULE_PATH.read_text(encoding="utf-8")
+
+    assert "539.88" not in source
+    for forbidden in (
+        "PriceQuote",
+        "SteamDTBuffPriceProvider",
+        "SteamDTMarketDataClient",
+        "ValuationService",
+        "value_live_recipes",
+        "evaluate_opportunity",
+    ):
+        assert forbidden not in source
 
 
 def test_module_has_no_handwritten_tradeup_geometry_or_runtime_boundary() -> None:

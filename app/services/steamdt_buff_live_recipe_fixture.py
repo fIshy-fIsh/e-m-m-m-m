@@ -35,10 +35,16 @@ _FIXED_SCANNED_AT = datetime(2026, 8, 15, tzinfo=UTC)
 _SOURCE_IDS = tuple(f"{index:064x}" for index in range(1, 11))
 _PAINT_SEEDS = tuple(range(1001, 1011))
 
+STEAMDT_BUFF_LIVE_RECIPE_VERIFIED_OUTPUT_MARKET_HASH_NAME = (
+    "M4A4 | Desolate Space (Factory New)"
+)
+
 __all__ = (
     "SteamDTBuffLiveRecipeFixtureError",
     "SteamDTBuffLiveRecipeFixture",
+    "STEAMDT_BUFF_LIVE_RECIPE_VERIFIED_OUTPUT_MARKET_HASH_NAME",
     "build_steamdt_buff_live_recipe_fixture",
+    "build_verified_steamdt_buff_live_recipe_fixture",
 )
 
 
@@ -115,6 +121,17 @@ def build_steamdt_buff_live_recipe_fixture(
         raise
     except Exception:
         raise SteamDTBuffLiveRecipeFixtureError from None
+
+
+def build_verified_steamdt_buff_live_recipe_fixture(
+) -> SteamDTBuffLiveRecipeFixture:
+    """Build the deterministic fixture with the verified output identity."""
+
+    return build_steamdt_buff_live_recipe_fixture(
+        output_market_hash_name=(
+            STEAMDT_BUFF_LIVE_RECIPE_VERIFIED_OUTPUT_MARKET_HASH_NAME
+        )
+    )
 
 
 def _validate_output_market_hash_name(value: object) -> str:
