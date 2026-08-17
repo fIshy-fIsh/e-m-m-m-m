@@ -1126,6 +1126,22 @@ Synthetic topology and limits:
 - The exact one-recipe, ten-input, one-canonical-output invariant and derived future provider budget of one remain unchanged. PRE2 performs zero provider lookup, network request, valuation, EV, ROI, or risk evaluation and neither implements nor runs the A5 live valuation smoke.
 - Historical query success is not a permanent provider guarantee and proves no current availability, buyability, executable listing/proceeds, stable price, profitability, recommendation, or acceptable risk. No historical observed price is fixture data or an expected future price, and no API key, raw response, provider record, secret, listing, observation, pool entry, or purchase link is retained.
 
+## Phase 13A Step 2M-A5 Opt-in Full Live Recipe Valuation Smoke
+
+Controlled runtime and composition:
+- `scripts/run_live_steamdt_buff_live_recipe_valuation_smoke.py` is a standalone manual operator harness, independently disabled unless inherited `STEAMDT_RUN_BUFF_LIVE_RECIPE_VALUATION_SMOKE` is stripped case-insensitive `true`. It then requires inherited `STEAMDT_API_KEY`, reads `STEAMDT_BASE_URL`, calls the zero-argument verified fixture builder, and validates one recipe, ten inputs, one canonical output, and the exact locked identity before constructing an HTTP runtime. It never reads `STEAMDT_SMOKE_MARKET_HASH_NAME`, loads `.env`, searches files/history, or prompts.
+- An enabled runtime owns one HTTPX client with redirects disabled and one existing `SteamDTHttpClient` configured with `max_retries=0` and `dry_run=False`. One request hook attests a maximum one attempt to the existing `GET /open/cs2/v1/price/single` path. There is no command retry, fallback, batch/base/avg/kline/wear call, second item, SteamApis connection, cache/Redis, scheduler, task/thread, background operation, or purchase path.
+- The harness passes only the verified fixture's construction, solver/risk configs, and borrowed client to `value_live_recipes_with_steamdt_buff_prices()`. That existing closed A3 composition remains responsible for the aggregate helper, exact case-sensitive BUFF gross sell selection, fixed transient `steamdt:buff` quote, `ValuationService`, Step 2F complete-price rejection, fee/EV/ROI, probability, and risk. Bids, other platforms, and construction zero placeholders never provide fallback.
+
+Result and output contract:
+- Success requires one completely valued opportunity, no rejection, one request, aligned recipe/provenance/output structure, and a completed risk decision. `risk_passed: no` remains smoke success because metrics and risk executed successfully even though the business rule rejected the synthetic economics.
+- The success summary contains only fixed construction/count/path/evaluation attestations, risk yes/no, and request count. It prints no actual output identity, input/output price, numeric EV/revenue/profit/ROI, float, paint seed, source/listing/platform ID, bid, provider record, raw response, key, header, URL, or exception detail. Stable failure summaries use only the frozen allowlist and are buffered until owned cleanup succeeds.
+- `LiveRecipeValuationResult` does not retain `PriceQuote.source`. Therefore `price_source_path: steamdt:buff` attests that A5 invoked the closed A3 construction; it is not source provenance dynamically recovered from the final DTO.
+
+Evidence limits:
+- A5 combines one real aggregate output-price lookup with PRE1's synthetic input skin, collection, candidate prices, floats, seeds, compatibility provenance, rarity topology, timestamp, and identities. Its EV, ROI, profit, and risk are intentionally not printed because they have no current marketplace-opportunity meaning. Success proves no real collection topology, input availability or buyability, output availability, executable proceeds, profitable trade-up, recommendation, or acceptable risk.
+- Automated validation is entirely offline with narrow fakes and local HTTPX transports. The implementation does not automatically execute the live smoke and is not wired into FastAPI, scheduler, scanning, alerts, database, cache, or production runtime.
+
 ## Phase 12D5A Batch Refresh Planner, Deduplication, and Chunking Core
 
 Planning and identity contract:
