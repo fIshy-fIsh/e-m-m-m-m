@@ -9,17 +9,8 @@ from pathlib import Path
 if __package__ is None or __package__ == "":
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.clients.buff_anonymous_listing_client import (
-    BUFF_ANONYMOUS_BASE_URL,
-    BUFF_ANONYMOUS_SELL_ORDER_PATH,
-    BUFF_ANONYMOUS_USER_AGENT,
-)
-from app.services.buff_listing_provider import (
-    BuffListingProvider,
-    BuffListingProviderError,
-)
+from app.services.buff_listing_provider import BuffListingProvider, BuffListingProviderError
 from scripts.buff_listing_smoke_utils import (
-    BuffListingSmokeRequestState,
     BuffListingSmokeRuntime,
     BuffListingSmokeRuntimeFactory,
     budget_was_exceeded,
@@ -30,46 +21,8 @@ from scripts.buff_listing_smoke_utils import (
 )
 from scripts.steamdt_smoke_utils import parse_bool_env
 
-RUN_GATE_ENV = "BUFF_RUN_ANONYMOUS_SELL_ORDER_SCHEMA_SMOKE"
+RUN_GATE_ENV = "BUFF_RUN_LISTING_PROVIDER_SMOKE"
 GOODS_ID_ENV = "BUFF_READONLY_SMOKE_GOODS_ID"
-BASE_URL = BUFF_ANONYMOUS_BASE_URL
-ENDPOINT_PATH = BUFF_ANONYMOUS_SELL_ORDER_PATH
-USER_AGENT = BUFF_ANONYMOUS_USER_AGENT
-BuffAnonymousSchemaRequestState = BuffListingSmokeRequestState
-_FAILURE_REASONS = frozenset(
-    {
-        "opt_in_disabled",
-        "goods_id_missing",
-        "goods_id_invalid",
-        "runtime_failed",
-        "request_failed",
-        "anonymous_access_unavailable",
-        "response_not_json",
-        "response_schema_invalid",
-        "items_missing",
-        "no_items",
-        "listing_id_missing",
-        "price_invalid",
-        "paintwear_invalid",
-        "request_count_invalid",
-        "close_failed",
-    }
-)
-_create_http_smoke_runtime = create_buff_listing_smoke_runtime
-
-_REASON_MAP = {
-    "response_not_json": "response_not_json",
-    "response_schema_invalid": "response_schema_invalid",
-    "anonymous_access_unavailable": "anonymous_access_unavailable",
-    "items_missing": "items_missing",
-    "listing_id_invalid": "listing_id_missing",
-    "price_invalid": "price_invalid",
-    "paintwear_invalid": "paintwear_invalid",
-    "asset_id_invalid": "response_schema_invalid",
-    "paintseed_invalid": "response_schema_invalid",
-    "request_failed": "request_failed",
-    "invalid_goods_id": "goods_id_invalid",
-}
 
 
 async def async_main(
@@ -78,7 +31,7 @@ async def async_main(
     printer: Callable[[str], None] = print,
     runtime_factory: BuffListingSmokeRuntimeFactory | None = None,
 ) -> int:
-    """Run one explicitly enabled anonymous BUFF schema request."""
+    """Run one explicitly enabled BUFF listing-provider request."""
 
     environ = os.environ if environ is None else environ
     if not parse_bool_env(environ, RUN_GATE_ENV):
@@ -89,7 +42,6 @@ async def async_main(
             "BUFF requests sent: 0",
         )
         return 0
-
     goods_value = environ.get(GOODS_ID_ENV)
     if goods_value is None or (type(goods_value) is str and not goods_value.strip()):
         return _guard_failure(printer, "goods_id_missing")
@@ -122,18 +74,12 @@ async def async_main(
                     success = [
                         "live_smoke_executed: yes",
                         "result: success",
-                        "anonymous_request: yes",
-                        "cookie_used: no",
-                        "login_used: no",
-                        "page_num: 1",
-                        "item_list_present: yes",
-                        "listing_item_present: yes",
-                        "listing_id_present: yes",
-                        "price_valid: yes",
-                        "paintwear_valid: yes",
-                        "asset_id_present: yes",
-                        f"paintseed_present: {'yes' if first.paintseed is not None else 'no'}",
+                        f"listing_count: {len(listings)}",
+                        "first_listing_id_present: yes",
+                        "first_listing_price_valid: yes",
+                        "first_listing_paintwear_valid: yes",
                     ]
+                    del first
                 state = try_read_request_state(runtime)
                 if state is None:
                     failure = "request_count_invalid"
@@ -146,15 +92,15 @@ async def async_main(
                     success = []
             except (MemoryError, asyncio.CancelledError):
                 raise
-            except BuffListingProviderError as exc:
-                failure = _REASON_MAP.get(exc.reason, "response_schema_invalid")
+            except BuffListingProviderError:
+                failure = "provider_failed"
                 state = try_read_request_state(runtime)
                 if state is None:
                     failure = "request_count_invalid"
                 elif budget_was_exceeded(state):
                     failure = "request_count_invalid"
             except Exception:
-                failure = "request_failed"
+                failure = "provider_failed"
                 state = try_read_request_state(runtime)
                 if state is None:
                     failure = "request_count_invalid"
@@ -180,7 +126,6 @@ async def async_main(
             f"BUFF requests sent: {'unavailable' if dispatched is None else dispatched}",
         )
         return 1
-
     print_lines(printer, *success, f"BUFF requests sent: {dispatched}")
     return 0
 

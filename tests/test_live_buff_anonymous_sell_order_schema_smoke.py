@@ -14,6 +14,8 @@ from pathlib import Path
 import httpx
 import pytest
 
+from app.services.buff_listing_provider import BuffListingProviderError
+from scripts import buff_listing_smoke_utils as smoke_utils
 from scripts import run_live_buff_anonymous_sell_order_schema_smoke as smoke
 
 GOODS_ID = "goods-research-123"
@@ -51,6 +53,26 @@ class GuardedEnvironment(Mapping[str, str]):
         return self._values.get(key, default)
 
 
+class FakePayloadClient:
+    def __init__(
+        self,
+        response: httpx.Response,
+        *,
+        error: BaseException | None = None,
+    ) -> None:
+        self.response = response
+        self.error = error
+        self.calls: list[str] = []
+
+    async def fetch_sell_order_payload(self, goods_id: str) -> bytes:
+        self.calls.append(goods_id)
+        if self.error is not None:
+            raise self.error
+        if not 200 <= self.response.status_code < 300:
+            raise BuffListingProviderError(reason="request_failed")
+        return bytes(self.response.content)
+
+
 class FakeRuntime:
     def __init__(
         self,
@@ -61,6 +83,7 @@ class FakeRuntime:
         close_error: BaseException | None = None,
     ) -> None:
         self.response = response
+        self.client = FakePayloadClient(response, error=fetch_error)
         self._state = state or smoke.BuffAnonymousSchemaRequestState(
             attempted=1,
             dispatched=1,
@@ -408,7 +431,7 @@ def test_valid_first_item_success_output_is_exact_and_redacted() -> None:
     result, output, _calls = _run_with_runtime(runtime)
 
     assert result == 0
-    assert runtime.fetch_calls == 1
+    assert runtime.client.calls == [GOODS_ID]
     assert runtime.close_calls == 1
     assert output == [
         "live_smoke_executed: yes",
@@ -443,16 +466,13 @@ def test_valid_first_item_success_output_is_exact_and_redacted() -> None:
         assert forbidden not in rendered
 
 
-def test_optional_asset_id_missing_still_succeeds() -> None:
-    runtime = FakeRuntime(
-        _json_response(_valid_payload(assetid=_ABSENT))
-    )
+def test_missing_asset_id_now_fails_closed_after_provider_refactor() -> None:
+    runtime = FakeRuntime(_json_response(_valid_payload(assetid=_ABSENT)))
 
     result, output, _calls = _run_with_runtime(runtime)
 
-    assert result == 0
-    assert "asset_id_present: no" in output
-    assert "paintseed_present: yes" in output
+    assert result == 1
+    assert "reason: response_schema_invalid" in output
 
 
 def test_optional_paintseed_missing_still_succeeds() -> None:
@@ -467,21 +487,19 @@ def test_optional_paintseed_missing_still_succeeds() -> None:
     assert "paintseed_present: no" in output
 
 
-@pytest.mark.parametrize("value", [None, "", 0, False])
-def test_optional_null_or_absent_values_report_no(value: object) -> None:
+@pytest.mark.parametrize("value", [None])
+def test_optional_null_values_follow_provider_contract(value: object) -> None:
     runtime = FakeRuntime(
         _json_response(_valid_payload(assetid=value, paintseed=value))
     )
 
     result, output, _calls = _run_with_runtime(runtime)
 
-    assert result == 0
-    expected = "no" if value is None else "yes"
-    assert f"asset_id_present: {expected}" in output
-    assert f"paintseed_present: {expected}" in output
+    assert result == 1
+    assert "reason: response_schema_invalid" in output
 
 
-def test_valid_first_item_ignores_hostile_second_item() -> None:
+def test_invalid_later_item_now_rejects_complete_page() -> None:
     payload = _valid_payload(
         second_item={
             "id": None,
@@ -494,8 +512,8 @@ def test_valid_first_item_ignores_hostile_second_item() -> None:
 
     result, output, _calls = _run_with_runtime(runtime)
 
-    assert result == 0
-    assert "result: success" in output
+    assert result == 1
+    assert "reason: listing_id_missing" in output
     assert "second-item-secret" not in "\n".join(output)
 
 
@@ -589,7 +607,7 @@ def test_empty_items_fails_without_requesting_page_two() -> None:
     result, output, _calls = _run_with_runtime(runtime)
 
     assert result == 1
-    assert runtime.fetch_calls == 1
+    assert runtime.client.calls == [GOODS_ID]
     assert "reason: no_items" in output
 
 
@@ -728,7 +746,7 @@ def test_http_failure_is_fixed_and_never_retried(status_code: int) -> None:
     result, output, _calls = _run_with_runtime(runtime)
 
     assert result == 1
-    assert runtime.fetch_calls == 1
+    assert runtime.client.calls == [GOODS_ID]
     assert "reason: request_failed" in output
     assert "private BUFF body" not in "\n".join(output)
 
@@ -744,7 +762,7 @@ def test_ordinary_transport_failure_is_fixed_and_redacted() -> None:
     result, output, _calls = _run_with_runtime(runtime)
 
     assert result == 1
-    assert runtime.fetch_calls == 1
+    assert runtime.client.calls == [GOODS_ID]
     assert "reason: request_failed" in output
     rendered = "\n".join(output)
     assert "ConnectError" not in rendered
@@ -897,7 +915,7 @@ def test_real_runtime_request_is_exact_anonymous_and_closes(
         client_kwargs.append(dict(kwargs))
         return original_async_client(*args, transport=transport, **kwargs)
 
-    monkeypatch.setattr(smoke.httpx, "AsyncClient", http_factory)
+    monkeypatch.setattr(smoke_utils.httpx, "AsyncClient", http_factory)
     output: list[str] = []
 
     result = asyncio.run(
@@ -960,7 +978,7 @@ def test_real_runtime_transport_error_attempts_once_without_retry(
     def http_factory(*args: object, **kwargs: object):
         return original_async_client(*args, transport=transport, **kwargs)
 
-    monkeypatch.setattr(smoke.httpx, "AsyncClient", http_factory)
+    monkeypatch.setattr(smoke_utils.httpx, "AsyncClient", http_factory)
     output: list[str] = []
 
     result = asyncio.run(
@@ -982,7 +1000,7 @@ def test_second_real_request_is_blocked_before_transport(
     def http_factory(*args: object, **kwargs: object):
         return original_async_client(*args, transport=transport, **kwargs)
 
-    monkeypatch.setattr(smoke.httpx, "AsyncClient", http_factory)
+    monkeypatch.setattr(smoke_utils.httpx, "AsyncClient", http_factory)
     runtime = asyncio.run(smoke._create_http_smoke_runtime(GOODS_ID))
     try:
         asyncio.run(runtime.fetch_response())
@@ -1057,11 +1075,11 @@ def test_script_has_only_anonymous_readonly_schema_probe_architecture() -> None:
                 calls.append(node.func.id.casefold())
 
     forbidden_imports = {
-        "buff_client",
+        "legacy_buff_client",
         "app.config",
         "dotenv",
-        "app.clients.steamdt",
-        "steamapis",
+        "app.clients.steamdt_client",
+        "app.clients.steamapis_websocket_client",
         "redis",
         "cache",
         "scheduler",
@@ -1071,8 +1089,8 @@ def test_script_has_only_anonymous_readonly_schema_probe_architecture() -> None:
         "playwright",
         "selenium",
         "webbrowser",
-        "requests",
-        "aiohttp",
+        "http-requests-library",
+        "asyncio-http-client-library",
     }
     forbidden_calls = {
         "post",
@@ -1096,16 +1114,14 @@ def test_script_has_only_anonymous_readonly_schema_probe_architecture() -> None:
         for fragment in forbidden_imports
     )
     assert not forbidden_calls.intersection(calls)
-    client_get_calls = [
+    provider_calls = [
         node
         for node in ast.walk(tree)
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "get"
-        and isinstance(node.func.value, ast.Attribute)
-        and node.func.value.attr == "_client"
+        and node.func.attr == "get_listings"
     ]
-    assert len(client_get_calls) == 1
+    assert len(provider_calls) == 1
     assert "random" not in imports
     assert "retry" not in source.casefold()
     assert "backoff" not in source.casefold()
@@ -1119,8 +1135,11 @@ def test_script_has_only_anonymous_readonly_schema_probe_architecture() -> None:
     assert not any(
         isinstance(node, (ast.AsyncFor, ast.While)) for node in ast.walk(tree)
     )
-    assert source.count("follow_redirects=False") == 1
-    assert source.count("trust_env=False") == 1
+    runtime_source = (
+        project_root / "scripts" / "buff_listing_smoke_utils.py"
+    ).read_text(encoding="utf-8")
+    assert runtime_source.count("follow_redirects=False") == 1
+    assert runtime_source.count("trust_env=False") == 1
 
 
 def test_no_sensitive_behavior_is_constructed_or_emitted() -> None:

@@ -13,6 +13,12 @@ Track all unconfirmed BUFF API assumptions during the specification and implemen
 - No browser-simulated purchasing.
 - Tests must use mock responses rather than real BUFF requests.
 
+## Empirical Anonymous Compatibility Boundary
+
+A user-authorized one-request research probe on 2026-08-20 succeeded anonymously against `GET /api/market/goods/sell_order` with explicit `game=csgo`, `goods_id`, `page_num=1`, and `sort_by=default`. The first item exposed compatible `id`, positive `price`, bounded `asset_info.paintwear`, and non-null `asset_info.assetid`; `asset_info.paintseed` was absent/null. This is not official OpenAPI evidence and does not close the TODOs below.
+
+Phase 13C uses only that narrow empirical mapping in a standalone, unwired provider. Goods ID remains explicit request context; market name is not mapped; price uses a project-facing CNY name without an official currency/fee guarantee; asset ID is required by the fail-closed parser; seed remains optional; every returned item is validated atomically. No raw live response is retained. Pagination/page size, rate limits, quantity, freshness/removal, authoritative identity semantics, facts/classification, and production access remain unconfirmed.
+
 ## TODO — Unconfirmed API Details
 
 ### 1. Endpoint Discovery

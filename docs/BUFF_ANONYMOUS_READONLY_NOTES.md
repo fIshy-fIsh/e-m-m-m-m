@@ -22,21 +22,11 @@ The request is one anonymous bodyless GET through one owned HTTPX client. Redire
 
 If anonymous access is rejected or unavailable, the correct outcome is a fixed safe failure. The harness does not add browser-like headers or attempt circumvention.
 
-## Probed response shape
+## Historical Phase 13B probe evidence
 
-For current compatibility only, the harness checks:
+The original Step 2B probe inspected exactly the first returned item, ignored later items, and recorded only passive first-item presence for asset ID and seed. Its one authorized manual run proved a compatible first-item ID, positive price, bounded paintwear, non-null asset ID, and absent/null seed at that moment. That historical evidence did not establish all-item coverage, asset type, or long-term field availability.
 
-```text
-code == "OK"
-data.items is a nonempty list
-items[0].id is a present compatible sell-order identifier
-items[0].price is finite and greater than zero
-items[0].asset_info.paintwear is finite and within [0,1]
-```
-
-It optionally reports only whether `asset_info.assetid` and `asset_info.paintseed` are present. It inspects exactly the first item, ignores later items and unknown fields, requests no second page, and calls no wear or other enrichment endpoint.
-
-Third-party behavior evidence indicates `items[].id` is used as a sell-order ID. This harness tests that current compatibility behavior only; it does not establish official BUFF identity semantics. Price and paintwear acceptance prove only parseable first-item fields, not confirmed currency, fee inclusion, availability at purchase time, or transaction actionability.
+Phase 13C supersedes the script-local first-item parser with the reusable provider below. The current smoke now validates the complete returned item list atomically, requires every item to carry a nonblank string asset ID, and keeps only paint seed optional. It still requests no second page and calls no enrichment endpoint.
 
 ## Output and data retention
 
@@ -63,3 +53,22 @@ It does not prove:
 - production readiness of direct BUFF ingestion.
 
 All automated tests use fake runtimes or local HTTPX transports and perform zero real network. Implementation and offline validation do not execute the live smoke; a later manual run requires an explicit user decision after commit.
+
+## Phase 13C reusable listing provider
+
+Phase 13C extracts the empirical request and response logic into one shared anonymous client and one provider. `BuffListingProvider.get_listings(goods_id)` performs one borrowed-client call and returns an ordered list of immutable `BuffListing` values. The parser validates every returned item atomically; any malformed item rejects the complete page, while an exact empty item list returns an empty list.
+
+The mapped fields are deliberately narrow:
+
+- `listing_id` comes from exact `items[].id`;
+- `goods_id` comes from the explicit validated request context;
+- `price_cny` is the positive finite `items[].price` under a project-facing CNY interpretation, not an official currency or fee guarantee;
+- `paintwear` comes from finite `[0,1]` `items[].asset_info.paintwear`;
+- required `asset_id` comes from a nonblank string `items[].asset_info.assetid`;
+- absent/null `items[].asset_info.paintseed` becomes `None`, while a valid present integer is retained;
+- `market_hash_name` remains `None` because no response name path has been verified;
+- `source` is fixed to `buff`.
+
+Unknown names, quantity-like values, seller/account fields, links, raw payload, and transaction data are discarded. The provider does not implement Phase 12 qualification, facts, `CandidateListing`, scanner, solver, EV/ROI/risk, pagination, cache, scheduling, or production wiring.
+
+The historical schema smoke and the independently gated provider smoke both reuse the same client, provider, and one-request runtime. They remain anonymous, no-Cookie, no-login, no-auth, no-retry, first-page-only, and disabled by default. Phase 13C automated validation does not execute either live smoke and does not retain a live response fixture.
