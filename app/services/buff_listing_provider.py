@@ -7,7 +7,6 @@ from decimal import Decimal, InvalidOperation
 
 from app.clients.buff_anonymous_listing_client import (
     BuffAnonymousListingPayloadClient,
-    BuffAnonymousListingRequestError,
 )
 
 _FIXED_ERROR = "invalid anonymous BUFF listing provider contract"
@@ -65,31 +64,25 @@ class BuffListing:
     source: str = "buff"
 
     def __post_init__(self) -> None:
+        failed = False
+        market_name = self.market_hash_name
         try:
-            object.__setattr__(
-                self,
-                "listing_id",
-                _exact_canonical_string(self.listing_id),
-            )
-            object.__setattr__(self, "goods_id", _canonical_string(self.goods_id))
-            market_name = self.market_hash_name
+            _exact_canonical_string(self.listing_id)
+            _exact_canonical_string(self.goods_id)
             if market_name is not None:
-                market_name = _exact_canonical_string(market_name)
-            object.__setattr__(self, "market_hash_name", market_name)
+                _exact_canonical_string(market_name)
             _validate_positive_decimal(self.price_cny)
             _validate_paintwear(self.paintwear)
-            object.__setattr__(
-                self,
-                "asset_id",
-                _exact_canonical_string(self.asset_id),
-            )
+            _exact_canonical_string(self.asset_id)
             _validate_paintseed(self.paintseed)
             if self.source != "buff":
                 raise ValueError
         except MemoryError:
             raise
         except Exception:
-            raise BuffListingProviderError(reason="response_schema_invalid") from None
+            failed = True
+        if failed:
+            raise BuffListingProviderError(reason="response_schema_invalid")
 
 
 class BuffListingProvider:
@@ -101,15 +94,17 @@ class BuffListingProvider:
         self._client = client
 
     async def get_listings(self, goods_id: str) -> list[BuffListing]:
-        canonical_goods_id = _validate_request_goods_id(goods_id)
+        canonical_goods_id = _normalize_provider_goods_id(goods_id)
+        failed = False
+        payload: bytes | None = None
         try:
             payload = await self._client.fetch_sell_order_payload(canonical_goods_id)
         except (MemoryError, asyncio.CancelledError):
             raise
-        except BuffAnonymousListingRequestError:
-            raise BuffListingProviderError(reason="request_failed") from None
         except Exception:
-            raise BuffListingProviderError(reason="request_failed") from None
+            failed = True
+        if failed or payload is None:
+            raise BuffListingProviderError(reason="request_failed")
         return parse_buff_listing_response(payload, goods_id=canonical_goods_id)
 
 
@@ -120,9 +115,11 @@ def parse_buff_listing_response(
 ) -> list[BuffListing]:
     """Parse a complete anonymous response atomically into ordered listings."""
 
-    canonical_goods_id = _validate_request_goods_id(goods_id)
+    canonical_goods_id = _validate_exact_goods_id(goods_id)
     if type(payload) is not bytes:
         raise BuffListingProviderError(reason="response_not_json")
+    failed = False
+    value: object = None
     try:
         value = json.loads(
             payload,
@@ -133,7 +130,9 @@ def parse_buff_listing_response(
     except MemoryError:
         raise
     except Exception:
-        raise BuffListingProviderError(reason="response_not_json") from None
+        failed = True
+    if failed:
+        raise BuffListingProviderError(reason="response_not_json")
 
     if type(value) is not dict:
         raise BuffListingProviderError(reason="response_schema_invalid")
@@ -219,13 +218,32 @@ def _parse_item(
     )
 
 
-def _validate_request_goods_id(value: object) -> str:
+def _normalize_provider_goods_id(value: object) -> str:
+    failed = False
+    canonical = ""
     try:
-        return _canonical_string(value)
+        canonical = _canonical_string(value)
     except MemoryError:
         raise
     except Exception:
-        raise BuffListingProviderError(reason="invalid_goods_id") from None
+        failed = True
+    if failed:
+        raise BuffListingProviderError(reason="invalid_goods_id")
+    return canonical
+
+
+def _validate_exact_goods_id(value: object) -> str:
+    failed = False
+    try:
+        canonical = _exact_canonical_string(value)
+    except MemoryError:
+        raise
+    except Exception:
+        failed = True
+        canonical = ""
+    if failed:
+        raise BuffListingProviderError(reason="invalid_goods_id")
+    return canonical
 
 
 def _canonical_string(value: object) -> str:
@@ -249,15 +267,20 @@ def _parse_required_string(
     reason: str,
     item_index: int,
 ) -> str:
+    failed = False
+    canonical = ""
     try:
-        return _exact_canonical_string(value)
+        canonical = _exact_canonical_string(value)
     except MemoryError:
         raise
     except Exception:
+        failed = True
+    if failed:
         raise BuffListingProviderError(
             reason=reason,
             item_index=item_index,
-        ) from None
+        )
+    return canonical
 
 
 def _parse_decimal(value: object) -> Decimal | None:

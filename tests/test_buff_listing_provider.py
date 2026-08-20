@@ -24,6 +24,11 @@ FIXTURE = (
 )
 
 
+def _assert_context_free(error: BaseException) -> None:
+    assert error.__cause__ is None
+    assert error.__context__ is None
+
+
 class Client:
     def __init__(self, payload: bytes, error: BaseException | None = None) -> None:
         self.payload = payload
@@ -140,6 +145,7 @@ def test_invalid_item_is_rejected(
     assert captured.value.reason == reason
     assert captured.value.item_index == 0
     assert captured.value.__cause__ is None
+    _assert_context_free(captured.value)
 
 
 def test_whitespace_padded_response_identity_is_rejected() -> None:
@@ -154,6 +160,32 @@ def test_whitespace_padded_response_identity_is_rejected() -> None:
     with pytest.raises(BuffListingProviderError) as captured:
         parse_buff_listing_response(_bytes([item]), goods_id=GOODS_ID)
     assert captured.value.reason == "asset_id_invalid"
+
+
+    with pytest.raises(BuffListingProviderError) as captured:
+        parse_buff_listing_response(b'{"secret_marker":', goods_id=GOODS_ID)
+    assert captured.value.reason == "response_not_json"
+    assert "secret_marker" not in str(captured.value)
+    _assert_context_free(captured.value)
+
+
+def test_direct_dto_and_parser_reject_padded_goods_id() -> None:
+    with pytest.raises(BuffListingProviderError) as captured:
+        BuffListing(
+            listing_id="listing",
+            goods_id=" padded ",
+            market_hash_name=None,
+            price_cny=Decimal("1"),
+            paintwear=Decimal("0.1"),
+            asset_id="asset",
+            paintseed=None,
+        )
+    _assert_context_free(captured.value)
+
+    with pytest.raises(BuffListingProviderError) as captured:
+        parse_buff_listing_response(_payload(), goods_id=" padded ")
+    assert captured.value.reason == "invalid_goods_id"
+    _assert_context_free(captured.value)
 
 
 def test_invalid_second_item_rejects_whole_page() -> None:

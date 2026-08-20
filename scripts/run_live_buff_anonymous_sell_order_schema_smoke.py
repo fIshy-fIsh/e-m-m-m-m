@@ -55,7 +55,6 @@ _FAILURE_REASONS = frozenset(
         "close_failed",
     }
 )
-_create_http_smoke_runtime = create_buff_listing_smoke_runtime
 
 _REASON_MAP = {
     "response_not_json": "response_not_json",

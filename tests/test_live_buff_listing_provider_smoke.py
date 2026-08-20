@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import os
+import runpy
 import socket
-import subprocess
 import sys
 from pathlib import Path
 
@@ -200,20 +199,31 @@ def test_process_control_propagates_after_cleanup(error: BaseException) -> None:
 
 
 @pytest.mark.parametrize("entrypoint", ["direct", "module"])
-def test_disabled_entrypoints_are_offline(entrypoint: str) -> None:
+def test_disabled_entrypoints_are_offline(
+    entrypoint: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     root = Path(__file__).resolve().parents[1]
-    env = os.environ.copy()
-    env.pop(smoke.RUN_GATE_ENV, None)
-    env[smoke.GOODS_ID_ENV] = "private"
-    command = (
-        [sys.executable, "scripts/run_live_buff_listing_provider_smoke.py"]
-        if entrypoint == "direct"
-        else [sys.executable, "-m", "scripts.run_live_buff_listing_provider_smoke"]
-    )
-    result = subprocess.run(command, cwd=root, env=env, text=True, capture_output=True)
-    assert result.returncode == 0
-    assert "reason: opt_in_disabled" in result.stdout
-    assert "private" not in result.stdout
+    monkeypatch.delenv(smoke.RUN_GATE_ENV, raising=False)
+    monkeypatch.setenv(smoke.GOODS_ID_ENV, "private")
+    module_name = "scripts.run_live_buff_listing_provider_smoke"
+    monkeypatch.delitem(sys.modules, module_name, raising=False)
+
+    with pytest.raises(SystemExit) as captured:
+        if entrypoint == "direct":
+            runpy.run_path(
+                str(root / "scripts" / "run_live_buff_listing_provider_smoke.py"),
+                run_name="__main__",
+            )
+        else:
+            runpy.run_module(module_name, run_name="__main__", alter_sys=True)
+
+    output = capsys.readouterr()
+    assert captured.value.code == 0
+    assert "reason: opt_in_disabled" in output.out
+    assert "private" not in output.out
+    assert output.err == ""
 
 
 def test_source_has_no_forbidden_behavior() -> None:

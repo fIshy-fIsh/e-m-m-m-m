@@ -4,9 +4,8 @@ import ast
 import asyncio
 import inspect
 import json
-import os
+import runpy
 import socket
-import subprocess
 import sys
 from collections.abc import Mapping
 from pathlib import Path
@@ -1001,11 +1000,11 @@ def test_second_real_request_is_blocked_before_transport(
         return original_async_client(*args, transport=transport, **kwargs)
 
     monkeypatch.setattr(smoke_utils.httpx, "AsyncClient", http_factory)
-    runtime = asyncio.run(smoke._create_http_smoke_runtime(GOODS_ID))
+    runtime = asyncio.run(smoke_utils.create_buff_listing_smoke_runtime(GOODS_ID))
     try:
-        asyncio.run(runtime.fetch_response())
+        asyncio.run(runtime.client.fetch_sell_order_payload(GOODS_ID))
         with pytest.raises(RuntimeError):
-            asyncio.run(runtime.fetch_response())
+            asyncio.run(runtime.client.fetch_sell_order_payload(GOODS_ID))
     finally:
         asyncio.run(runtime.aclose())
 
@@ -1016,42 +1015,42 @@ def test_second_real_request_is_blocked_before_transport(
         budget_exceeded=True,
     )
     assert transport.closed is True
+    assert not hasattr(runtime, "fetch_response")
 
 
 @pytest.mark.parametrize("entrypoint", ["direct", "module"])
-def test_disabled_entrypoints_are_zero_network_safe(entrypoint: str) -> None:
+def test_disabled_entrypoints_are_zero_network_safe(
+    entrypoint: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     project_root = Path(__file__).resolve().parents[1]
-    env = os.environ.copy()
-    env.pop(smoke.RUN_GATE_ENV, None)
-    env[smoke.GOODS_ID_ENV] = "entrypoint-private-goods"
-    env["BUFF_API_KEY"] = "entrypoint-private-key"
-    env["BUFF_API_SECRET"] = "entrypoint-private-secret"
-    env["HTTPS_PROXY"] = "https://must-not-connect.invalid"
-    command = (
-        [sys.executable, "scripts/run_live_buff_anonymous_sell_order_schema_smoke.py"]
-        if entrypoint == "direct"
-        else [
-            sys.executable,
-            "-m",
-            "scripts.run_live_buff_anonymous_sell_order_schema_smoke",
-        ]
-    )
+    monkeypatch.delenv(smoke.RUN_GATE_ENV, raising=False)
+    monkeypatch.setenv(smoke.GOODS_ID_ENV, "entrypoint-private-goods")
+    monkeypatch.setenv("BUFF_API_KEY", "entrypoint-private-key")
+    monkeypatch.setenv("BUFF_API_SECRET", "entrypoint-private-secret")
+    monkeypatch.setenv("HTTPS_PROXY", "https://must-not-connect.invalid")
+    module_name = "scripts.run_live_buff_anonymous_sell_order_schema_smoke"
+    monkeypatch.delitem(sys.modules, module_name, raising=False)
 
-    result = subprocess.run(
-        command,
-        cwd=project_root,
-        env=env,
-        text=True,
-        capture_output=True,
-        timeout=30,
-    )
+    with pytest.raises(SystemExit) as captured:
+        if entrypoint == "direct":
+            script_path = (
+                project_root
+                / "scripts"
+                / "run_live_buff_anonymous_sell_order_schema_smoke.py"
+            )
+            runpy.run_path(str(script_path), run_name="__main__")
+        else:
+            runpy.run_module(module_name, run_name="__main__", alter_sys=True)
 
-    assert result.returncode == 0
-    assert result.stderr == ""
-    assert "reason: opt_in_disabled" in result.stdout
-    assert "BUFF requests sent: 0" in result.stdout
-    assert "entrypoint-private" not in result.stdout
-    assert "must-not-connect.invalid" not in result.stdout
+    output = capsys.readouterr()
+    assert captured.value.code == 0
+    assert output.err == ""
+    assert "reason: opt_in_disabled" in output.out
+    assert "BUFF requests sent: 0" in output.out
+    assert "entrypoint-private" not in output.out
+    assert "must-not-connect.invalid" not in output.out
 
 
 def test_script_has_only_anonymous_readonly_schema_probe_architecture() -> None:

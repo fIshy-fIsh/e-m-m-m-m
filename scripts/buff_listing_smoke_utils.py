@@ -11,7 +11,6 @@ from app.clients.buff_anonymous_listing_client import (
     BUFF_ANONYMOUS_USER_AGENT,
     BuffAnonymousListingHttpClient,
     BuffAnonymousListingPayloadClient,
-    validate_buff_anonymous_listing_request,
 )
 
 
@@ -41,16 +40,31 @@ class _RequestBudgetExceeded(RuntimeError):
 
 
 @dataclass
+class _BudgetedPayloadClient:
+    _delegate: BuffAnonymousListingPayloadClient
+    _attempted: list[int]
+    _dispatched: list[int]
+    _budget_exceeded: list[bool]
+
+    async def fetch_sell_order_payload(self, goods_id: str) -> bytes:
+        self._attempted[0] += 1
+        if self._attempted[0] > 1:
+            self._budget_exceeded[0] = True
+            raise _RequestBudgetExceeded
+        self._dispatched[0] += 1
+        return await self._delegate.fetch_sell_order_payload(goods_id)
+
+
+@dataclass
 class _HttpSmokeRuntime:
     _http_client: httpx.AsyncClient
-    _client: BuffAnonymousListingHttpClient
-    _goods_id: str
+    _client: _BudgetedPayloadClient
     _attempted: list[int]
     _dispatched: list[int]
     _budget_exceeded: list[bool]
 
     @property
-    def client(self) -> BuffAnonymousListingHttpClient:
+    def client(self) -> _BudgetedPayloadClient:
         return self._client
 
     @property
@@ -60,10 +74,6 @@ class _HttpSmokeRuntime:
             dispatched=self._dispatched[0],
             budget_exceeded=self._budget_exceeded[0],
         )
-
-    async def fetch_response(self) -> httpx.Response:
-        await self._client.fetch_sell_order_payload(self._goods_id)
-        return httpx.Response(200)
 
     async def aclose(self) -> None:
         await self._http_client.aclose()
@@ -75,15 +85,6 @@ async def create_buff_listing_smoke_runtime(
     attempted = [0]
     dispatched = [0]
     exceeded = [False]
-
-    async def guard(request: httpx.Request) -> None:
-        attempted[0] += 1
-        if attempted[0] > 1:
-            exceeded[0] = True
-            raise _RequestBudgetExceeded
-        validate_buff_anonymous_listing_request(request, goods_id=goods_id)
-        dispatched[0] += 1
-
     http_client = httpx.AsyncClient(
         base_url=BUFF_ANONYMOUS_BASE_URL,
         timeout=10.0,
@@ -93,20 +94,30 @@ async def create_buff_listing_smoke_runtime(
             "Accept": "application/json",
             "User-Agent": BUFF_ANONYMOUS_USER_AGENT,
         },
-        event_hooks={"request": [guard]},
     )
+    construction_error: BaseException | None = None
+    delegate: BuffAnonymousListingHttpClient | None = None
     try:
-        client = BuffAnonymousListingHttpClient(http_client)
+        delegate = BuffAnonymousListingHttpClient(http_client)
     except BaseException as exc:
+        construction_error = exc
+    if construction_error is not None or delegate is None:
         try:
             await http_client.aclose()
         except Exception:
-            raise exc from None
-        raise
+            pass
+        if construction_error is not None:
+            raise construction_error
+        raise RuntimeError("BUFF listing smoke runtime construction failed")
+    client = _BudgetedPayloadClient(
+        _delegate=delegate,
+        _attempted=attempted,
+        _dispatched=dispatched,
+        _budget_exceeded=exceeded,
+    )
     return _HttpSmokeRuntime(
         _http_client=http_client,
         _client=client,
-        _goods_id=goods_id,
         _attempted=attempted,
         _dispatched=dispatched,
         _budget_exceeded=exceeded,

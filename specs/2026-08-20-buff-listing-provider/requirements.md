@@ -46,7 +46,9 @@ validate_buff_anonymous_listing_request
 async def fetch_sell_order_payload(self, goods_id: str) -> bytes: ...
 ```
 
-The concrete client borrows an injected `httpx.AsyncClient`, owns no lifecycle, and performs one bodyless GET per call with exact ordered query:
+The concrete client borrows an injected `httpx.AsyncClient`, owns no lifecycle, and performs one bodyless GET per call with exact ordered query. It constructs the absolute request independently of borrowed-client base URL, default query, headers, cookies, authentication, or redirect defaults; validates an exact Host/Accept/User-Agent allowlist and all URL/query/body invariants before dispatch; and calls `send(..., auth=None, follow_redirects=False)` explicitly. Unsafe inherited configuration cannot enter the request and invalid request construction fails before transport.
+
+External goods-ID padding is normalized only by `fetch_sell_order_payload()` and `BuffListingProvider.get_listings()`. The exported request validator, direct parser, and DTO require exact already-canonical strings.
 
 ```text
 game=csgo
@@ -146,6 +148,8 @@ fixed transparent User-Agent
 ```
 
 It exposes a runtime containing the shared payload client and exact attempted/dispatched/budget-exceeded state. A pre-send hook blocks attempt two before transport and validates attempt one with the public request validator. The runtime closes the owned client; providers borrow it.
+
+The shared runtime exposes only `client`, request state, and `aclose`; it has no raw `fetch_response` path. Its budgeted payload-client wrapper blocks call two before delegating to the concrete HTTP client and therefore before transport.
 
 Both BUFF live smoke scripts must use this utility. Application code never imports scripts.
 

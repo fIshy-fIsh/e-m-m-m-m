@@ -98,7 +98,7 @@ Until BUFF details are confirmed:
 1. do not hard-code uncertain endpoints
 2. do not hard-code uncertain signature logic
 3. do not hard-code uncertain field mappings into upper-layer business logic
-4. keep raw payloads for replay and parser updates
+4. keep raw payloads for replay and parser updates only in a future separately approved production mapping; the anonymous research provider intentionally retains no raw live response
 5. use mock responses in tests
 6. do not invent endpoints, signing methods, request parameters, or response fields
 7. wait for the user to provide official BUFF documentation details before finalizing endpoint/signature/field mapping

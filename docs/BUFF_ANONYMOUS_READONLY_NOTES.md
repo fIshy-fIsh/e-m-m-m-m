@@ -71,4 +71,6 @@ The mapped fields are deliberately narrow:
 
 Unknown names, quantity-like values, seller/account fields, links, raw payload, and transaction data are discarded. The provider does not implement Phase 12 qualification, facts, `CandidateListing`, scanner, solver, EV/ROI/risk, pagination, cache, scheduling, or production wiring.
 
+The current client constructs the absolute request independently from the injected HTTPX client's base URL, default query, headers, cookies, authentication, and redirect setting. It validates an exact request/header allowlist before dispatch, explicitly disables per-send authentication and redirects, and borrows rather than mutates or closes caller-owned HTTP state. `BuffListingProvider.get_listings()` is the only boundary that strips external goods-ID padding; the client request validator, direct parser, DTO, listing ID, optional market name, and asset ID require exact already-canonical strings.
+
 The historical schema smoke and the independently gated provider smoke both reuse the same client, provider, and one-request runtime. They remain anonymous, no-Cookie, no-login, no-auth, no-retry, first-page-only, and disabled by default. Phase 13C automated validation does not execute either live smoke and does not retain a live response fixture.

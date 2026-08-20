@@ -100,6 +100,7 @@ def test_non_success_status_is_fixed(status: int) -> None:
 
     assert str(captured.value) == "anonymous BUFF listing request failed"
     assert captured.value.__cause__ is None
+    assert captured.value.__context__ is None
     assert len(transport.requests) == 1
     assert "private response" not in repr(captured.value)
 
@@ -114,6 +115,86 @@ def test_invalid_goods_id_stops_before_transport(goods_id: object) -> None:
     finally:
         asyncio.run(http_client.aclose())
     assert transport.requests == []
+
+
+def test_hostile_client_defaults_do_not_enter_request() -> None:
+    transport = Transport()
+    auth_calls: list[httpx.Request] = []
+
+    class HeaderAuth(httpx.Auth):
+        def auth_flow(self, request: httpx.Request):
+            auth_calls.append(request)
+            request.headers["Authorization"] = "Bearer token-secret"
+            yield request
+
+    http_client = httpx.AsyncClient(
+        base_url="https://wrong.invalid/private",
+        params={"attacker": "query"},
+        headers={
+            "Authorization": "Bearer secret",
+            "Cookie": "session=secret",
+            "X-API-Key": "api-secret",
+            "X-CSRF-Token": "csrf-secret",
+            "Sec-Fetch-Site": "same-origin",
+            "Referer": "https://wrong.invalid",
+        },
+        cookies={"session": "secret"},
+        auth=HeaderAuth(),
+        follow_redirects=True,
+        transport=transport,
+    )
+    client = BuffAnonymousListingHttpClient(http_client)
+    try:
+        asyncio.run(client.fetch_sell_order_payload(GOODS_ID))
+    finally:
+        asyncio.run(http_client.aclose())
+    assert auth_calls == []
+    assert len(transport.requests) == 1
+    request = transport.requests[0]
+    assert request.url.host == "buff.163.com"
+    assert list(request.url.params) == ["game", "goods_id", "page_num", "sort_by"]
+    assert set(name.casefold() for name in request.headers) == {
+        "accept",
+        "host",
+        "user-agent",
+    }
+
+
+def test_redirecting_hostile_client_is_not_followed() -> None:
+    class RedirectTransport(Transport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            self.requests.append(request)
+            return httpx.Response(
+                302,
+                headers={"Location": "https://wrong.invalid/secret"},
+                request=request,
+            )
+
+    transport = RedirectTransport()
+    http_client = httpx.AsyncClient(
+        base_url="https://wrong.invalid",
+        follow_redirects=True,
+        transport=transport,
+    )
+    client = BuffAnonymousListingHttpClient(http_client)
+    try:
+        with pytest.raises(BuffAnonymousListingRequestError) as captured:
+            asyncio.run(client.fetch_sell_order_payload(GOODS_ID))
+    finally:
+        asyncio.run(http_client.aclose())
+    assert len(transport.requests) == 1
+    assert captured.value.__cause__ is None
+    assert captured.value.__context__ is None
+
+
+def test_client_normalizes_external_goods_id_only() -> None:
+    transport = Transport()
+    http_client, client = _client(transport)
+    try:
+        asyncio.run(client.fetch_sell_order_payload(f"  {GOODS_ID}  "))
+    finally:
+        asyncio.run(http_client.aclose())
+    assert transport.requests[0].url.params["goods_id"] == GOODS_ID
 
 
 def test_client_borrows_http_client() -> None:
@@ -137,7 +218,6 @@ def test_module_has_no_retry_or_forbidden_behavior() -> None:
         "sleep(",
         "page_size",
         "cookie=",
-        "auth=",
         "proxy=",
         "login",
         "purchase",
