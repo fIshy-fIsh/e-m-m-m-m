@@ -87,6 +87,18 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
   - Other `BaseException` values (cancellation, `KeyboardInterrupt`, `SystemExit`) propagate naturally and do not get reclassified.
 - **Future revisit:** only if a separately authorized retry policy proves `MemoryError` is recoverable in a specific layer.
 
+## D-IDENTITY-002 — Freeze identity source work and proceed with synthetic/offline pipeline only
+
+- **Date:** 2026-08-21 (Phase 13G-0)
+- **Decision:** Choose option D — freeze identity source work and proceed with a synthetic/offline pipeline only. No native BUFF identity source, no external provider, no hybrid, no resolver backend. The resolver contract remains a forward-only abstraction; `None` continues to be the only real answer.
+- **Status:** Active.
+- **Reason:** No verified anonymous/read-only native BUFF source exists; SteamDT identity fields are explicitly unverified and violate the anonymous-only stance; SteamApis compatibility IDs are documented as not authoritative for BUFF; a manual verified mapping is acceptable only as a future offline fallback, not as a primary source.
+- **Alternatives considered:** A (continue searching for native BUFF identity source), B (accept external identity provider), C (hybrid approach).
+- **Why A is not chosen now:** the open `docs/BUFF_API_NOTES.md` TODOs remain unresolved; no empirically verified anonymous/read-only source is available.
+- **Why B is rejected:** the project's anonymous-only policy forbids key-driven providers; no in-scope provider is verified.
+- **Why C is rejected:** there is no verified primary source to combine with any fallback.
+- **Future revisit:** if a separately verified anonymous/read-only BUFF identity source is obtained, Phase 13F-0's reverse direction can be added; a manual verified mapping can be introduced as a future offline fallback only.
+
 ## D-IDENTITY-001 — No verified goods_id ↔ market_hash_name mapping (Path B)
 
 - **Date:** 2026-08-21

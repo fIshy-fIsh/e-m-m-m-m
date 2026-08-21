@@ -78,6 +78,26 @@ The components remain in the tree as paused, offline-tested optional infrastruct
 
 ### Phase 13C — BUFF listing provider (committed `caf5922`, hardened `2a8a1e8`) — exact contract preserved.
 
+### Phase 13H-0 — Synthetic trade-up pipeline integration (in progress)
+
+- Adds `app/services/trade_up_pipeline.py`: `TradeUpInputMetadata`, `TradeUpInputMetadataResolver`, `InMemoryTradeUpInputMetadataResolver`, `candidates_to_input_items`.
+- Proves `TradeUpInputCandidate` can feed the existing trade-up engine via a synthetic metadata adapter; unresolved/unknown names are skipped.
+- No live provider, no identity resolver, no BUFF endpoint, no SteamApis, no scanner/scheduler, no purchase flow.
+
+### Phase 13G-0 — Identity source decision (in progress)
+
+- See `D-IDENTITY-002` in `DECISION_LOG.md`.
+- Choice **D**: freeze identity source work and proceed with synthetic/offline pipeline only.
+- No new endpoint, mapping, or resolver backend is added.
+- The forward direction (`BuffItemIdentityResolver.resolve(market_hash_name) → BuffItemIdentity | None`) remains the only verified resolver surface; `None` is the only real answer.
+
+### Phase 13F-0 — Identity resolution architecture review (in progress)
+
+- Docs-only review of candidate identity providers (BUFF goods metadata, SteamDT identity fields, external metadata catalog, manual verified mapping).
+- Forward direction (`resolve(market_hash_name) → BuffItemIdentity | None`) is supported.
+- Reverse direction (`resolve_by_goods_id(goods_id) → BuffItemIdentity | None`) is recorded as a missing contract to be added later; no current module is modified.
+- No candidate provider is approved for live wiring. No new endpoint, mapping, or resolver backend is added.
+
 ### Phase 13E-0 — Trade-up input candidate boundary (in progress)
 
 - Adds the standalone `TradeUpInputCandidate` DTO between `BuffListing` and the future trade-up engine.
