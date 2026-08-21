@@ -1,5 +1,20 @@
 # BUFF API Notes / TODO
 
+## Phase 13D-0 goods identity bridge TODO
+
+A read-only audit found no verified live source for canonical `market_hash_name ↔ goods_id` pairs. The anonymous sell-order endpoint consumes a caller-supplied goods ID and does not establish a market name. Phase 12 pairs are synthetic, legacy goods-info transport is unimplemented, SteamDT platform IDs remain opaque, and SteamApis compatibility identities are not BUFF goods IDs.
+
+Phase 13D-0 therefore adds only a canonical identity DTO and resolver protocol with normal unresolved `None`; it contains no mappings or implementation. Before a resolver can be implemented, confirm:
+
+- the authoritative lawful mapping source and exact field semantics;
+- whether lookup is one-to-one, one-to-many, or time/version dependent;
+- collision, alias, case, wear-qualified-name, StatTrak, and Souvenir behavior;
+- update/removal/freshness lifecycle and reproducible provenance;
+- failure and ambiguity semantics without first/last fallback;
+- whether reverse lookup is needed and separately authoritative.
+
+Do not populate the resolver from listing IDs, asset IDs, SteamDT `platformItemId`/base raw IDs, SteamApis purchase links/compatibility hashes, URLs, seeds, or name parsing.
+
 ## Purpose
 Track all unconfirmed BUFF API assumptions during the specification and implementation phases. This file exists to prevent the project from inventing endpoints, signatures, request parameters, or response fields.
 

@@ -54,6 +54,14 @@ It does not prove:
 
 All automated tests use fake runtimes or local HTTPX transports and perform zero real network. Implementation and offline validation do not execute the live smoke; a later manual run requires an explicit user decision after commit.
 
+## Phase 13D-0 goods identity bridge status
+
+The anonymous listing request consumes an explicit caller-provided `goods_id`; it does not discover that ID and the response parser does not extract or verify a canonical `market_hash_name`. `BuffListing.market_hash_name` therefore remains `None`.
+
+A repository audit found no verified live `market_hash_name ↔ goods_id` mapping. Phase 13D-0 adds only the immutable `BuffItemIdentity` shape and asynchronous `BuffItemIdentityResolver` protocol. `None` is the normal unresolved outcome. There is no concrete resolver, mapping table, fixture, endpoint, configuration, cache, or provider integration, and no identity is derived from listing ID, asset ID, SteamDT platform IDs, SteamApis compatibility IDs, URLs, hashes, seeds, or item-name syntax.
+
+A later implementation may satisfy the resolver only after separately verified mapping evidence exists. Until then, the anonymous provider remains keyed by a pre-known goods ID and cannot be invoked authoritatively from a market name.
+
 ## Phase 13C reusable listing provider
 
 Phase 13C extracts the empirical request and response logic into one shared anonymous client and one provider. `BuffListingProvider.get_listings(goods_id)` performs one borrowed-client call and returns an ordered list of immutable `BuffListing` values. The parser validates every returned item atomically; any malformed item rejects the complete page, while an exact empty item list returns an empty list.
