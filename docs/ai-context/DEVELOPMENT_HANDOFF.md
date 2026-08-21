@@ -76,7 +76,13 @@ SteamApis exploration was paused because:
 
 The components remain in the tree as paused, offline-tested optional infrastructure. Resume only after a verified live smoke and a separate BUFF identity strategy.
 
-### Phase 13C — BUFF listing provider (committed `caf5922`, hardened `2a8a1e8`)
+### Phase 13C — BUFF listing provider (committed `caf5922`, hardened `2a8a1e8`) — exact contract preserved.
+
+### Phase 13E-0 — Trade-up input candidate boundary (in progress)
+
+- Adds the standalone `TradeUpInputCandidate` DTO between `BuffListing` and the future trade-up engine.
+- `market_hash_name` is `None` by default; identity resolution is explicitly deferred.
+- No adapter, no resolver, no scanner, no solver, no SteamApis, no purchase.
 
 - `BuffListing` DTO, strict all-item parser, `BuffListingProvider`, shared one-request smoke runtime, provider live smoke, anonymous client hardening.
 
