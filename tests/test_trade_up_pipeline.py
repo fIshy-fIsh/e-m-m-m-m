@@ -57,6 +57,13 @@ def test_public_api_is_exact() -> None:
         "TradeUpInputMetadataResolver",
         "InMemoryTradeUpInputMetadataResolver",
         "candidates_to_input_items",
+        "SyntheticBasketConfig",
+        "SyntheticBasket",
+        "SyntheticScaleCase",
+        "build_synthetic_basket",
+        "drive_pipeline_path",
+        "drive_enrichment_path",
+        "compare_partition_paths",
     )
 
 
