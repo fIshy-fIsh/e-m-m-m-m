@@ -64,7 +64,8 @@ The missing bridge `market_hash_name ↔ BUFF goods_id` has **no verified source
 ## Current Git State (verify live; authoritative snapshot)
 
 - **Branch:** `feature/steamdt-cache-rate-limit`
-- **HEAD:** `330bdcbad187ee7a8cf9124694a7e13b0fc72e08` — `add synthetic trade-up pipeline integration`
-- **Uncommitted:** Phase 13I-3 enrichment boundary + Phase 13I-2 intrinsic flags + Phase 13I-0/13I-1 design reviews remain in the working tree (see DEVELOPMENT_HANDOFF).
+- **HEAD:** `15492481d7cb042367b579a88744620affb6210a` — `add synthetic scanner-scale validation`
+- **Latest completed phase:** Phase 13K-1 (synthetic BuffListing candidate adapter implementation, uncommitted in the working tree).
+- **Working tree:** contains uncommitted Phase 13K-1 implementation files (`app/services/buff_listing_candidate_adapter.py`, `tests/test_buff_listing_candidate_adapter.py`) plus Phase 13K-0 / 13K-2 documentation updates under `docs/ai-context/`.
 
 > Prefer `git status` and `git log --oneline -n 20` over this snapshot.

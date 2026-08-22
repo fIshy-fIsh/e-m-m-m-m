@@ -168,3 +168,112 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 - **Status:** Active.
 - **Reason:** the abstract bridge remains unresolved and the candidate/metadata ownership rule is the operative boundary rule. Reopening either would invalidate the seam sealed by `D-ENRICH-001`.
 - **Future revisit:** only when a verified anonymous/read-only BUFF identity source is independently obtained, or when a separately authorized ownership review demands a change.
+
+## D-VALIDATION-001 — Synthetic scale validation as canonical seam regression check
+
+- **Date:** 2026-08-22 (Phase 13J-1)
+- **Decision:** Establish synthetic scale validation (SMALL / MIXED / DIRTY cases) as the regression guard for the candidate → enrichment → trade-up engine boundary. The validation is **not** a replacement for production testing; it only protects architecture boundaries before live wiring exists.
+- **Validation surface (offline only):**
+  - 13H-0 `candidates_to_input_items` path (legacy, predates intrinsic flags).
+  - 13I-3 `enrich_candidates` path (canonical).
+  - Existing `calculate_tradeup_results`, `calculate_opportunity_metrics`, `evaluate_opportunity`.
+- **Required invariants asserted per case:**
+  - Partition agreement: pipeline kept count == enrichment kept count.
+  - Accepted item signature equivalence: `(market_hash_name, price_cny, actual_float, stattrak, souvenir)` sorted across both paths.
+  - Rejection reason coverage: `MARKET_HASH_NAME_UNRESOLVED` and `METADATA_NOT_FOUND` both surface.
+  - Engine compatibility: `calculate_tradeup_results` accepts the enriched `InputItem` list without exception; `_validate_input_items` failures are classified and reported, never swallowed.
+  - EV / Risk reproducibility: two reruns of the same basket produce byte-equal `OpportunityMetrics` and `RiskDecision`.
+  - Determinism: `random.Random(seed)` produces byte-equal baskets across reruns.
+- **Status:** Active.
+- **Reason:** the candidate → enrichment → engine chain is the only architectural seam with no live wiring. The synthetic validation is the only available regression mechanism until a verified identity source enables production candidate flow.
+- **Future revisit:** only to extend the validation surface when the canonical seam gains new fields, never to relax invariants. The validation must continue to pass against any future change touching the seam.
+
+## D-MIGRATION-001 — Intrinsic flag ownership migration requirement
+
+- **Date:** 2026-08-22 (Phase 13J-1)
+- **Decision:** Phase 13I-2 moved ownership of `stattrak` / `souvenir` to `TradeUpInputCandidate`. Phase 13H-0 `trade_up_pipeline.py` predates this decision and still hard-codes `stattrak=False, souvenir=False` on the `InputItem` it builds. This is documented technical debt, not a license to copy.
+- **Status:** Active.
+- **Reason:** the 13H-0 behavior was correct at the time it was written (the candidate had no intrinsic flags yet). Now that 13I-2 has moved the flags onto the candidate, the canonical path must be:
+  - `TradeUpInputCandidate` owns `stattrak`, `souvenir`, `market_hash_name`, `price_cny`, `paintwear`, `asset_id`, `source`.
+  - `TradeUpInputEnrichment` carries those flags verbatim into `InputItem`.
+  - Metadata / catalog layers must not overwrite intrinsic candidate flags.
+- **Migration requirement:** before any production / live candidate wiring, the canonical path is the only path. A future production candidate adapter MUST NOT replicate the 13H-0 hard-coded `False`; it MUST route through `TradeUpInputEnrichment` so the candidate-owned flags survive.
+- **Future revisit:** when the production candidate adapter is designed, the 13H-0 hard-code is to be retired from any production code path. It remains acceptable only inside the synthetic validation suite that explicitly tests against the historical behavior.
+
+## D-ADAPTER-001 — BuffListing candidate adapter boundary
+
+- **Date:** 2026-08-22 (Phase 13K-1)
+- **Decision:** Establish `app/services/buff_listing_candidate_adapter.py` as the dedicated production candidate conversion boundary.
+- **Responsibility:** `BuffListing → TradeUpInputCandidate | CandidateAdapterRejection`.
+- **Adapter does not own:**
+  - Identity resolution.
+  - Metadata enrichment.
+  - Trade-up calculation.
+  - Scanner orchestration.
+  - Purchase execution.
+- **Dependency direction (frozen):**
+  ```
+  BuffListingProvider
+        ↓
+  Adapter
+        ↓
+  TradeUpInputCandidate
+        ↓
+  TradeUpInputEnrichment
+        ↓
+  InputItem
+        ↓
+  trade-up engine
+  ```
+- **Status:** Active.
+- **Reason:** the candidate seam established by `D-ENRICH-001` had no upstream bridge; the adapter is that bridge. Localizing it in a single module keeps the dependency graph acyclic and makes the seam testable in isolation.
+- **Future revisit:** only if a second listing source is added (different adapter) or if the upstream listing DTO is replaced.
+
+## D-ADAPTER-002 — Candidate adapter uses return-rejection pattern
+
+- **Date:** 2026-08-22 (Phase 13K-1)
+- **Decision:** Adapter conversion failures return structured rejection objects; they do not raise. Caller partitions kept vs rejected. Closed rejection vocabulary:
+  - `MISSING_IDENTITY` (reserved; not currently triggered — see `D-ADAPTER-003`)
+  - `MISSING_PRICE`
+  - `INVALID_FLOAT`
+  - `MISSING_ASSET_ID`
+  - `UNSUPPORTED_SOURCE`
+- **Status:** Active.
+- **Reason:** aligns with the existing `TradeUpInputEnrichment` return-rejection idiom (`D-ENRICH-001`); fragments of `try/except` control flow around listing conversion would obscure the partition boundary and re-introduce the very kind of mixed-concern code the enrichment seam was created to avoid.
+- **Future revisit:** only to extend the vocabulary when the upstream listing DTO grows new required fields.
+
+## D-ADAPTER-003 — Adapter does not resolve identity
+
+- **Date:** 2026-08-22 (Phase 13K-1)
+- **Decision:** The adapter does not call `BuffItemIdentityResolver`, does not infer `market_hash_name`, does not map `goods_id`, does not use SteamDT identity fields, does not use SteamApis identity assumptions.
+- **Current behavior:** when identity is unavailable, the adapter returns `TradeUpInputCandidate(market_hash_name=None)`. Downstream `TradeUpInputEnrichment` surfaces that as `MARKET_HASH_NAME_UNRESOLVED`.
+- **Status:** Active.
+- **Reason:** identity resolution remains the unresolved primary blocker (`D-IDENTITY-001`, `D-IDENTITY-002`); the adapter must not invent identity derivation. The `MISSING_IDENTITY` rejection code is reserved for a future explicit-refusal mode and is not triggered in 13K-1.
+- **Future revisit:** when a verified anonymous/read-only BUFF identity source is independently obtained, the adapter reads the resolved name from the upstream listing DTO; the adapter itself does not own the derivation.
+
+## D-ADAPTER-004 — Adapter must route through enrichment
+
+- **Date:** 2026-08-22 (Phase 13K-1)
+- **Decision:** Production path must remain `TradeUpInputCandidate → TradeUpInputEnrichment → InputItem`. The adapter never directly constructs engine inputs.
+- **Status:** Active.
+- **Reason:** preserves metadata ownership (candidate does not own `collection_name` / `rarity` / `min_float` / `max_float`); preserves intrinsic flag ownership (candidate owns `stattrak` / `souvenir`); preserves the validation seam (`D-ENRICH-001`); preserves the ability to swap the upstream listing source without touching the engine.
+- **Future revisit:** forbidden. This is a permanent structural rule.
+
+## D-MIGRATION-002 — Intrinsic flag migration remains a production wiring requirement
+
+- **Date:** 2026-08-22 (Phase 13K-1)
+- **Decision:** Phase 13K-1's synthetic adapter currently defaults `stattrak=False, souvenir=False` on `TradeUpInputCandidate` because the current `BuffListing` DTO does not expose intrinsic flags. This is acceptable only for synthetic / offline validation.
+- **Production wiring requirement:** before any production provider wiring, `BuffListing` (or a future upstream source) MUST expose `stattrak` and `souvenir`. The production conversion must become:
+  ```
+  BuffListing
+        ↓
+  TradeUpInputCandidate(
+      stattrak=source_value,
+      souvenir=source_value,
+      ...
+  )
+  ```
+  The old 13H-0 hard-coded `False` behavior MUST NOT be copied into production code paths.
+- **Status:** Active.
+- **Reason:** without intrinsic flag preservation on the candidate boundary, downstream `TradeUpInputEnrichment` cannot distinguish StatTrak / Souvenir inputs from normal items, breaking the canonical seam sealed by `D-ENRICH-001` and `D-MIGRATION-001`.
+- **Future revisit:** when `BuffListing` (or its successor) grows `stattrak` and `souvenir`, the adapter must read them and forward verbatim. The synthetic defaulting is then retired from any production code path.

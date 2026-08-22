@@ -184,11 +184,26 @@ The components remain in the tree as paused, offline-tested optional infrastruct
 
 ## Next Action (ordered)
 
-1. (In-flight) Phase 13I-3 enrichment boundary + 13I-2 intrinsic flags + 13I-0/13I-1 design reviews are implemented in the working tree — decide whether to commit them as a single checkpoint before any further code work.
-2. Recommended next phase (no implementation yet): **synthetic scanner-scale validation** of the `TradeUpInputCandidate → TradeUpInputEnrichment → InputItem → trade-up engine` chain on a fixture basket large enough to exercise `enrich_candidates` partition behavior and the engine's existing math deterministically. Alternatively, once a verified identity source exists, design a live candidate adapter as a separate module.
-3. Do **not** add more metadata / enrichment abstraction layers; the seam is sealed by `D-ENRICH-001`.
-4. Later: obtain verified goods↔name evidence before implementing any resolver backend.
-5. Later: verify quantity/freshness/classification facts before bridging into Phase 12/solver.
+1. Freeze `TradeUpInputCandidate`, `TradeUpInputEnrichment`, and `BuffListingCandidateAdapter`. No new metadata / enrichment abstraction should be introduced.
+2. Before any live wiring: design production provider integration along the path
+   ```
+   BuffListingProvider
+        ↓
+   buff_listing_candidate_adapter
+        ↓
+   TradeUpInputCandidate
+        ↓
+   TradeUpInputEnrichment
+        ↓
+   InputItem
+        ↓
+   trade-up engine
+   ```
+   See `D-ADAPTER-001` for the dependency direction; see `D-ADAPTER-004` for the routing rule; see `D-MIGRATION-002` for the intrinsic-flag preservation requirement.
+3. Identity resolution remains the main blocker. Do NOT add: BUFF identity guessing, SteamDT identity inference, SteamApis identity assumptions, browser automation, anti-bot bypass (`D-ADAPTER-003`, `D-IDENTITY-001`, `D-IDENTITY-002`).
+4. Synthetic validation (`D-VALIDATION-001`) remains a mandatory regression gate. Any future change to the adapter, the enrichment boundary, or candidate ownership must pass synthetic seam validation.
+5. Intrinsic flag migration is a separate production prerequisite (`D-MIGRATION-002`): `BuffListing` (or its successor) must expose `stattrak` and `souvenir` before any production wiring.
+6. Later: verify quantity / freshness / classification facts before bridging into Phase 12 / solver.
 
 ## Current Blockers
 

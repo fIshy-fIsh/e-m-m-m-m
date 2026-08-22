@@ -118,9 +118,21 @@ BuffListing → TradeUpInputCandidate → TradeUpInputEnrichment → (future tra
 
 - Anonymous BUFF listing acquisition (provider works; gated, read-only).
 - Identity abstraction (`BuffItemIdentity` + resolver protocol; unresolved is normal).
-- TradeUpInputCandidate boundary (with intrinsic `stattrak`/`souvenir` flags).
+- TradeUpInputCandidate boundary (with intrinsic `stattrak`/`souvenir` flags, 13I-2).
 - Synthetic trade-up pipeline (13H-0): candidate → engine via offline metadata adapter.
 - Enrichment boundary (13I-3): candidate → InputItem seam with kept/rejected partitions.
+- Synthetic scale validation (13J-1): SMALL / MIXED / DIRTY cases drive both 13H-0 and 13I-3 paths; partition agreement, signature equivalence, EV / Risk reproducibility, and rejection-reason coverage are asserted offline.
+- BuffListing candidate adapter boundary (13K-1): `app/services/buff_listing_candidate_adapter.py`; closed return-rejection vocabulary; routes candidate output through `TradeUpInputEnrichment`; synthetic / offline only at present.
+
+## Current Blockers
+
+- BUFF identity bridge unresolved: `goods_id ↔ market_hash_name`. No production identity wiring until a verified anonymous/read-only source exists.
+- Intrinsic flag source incomplete: `stattrak` / `souvenir` are owned by the candidate layer, but the current `BuffListing` DTO does not expose them. Production adapter wiring is blocked until these values can be preserved (see `D-MIGRATION-002`).
+- No production scanner orchestration wiring.
+
+## Technical Debt
+
+- **13H-0 / 13K-1 intrinsic flag compatibility debt** — `trade_up_pipeline.py::candidates_to_input_items` (13H-0) and `buff_listing_candidate_adapter.py::convert_buff_listing_to_candidate` (13K-1) both default `stattrak=False, souvenir=False` because the upstream `BuffListing` DTO does not yet expose those fields. Historical behavior; preserved for compatibility; validated offline by synthetic scale validation (13J-1) and the adapter's own test suite. Forbidden as production behavior. References: `D-MIGRATION-001`, `D-MIGRATION-002`.
 
 ## Standing Engineering Constraints
 
