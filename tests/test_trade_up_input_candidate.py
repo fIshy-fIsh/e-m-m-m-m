@@ -40,7 +40,73 @@ def test_public_api_is_exact() -> None:
         "paintwear",
         "asset_id",
         "source",
+        "stattrak",
+        "souvenir",
     ]
+
+
+def test_intrinsic_flag_defaults_are_false_and_independent() -> None:
+    candidate = _valid()
+    assert candidate.stattrak is False
+    assert candidate.souvenir is False
+
+
+def test_intrinsic_flags_explicit_true_is_preserved() -> None:
+    candidate = _valid(stattrak=True, souvenir=True)
+    assert candidate.stattrak is True
+    assert candidate.souvenir is True
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("stattrak", 1),
+        ("stattrak", 0),
+        ("stattrak", "true"),
+        ("stattrak", "false"),
+        ("stattrak", None),
+        ("stattrak", 1.0),
+        ("souvenir", 1),
+        ("souvenir", 0),
+        ("souvenir", "true"),
+        ("souvenir", "false"),
+        ("souvenir", None),
+        ("souvenir", 1.0),
+    ],
+)
+def test_intrinsic_flags_reject_non_exact_bool(field: str, value: object) -> None:
+    with pytest.raises(TradeUpInputCandidateValidationError) as captured:
+        _valid(**{field: value})  # type: ignore[arg-type]
+    assert captured.value.field == field
+
+
+def test_intrinsic_flags_are_immutable() -> None:
+    candidate = _valid()
+    with pytest.raises(FrozenInstanceError):
+        candidate.stattrak = True  # type: ignore[misc]
+    with pytest.raises(FrozenInstanceError):
+        candidate.souvenir = True  # type: ignore[misc]
+
+
+def test_existing_candidate_fields_still_pass_with_intrinsic_flags_defaulted() -> None:
+    candidate = _valid(
+        listing_id="listing-private-2",
+        goods_id="goods-synthetic-7",
+        market_hash_name="Synthetic AK | Variant",
+        price_cny=Decimal("99.9900"),
+        paintwear=Decimal("0.456700"),
+        asset_id="asset-private-2",
+        source="buff",
+    )
+    assert candidate.listing_id == "listing-private-2"
+    assert candidate.goods_id == "goods-synthetic-7"
+    assert candidate.market_hash_name == "Synthetic AK | Variant"
+    assert candidate.price_cny == Decimal("99.9900")
+    assert candidate.paintwear == Decimal("0.456700")
+    assert candidate.asset_id == "asset-private-2"
+    assert candidate.source == "buff"
+    assert candidate.stattrak is False
+    assert candidate.souvenir is False
 
 
 def test_unresolved_identity_path_is_default() -> None:

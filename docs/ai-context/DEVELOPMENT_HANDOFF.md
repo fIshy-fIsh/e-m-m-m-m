@@ -78,6 +78,67 @@ The components remain in the tree as paused, offline-tested optional infrastruct
 
 ### Phase 13C — BUFF listing provider (committed `caf5922`, hardened `2a8a1e8`) — exact contract preserved.
 
+### Phase 13I-3 — Trade-up input enrichment boundary (implemented, uncommitted)
+
+- Adds `app/services/trade_up_input_enrichment.py` with
+  `TradeUpInputMetadata`, `TradeUpInputMetadataResolver`,
+  `InMemoryTradeUpInputMetadataResolver`,
+  `TradeUpEnrichmentRejectionReason`, `TradeUpEnrichmentRejection`,
+  `TradeUpEnrichedInput`, `TradeUpInputEnrichmentResult`,
+  `TradeUpInputEnricher`, `InMemoryTradeUpInputEnricher`,
+  `enrich_candidates`.
+- Defines the explicit boundary
+  `TradeUpInputCandidate + metadata → InputItem` with `kept` and
+  `rejected` partitions in input order.
+- Ownership split per 13I-0 / 13I-1:
+  - candidate supplies `market_hash_name`, `price_cny`, `paintwear`,
+    `stattrak`, `souvenir`;
+  - metadata supplies `collection_name`, `rarity`, `min_float`,
+    `max_float`;
+  - `paintwear` (Decimal) is converted to `actual_float` (float)
+    exactly once at the boundary.
+- Rejection vocabulary: `MARKET_HASH_NAME_UNRESOLVED`,
+  `METADATA_NOT_FOUND`. No identity inference; no default fallback.
+- `TradeUpInputCandidate`, `InputItem`, `tradeup_engine`,
+  `recipe_solver`, all metadata layers, `BuffListing`,
+  `BuffItemIdentity`, the 13H-0 synthetic `trade_up_pipeline.py`,
+  and all live provider / scanner / scheduler / BUFF / SteamDT /
+  SteamApis code remain untouched.
+- No adapter to a real metadata provider, no runtime wiring,
+  no enrichment-layer call site.
+
+### Phase 13I-2 — Trade-up input candidate intrinsic flags (implemented, uncommitted)
+
+- Adds exactly two intrinsic item-instance flags to `TradeUpInputCandidate`:
+  `stattrak: bool = False`, `souvenir: bool = False`.
+- `_ALLOWED_FIELDS` and the `_validate_exact_bool` helper are extended
+  in lockstep with the existing fixed-error contract.
+- Default values stay `False`; explicit `True` is preserved; strict bool
+  validation rejects int / str / `None` / float.
+- Candidate remains the sole owner of these flags; metadata / catalog
+  enrichment can never override them (Phase 13I-0 decision).
+- No `collection_name` / `rarity` / `min_float` / `max_float` was added
+  to the candidate.
+- `InputItem`, `tradeup_engine`, `recipe_solver`, all metadata layers,
+  `BuffListing`, `BuffItemIdentity`, the synthetic `trade_up_pipeline`,
+  and all live provider / scanner / scheduler / BUFF / SteamDT /
+  SteamApis code remain untouched.
+- No enrichment module, no adapter, no runtime wiring is added.
+
+### Phase 13I-1 — Metadata provider contract audit (uncommitted)
+
+- Design-only review under `specs/2026-08-22-trade-up-metadata-provider-contract-audit/`.
+- Conclusion: `SkinMetadata` already covers every catalog field the
+  planned enrichment boundary needs; the only outstanding gap is the
+  two intrinsic flags added in 13I-2 on the candidate side.
+
+### Phase 13I-0 — Trade-up metadata enrichment boundary review (uncommitted)
+
+- Design-only review under `specs/2026-08-22-trade-up-metadata-enrichment-boundary-review/`.
+- Conclusion: keep candidate minimal, candidate owns intrinsic item
+  flags (`stattrak`, `souvenir`), metadata / catalog layer owns the
+  five catalog fields, future enrichment is a separate module seam.
+
 ### Phase 13H-0 — Synthetic trade-up pipeline integration (in progress)
 
 - Adds `app/services/trade_up_pipeline.py`: `TradeUpInputMetadata`, `TradeUpInputMetadataResolver`, `InMemoryTradeUpInputMetadataResolver`, `candidates_to_input_items`.
@@ -123,10 +184,11 @@ The components remain in the tree as paused, offline-tested optional infrastruct
 
 ## Next Action (ordered)
 
-1. (In-flight) Phase 13D-0 identity contract is implemented but uncommitted — decide whether to commit it before 13E-0.
-2. Phase 13E-0 — design `TradeUpInputCandidate` between `BuffListing` and the future trade-up engine (no solver/EV/scanner wiring). Keep unresolved `market_hash_name` explicit.
-3. Later: obtain verified goods↔name evidence before implementing any resolver backend.
-4. Later: verify quantity/freshness/classification facts before bridging into Phase 12/solver.
+1. (In-flight) Phase 13I-3 enrichment boundary + 13I-2 intrinsic flags + 13I-0/13I-1 design reviews are implemented in the working tree — decide whether to commit them as a single checkpoint before any further code work.
+2. Recommended next phase (no implementation yet): **synthetic scanner-scale validation** of the `TradeUpInputCandidate → TradeUpInputEnrichment → InputItem → trade-up engine` chain on a fixture basket large enough to exercise `enrich_candidates` partition behavior and the engine's existing math deterministically. Alternatively, once a verified identity source exists, design a live candidate adapter as a separate module.
+3. Do **not** add more metadata / enrichment abstraction layers; the seam is sealed by `D-ENRICH-001`.
+4. Later: obtain verified goods↔name evidence before implementing any resolver backend.
+5. Later: verify quantity/freshness/classification facts before bridging into Phase 12/solver.
 
 ## Current Blockers
 

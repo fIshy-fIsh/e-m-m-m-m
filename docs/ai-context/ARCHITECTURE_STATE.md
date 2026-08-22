@@ -35,10 +35,35 @@ market_hash_name → BuffItemIdentityResolver.resolve() → BuffItemIdentity | N
 
 `None` is the normal unresolved outcome. No concrete resolver or mapping data exists.
 
+### Trade-up input candidate → enrichment boundary (synthetic/offline only)
+
+```
+BuffListing / future source
+        ↓
+TradeUpInputCandidate  (candidate-owned fields: market_hash_name, price_cny,
+                       paintwear, asset_id, source, stattrak, souvenir)
+        ↓
+TradeUpInputEnrichment  (offline enricher + metadata resolver)
+        ↓
+InputItem
+        ↓
+existing trade-up engine
+        ↓
+EV / ROI / Risk
+```
+
+Phase 13I-3 established the explicit seam `TradeUpInputCandidate + metadata → InputItem` with `kept` + `rejected` partitions in input order. Ownership is split:
+
+- Candidate owns: `market_hash_name`, `price_cny`, `paintwear`, `asset_id`, `source`, `stattrak`, `souvenir`.
+- Metadata owns: `collection_name`, `rarity`, `min_float`, `max_float`.
+- `paintwear` (Decimal) is converted to `actual_float` (float) exactly once at the boundary.
+
+Rejection vocabulary: `MARKET_HASH_NAME_UNRESOLVED`, `METADATA_NOT_FOUND`. No identity inference; no default fallback; no live adapter.
+
 ### Future (not yet wired)
 
 ```
-BuffListing → TradeUpInputCandidate → (future trade-up engine)
+BuffListing → TradeUpInputCandidate → TradeUpInputEnrichment → (future trade-up engine)
 ```
 
 ## Existing Modules (responsibility map)
@@ -46,6 +71,8 @@ BuffListing → TradeUpInputCandidate → (future trade-up engine)
 - `app/clients/buff_anonymous_listing_client.py` — hardened anonymous BUFF GET; exact independent request, header allowlist, auth/redirect disabled.
 - `app/services/buff_listing_provider.py` — `BuffListing` DTO, strict parser, `BuffListingProvider`.
 - `app/services/buff_item_identity.py` — `BuffItemIdentity`, `BuffItemIdentityResolver` protocol (unresolved).
+- `app/services/trade_up_input_candidate.py` — `TradeUpInputCandidate` DTO (13I-2: intrinsic flags `stattrak`/`souvenir`).
+- `app/services/trade_up_input_enrichment.py` — `TradeUpInputMetadata`, `TradeUpInputMetadataResolver`, `TradeUpInputEnricher`, `enrich_candidates`, rejection model (13I-3, offline only).
 - `app/clients/buff_client.py` — legacy `BuffHttpClient` (unimplemented), `MockBuffClient`, `DryRunBuffClient`, legacy `BuffSellOrder`/`BuffGoodsInfo`.
 - `app/services/buff_listing.py` + parser/facts/eligibility/qualification/solver_adapter — Phase 12 offline contract chain.
 - `app/services/market_scan_service.py` — `CandidateListing`, legacy synchronous scanner (`scan_goods`/`scan_watchlist`).
@@ -78,6 +105,22 @@ BuffListing → TradeUpInputCandidate → (future trade-up engine)
 - **Verified (manual, one request):** anonymous BUFF sell-order first page returns `items[]` with id/price/`asset_info.paintwear`/`asset_info.assetid`; paintseed absent in that run.
 - **Assumed (project decision):** SteamDT sell/bid interpreted as CNY/RMB; BUFF `price_cny` project-facing naming.
 - **Unknown:** official currency/fees, canonical `market_hash_name` mapping, goods/product/search endpoint, quantity/freshness/removal, pagination/page size, rate limits, classification facts, purchase handoff.
+
+## Current Blockers
+
+- No verified `market_hash_name ↔ BUFF goods_id` source.
+- BUFF goods/product/search endpoint undocumented/unauthorized.
+- Anonymous sell-order has no verified market name; `BuffListing.market_hash_name` stays `None`.
+- No production candidate adapter from `BuffListing` (or any live source) to `TradeUpInputCandidate`.
+- No live metadata resolver backend; `TradeUpInputEnrichment` is offline/synthetic only.
+
+## Completed Capabilities (cumulative)
+
+- Anonymous BUFF listing acquisition (provider works; gated, read-only).
+- Identity abstraction (`BuffItemIdentity` + resolver protocol; unresolved is normal).
+- TradeUpInputCandidate boundary (with intrinsic `stattrak`/`souvenir` flags).
+- Synthetic trade-up pipeline (13H-0): candidate → engine via offline metadata adapter.
+- Enrichment boundary (13I-3): candidate → InputItem seam with kept/rejected partitions.
 
 ## Standing Engineering Constraints
 

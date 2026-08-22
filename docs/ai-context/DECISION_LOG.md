@@ -141,3 +141,30 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 - **Status:** Active.
 - **Reason:** bound blast radius and prove schema before building provider/scanner.
 - **Future revisit:** n/a (principle).
+
+## D-ENRICH-001 — TradeUpInputEnrichment as the canonical candidate → InputItem seam
+
+- **Date:** 2026-08-22 (Phase 13I-3, after 13I-0 boundary review and 13I-1 contract audit)
+- **Decision:** Establish `app/services/trade_up_input_enrichment.py` as the single seam where `TradeUpInputCandidate + metadata → InputItem`. Enrichment is offline/synthetic only in this phase; no live metadata adapter, no runtime wiring.
+- **Field ownership (frozen):**
+  - Candidate-owned: `market_hash_name`, `price_cny`, `paintwear`, `asset_id`, `source`, `stattrak`, `souvenir`.
+  - Metadata-owned: `collection_name`, `rarity`, `min_float`, `max_float`.
+  - `paintwear` (Decimal) → `actual_float` (float) conversion happens exactly once at this boundary.
+- **Rejection vocabulary:** `MARKET_HASH_NAME_UNRESOLVED`, `METADATA_NOT_FOUND`. No inference, no default fallback, no synthetic promotion of `market_hash_name`.
+- **Status:** Active (uncommitted as of this write).
+- **Reason:** Candidate intrinsic flags (`stattrak`, `souvenir`) must never be overridden by catalog-row metadata; catalog fields must never leak into the candidate; the conversion from exact `Decimal` paintwear to float must be single-point to keep the engine deterministic. A dedicated enricher isolates both concerns from `tradeup_engine`, `recipe_solver`, and the live metadata chain.
+- **Alternatives considered:** inline enrichment inside `trade_up_pipeline.py`; letting `recipe_solver` read metadata directly; merging enrichment into the candidate boundary.
+- **Why rejected:** would couple the synthetic pipeline to live metadata; would force metadata calls into solver-side code; would defeat the 13I-0 ownership rule. The seam must remain a standalone module.
+- **Future revisit:** when a verified identity source exists, the seam is the natural place to introduce a real `TradeUpInputMetadataResolver` backend and a real `BuffListing → TradeUpInputCandidate` adapter. Until then, do not add more metadata/enrichment abstraction.
+
+## D-ENRICH-002 — Do not reopen identity / ownership decisions
+
+- **Date:** 2026-08-22 (Phase 13I-3)
+- **Decision:** The following are frozen and must not be reopened without explicit new evidence:
+  - BUFF `goods_id ↔ market_hash_name` investigation (see `D-IDENTITY-001`, `D-IDENTITY-002`).
+  - SteamDT as identity mapping source (see `D-STEAMDT-001`).
+  - SteamApis as identity source (see `D-STEAMAPIS-001`).
+  - Metadata ownership split (candidate owns intrinsic flags; metadata owns catalog-row fields).
+- **Status:** Active.
+- **Reason:** the abstract bridge remains unresolved and the candidate/metadata ownership rule is the operative boundary rule. Reopening either would invalidate the seam sealed by `D-ENRICH-001`.
+- **Future revisit:** only when a verified anonymous/read-only BUFF identity source is independently obtained, or when a separately authorized ownership review demands a change.

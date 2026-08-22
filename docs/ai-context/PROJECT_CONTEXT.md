@@ -64,7 +64,7 @@ The missing bridge `market_hash_name ↔ BUFF goods_id` has **no verified source
 ## Current Git State (verify live; authoritative snapshot)
 
 - **Branch:** `feature/steamdt-cache-rate-limit`
-- **HEAD:** `2a8a1e8bb23aa0e51ad9ebb73ac50a662a951e4f` — `harden buff listing provider anonymous contract`
-- **Uncommitted:** Phase 13D-0 identity contract is staged in the working tree but **not yet committed** (see DEVELOPMENT_HANDOFF).
+- **HEAD:** `330bdcbad187ee7a8cf9124694a7e13b0fc72e08` — `add synthetic trade-up pipeline integration`
+- **Uncommitted:** Phase 13I-3 enrichment boundary + Phase 13I-2 intrinsic flags + Phase 13I-0/13I-1 design reviews remain in the working tree (see DEVELOPMENT_HANDOFF).
 
 > Prefer `git status` and `git log --oneline -n 20` over this snapshot.

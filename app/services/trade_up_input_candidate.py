@@ -13,6 +13,8 @@ _ALLOWED_FIELDS = frozenset(
         "paintwear",
         "asset_id",
         "source",
+        "stattrak",
+        "souvenir",
     }
 )
 
@@ -39,6 +41,11 @@ class TradeUpInputCandidate:
     The boundary intentionally accommodates unresolved identity. The
     `market_hash_name` field is left as `None` until a verified
     `market_hash_name <-> BUFF goods_id` source is wired upstream.
+
+    The `stattrak` and `souvenir` fields are intrinsic item-instance
+    attributes. They live on the candidate so that future catalog-row
+    enrichment can never override them; catalog sources describe the
+    catalog row, the candidate describes the specific listing.
     """
 
     listing_id: str
@@ -48,6 +55,8 @@ class TradeUpInputCandidate:
     paintwear: Decimal
     asset_id: str
     source: str = "buff"
+    stattrak: bool = False
+    souvenir: bool = False
 
     def __post_init__(self) -> None:
         _validate_exact_string(self.listing_id, field="listing_id")
@@ -58,6 +67,8 @@ class TradeUpInputCandidate:
         _validate_paintwear(self.paintwear)
         _validate_exact_string(self.asset_id, field="asset_id")
         _validate_exact_string(self.source, field="source")
+        _validate_exact_bool(self.stattrak, field="stattrak")
+        _validate_exact_bool(self.souvenir, field="souvenir")
 
 
 def _validate_exact_string(value: object, *, field: str) -> str:
@@ -82,3 +93,8 @@ def _validate_paintwear(value: object) -> None:
         or not Decimal("0") <= value <= Decimal("1")
     ):
         raise TradeUpInputCandidateValidationError(field="paintwear")
+
+
+def _validate_exact_bool(value: object, *, field: str) -> None:
+    if type(value) is not bool:
+        raise TradeUpInputCandidateValidationError(field=field)
