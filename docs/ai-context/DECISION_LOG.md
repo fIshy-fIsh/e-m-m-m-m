@@ -259,6 +259,22 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 - **Reason:** preserves metadata ownership (candidate does not own `collection_name` / `rarity` / `min_float` / `max_float`); preserves intrinsic flag ownership (candidate owns `stattrak` / `souvenir`); preserves the validation seam (`D-ENRICH-001`); preserves the ability to swap the upstream listing source without touching the engine.
 - **Future revisit:** forbidden. This is a permanent structural rule.
 
+## D-IDENTITY-003 — Phase 13L-0 source survey confirms no verified identity bridge
+
+- **Date:** 2026-08-22 (Phase 13L-0)
+- **Decision:** Repository-only source survey of the four candidate identity sources closes with no verified `market_hash_name ↔ BUFF goods_id` source. The forward `BuffItemIdentityResolver` protocol stays abstract; `market_hash_name=None` is the only real answer; synthetic-only seam work continues.
+- **Status:** Active.
+- **Source verdicts:**
+  - **BUFF native metadata:** not usable. Endpoint unknown, response field mapping unverified, lifecycle / freshness unconfirmed. Phase 13D-2 already closed: "no validated anonymous/read-only goods/metadata endpoint was discovered." No `BuffGoodsInfo` implementation exists; no endpoint was coded or requested.
+  - **SteamDT `platformItemId`:** not authoritative. Aggregate-level field; per-aggregate, not per-listing; cannot be traced to a single BUFF `goods_id`. `D-STEAMDT-001` already prohibits using SteamDT as an identity source.
+  - **SteamApis `source_offer_id`:** not a BUFF goods ID. Project-local `hashlib.sha256(marketplace + game + purchase_link)`; explicitly documented as non-authoritative. `D-STEAMAPIS-001` records this; live smoke was gated off and never executed.
+  - **Manual offline mapping:** permissible only as a future offline verified fallback under the five constraints in `FR-4.1`–`FR-4.5` of `specs/2026-08-22-identity-bridge-architecture-review/requirements.md`. No verified mapping file exists today.
+- **`BuffItemIdentityResolver` remains abstract:** no concrete resolver, no mapping data, no fixture, no parser, no loader, no cache, no factory. The forward `resolve(market_hash_name) -> BuffItemIdentity | None` direction is the only verified contract surface; `None` continues to be the normal outcome.
+- **`market_hash_name=None` is the only valid unresolved state.** `BuffListing.market_hash_name` stays `None` for the anonymous provider; `TradeUpInputCandidate.market_hash_name` stays `str | None`; `TradeUpInputEnrichment` surfaces the unresolved shape as `MARKET_HASH_NAME_UNRESOLVED`.
+- **Reason:** the canonical seam (`D-ENRICH-001`, `D-ADAPTER-004`) is built to operate with `market_hash_name=None` flowing through as a candidate and being rejected downstream as `MARKET_HASH_NAME_UNRESOLVED`. Synthetic scale validation (Phase 13J-1) and the synthetic candidate adapter (Phase 13K-1) operate entirely without identity resolution. The frozen seam continues to work; production wiring remains blocked until a verified source exists.
+- **Alternatives considered:** A (BUFF native) — rejected above. B (SteamDT) — rejected above. C (SteamApis) — rejected above. D (manual offline mapping) — permissible only under the five constraints; not implemented in 13L-0.
+- **Future revisit:** only when a verified source is obtained (independently verified anonymous/read-only BUFF endpoint, or an attested offline mapping file satisfying `FR-4.1`–`FR-4.5`). Reopening this decision requires explicit new evidence; do not reopen speculatively.
+
 ## D-MIGRATION-002 — Intrinsic flag migration remains a production wiring requirement
 
 - **Date:** 2026-08-22 (Phase 13K-1)

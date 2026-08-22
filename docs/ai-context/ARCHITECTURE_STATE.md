@@ -123,12 +123,14 @@ BuffListing → TradeUpInputCandidate → TradeUpInputEnrichment → (future tra
 - Enrichment boundary (13I-3): candidate → InputItem seam with kept/rejected partitions.
 - Synthetic scale validation (13J-1): SMALL / MIXED / DIRTY cases drive both 13H-0 and 13I-3 paths; partition agreement, signature equivalence, EV / Risk reproducibility, and rejection-reason coverage are asserted offline.
 - BuffListing candidate adapter boundary (13K-1): `app/services/buff_listing_candidate_adapter.py`; closed return-rejection vocabulary; routes candidate output through `TradeUpInputEnrichment`; synthetic / offline only at present.
+- Identity bridge architecture review (13L-0): source-by-source verdict recorded in `D-IDENTITY-003`. Four candidate sources (BUFF native, SteamDT, SteamApis, manual offline mapping) all non-actionable for production wiring. Frozen contracts preserved; `market_hash_name=None` continues to flow through the seam.
+- Production scanner orchestration architecture review (13M-0): design only; boundary B (new standalone `app/services/scanner_orchestration.py`), periodic scheduling, per-cache module ownership. Architecture recommendation recorded; no implementation in 13M-0.
 
 ## Current Blockers
 
-- BUFF identity bridge unresolved: `goods_id ↔ market_hash_name`. No production identity wiring until a verified anonymous/read-only source exists.
+- BUFF identity bridge unresolved: `goods_id ↔ market_hash_name`. No production identity wiring until a verified anonymous/read-only source exists (`D-IDENTITY-003`).
 - Intrinsic flag source incomplete: `stattrak` / `souvenir` are owned by the candidate layer, but the current `BuffListing` DTO does not expose them. Production adapter wiring is blocked until these values can be preserved (see `D-MIGRATION-002`).
-- No production scanner orchestration wiring.
+- No production orchestration runtime implementation: `ScannerOrchestrator` skeleton, periodic scheduler adapter, and per-cache modules are design-only as of 13M-0; the production orchestration path is not yet implemented.
 
 ## Technical Debt
 

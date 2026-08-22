@@ -3,13 +3,11 @@
 ## Current Git State (verify live)
 
 - **Branch:** `feature/steamdt-cache-rate-limit`
-- **HEAD:** `2a8a1e8bb23aa0e51ad9ebb73ac50a662a951e4f`
-- **HEAD message:** `harden buff listing provider anonymous contract`
-- **Uncommitted work:** Phase 13D-0 identity contract (not committed at time of this write). Uncommitted changes remain working tree state and are not part of the canonical committed baseline:
-  - Modified: `docs/BUFF_ANONYMOUS_READONLY_NOTES.md`, `docs/BUFF_API_NOTES.md`
-  - Untracked: `app/services/buff_item_identity.py`, `specs/2026-08-21-buff-item-identity-contract/`, `tests/test_buff_item_identity.py`
+- **HEAD:** `a70b0e63661ad7165bd023fa9a35d82b21bf4310`
+- **HEAD message:** `add identity and orchestration architecture reviews`
+- **Uncommitted work:** none as of this checkpoint; working tree is clean. The 13L-0 and 13M-0 spec trilogies are part of HEAD (`specs/2026-08-22-identity-bridge-architecture-review/`, `specs/2026-08-22-production-scanner-orchestration-review/`).
 
-Recent commit history (oldest → newest):
+Recent commit history (oldest → newest, including the latest 18 unpushed local commits on this branch):
 
 ```
 1f3355a add steamapis websocket client
@@ -28,6 +26,13 @@ fac508c add live steamdt recipe valuation smoke
 04ba133 add buff anonymous schema smoke
 caf5922 add buff listing provider abstraction
 2a8a1e8 harden buff listing provider anonymous contract
+b398bcc add trade-up input candidate boundary
+560f4dd add buff identity contract and ai context
+330bdcb add synthetic trade-up pipeline integration
+f34f25f add trade-up input enrichment boundary
+1549248 add synthetic scanner-scale validation
+5d19096 add BuffListing candidate adapter boundary
+a70b0e6 add identity and orchestration architecture reviews
 ```
 
 ## Completed Milestones
@@ -175,6 +180,28 @@ The components remain in the tree as paused, offline-tested optional infrastruct
 
 - No verified source for `market_hash_name ↔ BUFF goods_id`; no validated goods/product/search endpoint. Do not invent one.
 
+### Phase 13L-0 — Identity bridge architecture review (committed `a70b0e6`)
+
+- Design-only review under `specs/2026-08-22-identity-bridge-architecture-review/`.
+- Architecture decision: **C — Freeze identity and continue synthetic-only**.
+- All four candidate sources (BUFF native, SteamApis, SteamDT, manual offline mapping) evaluated as non-actionable for production wiring as of 2026-08-22.
+- New decision record: `D-IDENTITY-003`. Existing `D-IDENTITY-001` and `D-IDENTITY-002` unchanged.
+- Frozen contracts preserved: `BuffItemIdentity`, `BuffItemIdentityResolver`, `BuffListing.market_hash_name=None`, `TradeUpInputCandidate.market_hash_name=None` still accepted.
+- Manual offline mapping is permissible only under the five `FR-4.1`–`FR-4.5` constraints recorded in `requirements.md`. Not implemented.
+- No `app/` or `tests/` changes.
+- Next recommended phase: none. Identity remains the unblocking prerequisite for any future production wiring.
+
+### Phase 13M-0 — Production scanner orchestration architecture review (committed `a70b0e6`)
+
+- Design-only review under `specs/2026-08-22-production-scanner-orchestration-review/`.
+- Architecture decision: **B — new standalone orchestration module**, periodic scheduling, per-cache module ownership.
+- Rejected alternatives: A (extend `market_scan_service`) and C (provider-driven pipeline runner) under boundary; event-driven and manual-only under scheduling; central cache registry and lazy caches under cache ownership.
+- Future orchestration module path: `app/services/scanner_orchestration.py` (not yet created). Scheduler adapter is the only reference to `APScheduler`. Four cache modules (`listing_cache`, `metadata_cache`, `valuation_cache`, `identity_cache`) each own their own keyspace, TTL, invalidation, and observability. Cache modules must never import each other.
+- Opportunity lifecycle: five stages (listing observed → candidate conversion → enrichment → trade-up evaluation → opportunity result), each owned by exactly one module.
+- Failure handling: four categories (provider failure, enrichment rejection, valuation failure, stale data), each owned by exactly one module. No retry-with-backoff inside the orchestrator.
+- Frozen contracts preserved: `BuffItemIdentity`, `BuffListing`, `TradeUpInputCandidate`, `TradeUpInputEnricher`, `BuffListingCandidateAdapter` all unchanged.
+- No `app/` or `tests/` changes. No scanner, scheduler, cache, or BUFF endpoint code added.
+
 ## Current Status
 
 - BUFF anonymous listing acquisition: **solved** (provider works; gated, read-only).
@@ -184,8 +211,9 @@ The components remain in the tree as paused, offline-tested optional infrastruct
 
 ## Next Action (ordered)
 
-1. Freeze `TradeUpInputCandidate`, `TradeUpInputEnrichment`, and `BuffListingCandidateAdapter`. No new metadata / enrichment abstraction should be introduced.
-2. Before any live wiring: design production provider integration along the path
+1. **Phase 13M-1 — `ScannerOrchestrator` skeleton implementation.** Implement `app/services/scanner_orchestration.py` with `ScannerOrchestrator.run_once()` and `ScannerOrchestratorConfig`. Compose the four frozen seams (`BuffListingProvider` → `BuffListingCandidateAdapter` → `TradeUpInputEnricher` → `trade_up_engine`) by dependency injection. No scheduler. No cache. No live BUFF polling. No identity resolver. No purchase. Frozen contracts (`BuffItemIdentity`, `BuffListing`, `TradeUpInputCandidate`, `TradeUpInputEnricher`, `BuffListingCandidateAdapter`) must remain unchanged. The skeleton must operate against synthetic test fixtures only.
+2. Freeze `TradeUpInputCandidate`, `TradeUpInputEnrichment`, and `BuffListingCandidateAdapter`. No new metadata / enrichment abstraction should be introduced.
+3. Before any live wiring: design production provider integration along the path
    ```
    BuffListingProvider
         ↓
@@ -200,10 +228,10 @@ The components remain in the tree as paused, offline-tested optional infrastruct
    trade-up engine
    ```
    See `D-ADAPTER-001` for the dependency direction; see `D-ADAPTER-004` for the routing rule; see `D-MIGRATION-002` for the intrinsic-flag preservation requirement.
-3. Identity resolution remains the main blocker. Do NOT add: BUFF identity guessing, SteamDT identity inference, SteamApis identity assumptions, browser automation, anti-bot bypass (`D-ADAPTER-003`, `D-IDENTITY-001`, `D-IDENTITY-002`).
-4. Synthetic validation (`D-VALIDATION-001`) remains a mandatory regression gate. Any future change to the adapter, the enrichment boundary, or candidate ownership must pass synthetic seam validation.
-5. Intrinsic flag migration is a separate production prerequisite (`D-MIGRATION-002`): `BuffListing` (or its successor) must expose `stattrak` and `souvenir` before any production wiring.
-6. Later: verify quantity / freshness / classification facts before bridging into Phase 12 / solver.
+4. Identity resolution remains the main blocker (`D-IDENTITY-001`, `D-IDENTITY-002`, `D-IDENTITY-003`). Do NOT add: BUFF identity guessing, SteamDT identity inference, SteamApis identity assumptions, browser automation, anti-bot bypass.
+5. Synthetic validation (`D-VALIDATION-001`) remains a mandatory regression gate. Any future change to the adapter, the enrichment boundary, or candidate ownership must pass synthetic seam validation.
+6. Intrinsic flag migration is a separate production prerequisite (`D-MIGRATION-002`): `BuffListing` (or its successor) must expose `stattrak` and `souvenir` before any production wiring.
+7. Later: verify quantity / freshness / classification facts before bridging into Phase 12 / solver.
 
 ## Current Blockers
 

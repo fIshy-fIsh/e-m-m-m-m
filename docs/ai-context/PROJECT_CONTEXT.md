@@ -64,8 +64,14 @@ The missing bridge `market_hash_name ↔ BUFF goods_id` has **no verified source
 ## Current Git State (verify live; authoritative snapshot)
 
 - **Branch:** `feature/steamdt-cache-rate-limit`
-- **HEAD:** `15492481d7cb042367b579a88744620affb6210a` — `add synthetic scanner-scale validation`
-- **Latest completed phase:** Phase 13K-1 (synthetic BuffListing candidate adapter implementation, uncommitted in the working tree).
-- **Working tree:** contains uncommitted Phase 13K-1 implementation files (`app/services/buff_listing_candidate_adapter.py`, `tests/test_buff_listing_candidate_adapter.py`) plus Phase 13K-0 / 13K-2 documentation updates under `docs/ai-context/`.
+- **HEAD:** `a70b0e63661ad7165bd023fa9a35d82b21bf4310` — `add identity and orchestration architecture reviews`
+- **Latest completed phases:**
+  - **Phase 13M-0** — production scanner orchestration architecture review (committed `a70b0e6`, design only).
+  - **Phase 13L-0** — identity bridge architecture review (committed `a70b0e6`, design only; new decision `D-IDENTITY-003`).
+  - **Phase 13K-3** — BuffListing candidate adapter boundary commit (`5d19096`).
+  - **Phase 13K-1** — synthetic BuffListing candidate adapter implementation (`5d19096`).
+  - **Phase 13J-1** — synthetic scanner-scale validation implementation (`1549248`).
+  - **Phase 13I-3** — trade-up input enrichment boundary (`f34f25f`).
+- **Working tree:** clean after the 13M-0 documentation checkpoint. Local branch is 18 commits ahead of `origin/feature/steamdt-cache-rate-limit`; no remote-only divergence.
 
 > Prefer `git status` and `git log --oneline -n 20` over this snapshot.
