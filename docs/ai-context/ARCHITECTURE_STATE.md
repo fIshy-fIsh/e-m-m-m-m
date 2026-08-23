@@ -27,13 +27,65 @@ BUFF_READONLY_SMOKE_GOODS_ID (caller context, not response-derived)
 
 `BuffListing` fields: `listing_id`, `goods_id` (request context), `market_hash_name` (always `None` currently), `price_cny`, `paintwear`, `asset_id` (required string), `paintseed` (optional), `source="buff"`.
 
-### Identity bridge (abstraction only, unresolved)
+### Identity bridge (runtime resolver + binding layer; provisional under D-IDENTITY-006)
 
 ```
-market_hash_name → BuffItemIdentityResolver.resolve() → BuffItemIdentity | None
+market_hash_name → BuffCommunityIdentityResolver.resolve()            → BuffItemIdentity | None
+goods_id         → BuffCommunityIdentityResolver.resolve_goods_id()   → BuffItemIdentity | None
+
+market_hash_name → CanonicalNameIntrinsicFlagResolver.resolve()       → BuffListingIntrinsicFlagsValue
+                                                                              (stattrak: bool | None,
+                                                                               souvenir: bool | None)
+
+BUFF_READONLY_SMOKE_GOODS_ID (caller context)
+  → BuffAnonymousListingHttpClient GET /api/market/goods/sell_order
+  → strict all-item parser
+  → list[BuffListing]                       (BuffListing.market_hash_name = None at this layer)
+  → IdentityResolvingBuffListingProvider    (13N-3C; identity-only)
+       ↓   resolve_goods_id(goods_id)  exactly once per provider fetch
+  → list[BuffListing]                       (BuffListing.market_hash_name = resolved exact name | None)
+  → IntrinsicFlagResolvingBuffListingProvider  (13O-1; intrinsic-flag-only)
+       ↓   canonical-name exact-prefix classification, one resolve per listing
+  → list[BuffListingIntrinsicFlags]         (wrapper preserves every other field)
+  → BuffListingCandidateAdapter               (13K-1; reads market_hash_name + flags off the DTO)
+       ↓   convert_buff_listing_to_candidate
+  → TradeUpInputCandidate                   (bool | None for statted/souvenir since 13O)
+  → TradeUpInputEnrichment
+  → InputItem
 ```
 
-`None` is the normal unresolved outcome. No concrete resolver or mapping data exists.
+The architecture is three independent composition stages after the
+underlying provider: identity-only, intrinsic-flag-only, and the
+adapter. Each stage has exactly one responsibility and a closed
+invariants contract.
+
+* **Identity binding** (`app/services/buff_identity_listing_provider.py`,
+  Phase 13N-3C; Phase 13O-1 removed the intrinsic-flag kwargs):
+  identity-only. Exactly one `resolve_goods_id(goods_id)` per fetch.
+  Three closed integrity errors (`resolver_goods_id_mismatch`,
+  `listing_goods_id_mismatch`, `market_hash_name_conflict`).
+* **Intrinsic-flag binding**
+  (`app/services/buff_intrinsic_flag_listing_provider.py`, Phase 13O-1):
+  wraps an upstream provider with a `BuffListingIntrinsicFlagResolver`
+  (default `CanonicalNameIntrinsicFlagResolver`) and attaches
+  `stattrak` / `souvenir` to each listing. The resolver is invoked
+  once per listing. When `market_hash_name` is `None` (identity
+  unresolved), both flags remain `None` (unknown).
+* **Canonical-name classifier**
+  (`app/services/buff_intrinsic_flag_resolver.py`, Phase 13O-1):
+  pure exact-canonical-string-prefix classifier using the canonical Steam community
+  market naming convention (`'StatTrak™ '` and `'Souvenir '` prefixes).
+  Verified against the full 34,402-entry pinned catalog with zero
+  contradictions under `D-INTRINSIC-002`. No HTTP, no filesystem,
+  no BUFF / SteamDT / SteamApis / Redis / DB / Discord.
+
+The intrinsic-flag binding layer is the seam. Production correctness
+never depends on caller assertions about intrinsic flags; the
+canonical classifier establishes the value deterministically from the
+canonical name only.
+
+The binding layer is **not** the adapter. The adapter still reads
+`market_hash_name` and the intrinsic flags off the supplied DTO.
 
 ### Trade-up input candidate → enrichment boundary (synthetic/offline only)
 
@@ -57,8 +109,9 @@ Phase 13I-3 established the explicit seam `TradeUpInputCandidate + metadata → 
 - Candidate owns: `market_hash_name`, `price_cny`, `paintwear`, `asset_id`, `source`, `stattrak`, `souvenir`.
 - Metadata owns: `collection_name`, `rarity`, `min_float`, `max_float`.
 - `paintwear` (Decimal) is converted to `actual_float` (float) exactly once at the boundary.
+- **Phase 13O migration:** intrinsic flags (`stattrak`, `souvenir`) are `bool | None = None`, not `bool = False`. The three states (`True` established, `False` established, `None` not-established-by-this-source) are explicit at the candidate boundary. No `None → False` coercion occurs at any upstream layer.
 
-Rejection vocabulary: `MARKET_HASH_NAME_UNRESOLVED`, `METADATA_NOT_FOUND`. No identity inference; no default fallback; no live adapter.
+Rejection vocabulary (13O): `MARKET_HASH_NAME_UNRESOLVED`, `METADATA_NOT_FOUND`, `INTRINSIC_FLAG_UNRESOLVED`. No identity inference; no default fallback; no live adapter. `INTRINSIC_FLAG_UNRESOLVED` surfaces a candidate whose intrinsic flags are `None` (the upstream did not establish the value).
 
 ### Future (not yet wired)
 
@@ -71,7 +124,12 @@ BuffListing → TradeUpInputCandidate → TradeUpInputEnrichment → (future tra
 - `app/clients/buff_anonymous_listing_client.py` — hardened anonymous BUFF GET; exact independent request, header allowlist, auth/redirect disabled.
 - `app/services/buff_listing_provider.py` — `BuffListing` DTO, strict parser, `BuffListingProvider`.
 - `app/services/buff_item_identity.py` — `BuffItemIdentity`, `BuffItemIdentityResolver` protocol (unresolved).
-- `app/services/trade_up_input_candidate.py` — `TradeUpInputCandidate` DTO (13I-2: intrinsic flags `stattrak`/`souvenir`).
+- `app/services/buff_community_identity_resolver.py` — concrete forward + reverse resolver over the pinned snapshot (13N-3B); O(1) lookup, zero network I/O.
+- `app/services/buff_identity_listing_provider.py` — identity-binding composition layer (13N-3C); wraps `BuffListingProvider` and a `BuffGoodsIdIdentityResolver`, performs exactly one `resolve_goods_id` lookup per fetch, and rebinds `BuffListing.market_hash_name` before the adapter sees it.
+- `app/services/buff_listing_intrinsic_flags.py` — three-state intrinsic-flag representation (13O); `BuffListingIntrinsicFlags` wrapper, `coerce_intrinsic_flag`, `IntrinsicFlagValidationError`. Distinguishes `True` / `False` / `None`. Source capability was UNKNOWN at the start of 13O; the canonical-name classifier (13O-1) now establishes `True` / `False` for every well-formed canonical name, leaving `None` only for unresolved identity (`D-INTRINSIC-002`).
+- `app/services/buff_intrinsic_flag_resolver.py` — canonical-name exact-canonical-string-prefix classifier (13O-1). Pure: no I/O, no network. Verifies the canonical Steam community market prefix rule against every pinned catalog entry with zero contradictions.
+- `app/services/buff_intrinsic_flag_listing_provider.py` — intrinsic-flag binding composition layer (13O-1). Identity-only provider output → intrinsic-flag-wrapped listings; one resolver call per listing.
+- `app/services/trade_up_input_candidate.py` — `TradeUpInputCandidate` DTO (13I-2 intrinsic flags `stattrak`/`souvenir`; widened to `bool | None = None` in 13O).
 - `app/services/trade_up_input_enrichment.py` — `TradeUpInputMetadata`, `TradeUpInputMetadataResolver`, `TradeUpInputEnricher`, `enrich_candidates`, rejection model (13I-3, offline only).
 - `app/clients/buff_client.py` — legacy `BuffHttpClient` (unimplemented), `MockBuffClient`, `DryRunBuffClient`, legacy `BuffSellOrder`/`BuffGoodsInfo`.
 - `app/services/buff_listing.py` + parser/facts/eligibility/qualification/solver_adapter — Phase 12 offline contract chain.
@@ -106,13 +164,13 @@ BuffListing → TradeUpInputCandidate → TradeUpInputEnrichment → (future tra
 - **Assumed (project decision):** SteamDT sell/bid interpreted as CNY/RMB; BUFF `price_cny` project-facing naming.
 - **Unknown:** official currency/fees, canonical `market_hash_name` mapping, goods/product/search endpoint, quantity/freshness/removal, pagination/page size, rate limits, classification facts, purchase handoff.
 
-## Current Blockers
+## Current Blockers (pre-13N-3C, retained for historical context)
 
-- No verified `market_hash_name ↔ BUFF goods_id` source.
-- BUFF goods/product/search endpoint undocumented/unauthorized.
-- Anonymous sell-order has no verified market name; `BuffListing.market_hash_name` stays `None`.
-- No production candidate adapter from `BuffListing` (or any live source) to `TradeUpInputCandidate`.
-- No live metadata resolver backend; `TradeUpInputEnrichment` is offline/synthetic only.
+- No verified `market_hash_name ↔ BUFF goods_id` source. *(superseded by 13N-3A / 13N-3B / 13N-3C; the source is provisional under D-IDENTITY-006 and the binding layer is implemented.)*
+- BUFF goods/product/search endpoint undocumented/unauthorized. *(still valid; the binding layer uses the community snapshot, not this endpoint.)*
+- Anonymous sell-order has no verified market name. *(still valid at the parser layer; the binding layer rebinds `market_hash_name` after the parser.)*
+- No production candidate adapter from `BuffListing` (or any live source) to `TradeUpInputCandidate`. *(the adapter exists at 13K-1; production wiring still pending.)*
+- No live metadata resolver backend; `TradeUpInputEnrichment` is offline/synthetic only. *(unchanged.)*
 
 ## Completed Capabilities (cumulative)
 
@@ -125,10 +183,18 @@ BuffListing → TradeUpInputCandidate → TradeUpInputEnrichment → (future tra
 - BuffListing candidate adapter boundary (13K-1): `app/services/buff_listing_candidate_adapter.py`; closed return-rejection vocabulary; routes candidate output through `TradeUpInputEnrichment`; synthetic / offline only at present.
 - Identity bridge architecture review (13L-0): source-by-source verdict recorded in `D-IDENTITY-003`. Four candidate sources (BUFF native, SteamDT, SteamApis, manual offline mapping) all non-actionable for production wiring. Frozen contracts preserved; `market_hash_name=None` continues to flow through the seam.
 - Production scanner orchestration architecture review (13M-0): design only; boundary B (new standalone `app/services/scanner_orchestration.py`), periodic scheduling, per-cache module ownership. Architecture recommendation recorded; no implementation in 13M-0.
+- BUF anonymous response field inventory (13N-1): deep audit of `BuffListingProvider` parser, response envelope, and field access map. Recorded in `D-IDENTITY-004`. Confirms parser reads exactly six item-level fields; `market_hash_name=None` is structurally hardcoded.
+- BUF goods-info endpoint survey (13N-2): endpoint listed as TODO `#5` in `docs/BUFF_API_NOTES.md`; `BuffGoodsInfo` is a placeholder; `BuffHttpClient.get_goods_info` raises `NotImplementedError`. Recorded in `D-IDENTITY-005`. No live probe authorized.
+- Community catalog identity revalidation (13N-3A): EricZhu-42/SteamTradingSite-ID-Mapper `buff/730.json` accepted as a **provisional** V1 identity source under `D-IDENTITY-006`. Version-pinned (commit `093adde1...`, file SHA-256 `a7f370a6...`), CC-BY-4.0 licensed, 99.96% coverage, 0 in-source collisions, 99.997% independent agreement with ModestSerhat.
+- Offline snapshot builder + bidirectional identity resolver (13N-3B): `data/identity/buff_identity_v1.json` (canonical SHA-256 `e3aab46d...`) committed. `scripts/build_buff_identity_snapshot.py` deterministic builder (verifies raw source SHA-256). `app/services/buff_community_identity_resolver.py` runtime resolver exposes both forward `resolve(market_hash_name) -> BuffItemIdentity | None` (existing Protocol) and reverse `resolve_goods_id(goods_id) -> BuffItemIdentity | None`. Runtime performs zero network I/O.
+- BUF listing identity binding (13N-3C): `app/services/buff_identity_listing_provider.py` provides `IdentityResolvingBuffListingProvider` and `bind_identity_to_provider(provider, resolver)`. Composition layer that wraps a raw `BuffListingProvider` and a `BuffGoodsIdIdentityResolver`; performs exactly one `resolve_goods_id` lookup per fetch; rebinds `BuffListing.market_hash_name` to the resolved exact name while preserving every other field verbatim; defends against three closed integrity violations (`resolver_goods_id_mismatch`, `listing_goods_id_mismatch`, `market_hash_name_conflict`) by failing closed; never invokes fallback I/O. `BuffListingCandidateAdapter` is **not** modified; the binding layer inserts the resolution step between provider and adapter so the adapter continues to read `market_hash_name` off the supplied DTO. Identity resolution is **not** inside the adapter.
+- Intrinsic-flag three-state representation (13O): `app/services/buff_listing_intrinsic_flags.py` defines `BuffListingIntrinsicFlags` (wraps `BuffListing`, adds `stattrak: bool | None` and `souvenir: bool | None`); `coerce_intrinsic_flag` enforces strict `True` / `False` / `None` acceptance; rejects `int 0/1`, `str "true"/"false"`, `float`, and `bool` subclasses. `TradeUpInputCandidate.stattrak` and `.souvenir` widened from `bool = False` to `bool | None = None` (the explicit migration target). `BuffListingCandidateAdapter` reads the flags via `getattr(..., default=None)` and forwards them verbatim; it never coerces `None` to `False`; it returns `INTRINSIC_FLAG_INVALID` for malformed values. `TradeUpInputEnrichment` rejects a candidate whose flags are `None` as `INTRINSIC_FLAG_UNRESOLVED`. **No Protected Core file is modified.** Source capability remains **UNKNOWN**: the anonymous BUFF sell-order payload does not currently expose these fields; no verification has been authorized.
+- Intrinsic-flag canonical-name classifier (13O-1; refined by 13O-1A): `app/services/buff_intrinsic_flag_resolver.py` provides `CanonicalNameIntrinsicFlagResolver` — a pure exact-canonical-string-prefix classifier using the canonical Steam community market naming convention (`'StatTrak™ '` prefix → `stattrak=True`; `'Souvenir '` prefix → `souvenir=True`; otherwise `False`). Empirical validation against the pinned 34,402-entry catalog produces zero contradictions. The classifier establishes `True` / `False` for every well-formed canonical name; `None` is reserved for callers that wrap an unknown-source resolver or for inputs that fail input validation (`IntrinsicFlagInputError`). Independent totals (13O-1A verified): `stattrak_true=3377`, `stattrak_false=31025`, `souvenir_true=2345`, `souvenir_false=32057`. Joint counts partition the catalog: `(True,True)=0`, `(True,False)=3377`, `(False,True)=2345`, `(False,False)=28680`.
+- Intrinsic-flag binding composition (13O-1; refined by 13O-1A): `app/services/buff_intrinsic_flag_listing_provider.py` provides `IntrinsicFlagResolvingBuffListingProvider` and `bind_intrinsic_flags_to_provider`. Wraps an upstream provider with a `BuffListingIntrinsicFlagResolver`; **invokes the resolver exactly once per page** (not per listing) — every non-`None` `market_hash_name` in the page is verified to share the same canonical value; conflicting non-`None` values fail closed with `IntrinsicFlagInputError`. Flags are attached via `BuffListingIntrinsicFlags`. Architecture is now three independent stages after the underlying provider: **identity-only** (13N-3C; intrinsic-flag kwargs removed in 13O-1), **intrinsic-flag-only** (13O-1; this module), and the **adapter** (13K-1; reads off the DTO).
 
 ## Current Blockers
 
-- BUFF identity bridge unresolved: `goods_id ↔ market_hash_name`. No production identity wiring until a verified anonymous/read-only source exists (`D-IDENTITY-003`).
+- BUFF identity bridge is **provisional** under `D-IDENTITY-006` (community catalog snapshot, runtime implemented in 13N-3B, file `data/identity/buff_identity_v1.json`). Identity binding between `BuffListingProvider` and `BuffListingCandidateAdapter` is implemented (13N-3C) but not yet wired into the orchestration runtime.
 - Intrinsic flag source incomplete: `stattrak` / `souvenir` are owned by the candidate layer, but the current `BuffListing` DTO does not expose them. Production adapter wiring is blocked until these values can be preserved (see `D-MIGRATION-002`).
 - No production orchestration runtime implementation: `ScannerOrchestrator` skeleton, periodic scheduler adapter, and per-cache modules are design-only as of 13M-0; the production orchestration path is not yet implemented.
 

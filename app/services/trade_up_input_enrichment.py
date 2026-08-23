@@ -70,10 +70,18 @@ class InMemoryTradeUpInputMetadataResolver:
 
 
 class TradeUpEnrichmentRejectionReason(StrEnum):
-    """Stable structural reasons one candidate failed enrichment."""
+    """Stable structural reasons one candidate failed enrichment.
+
+    The vocabulary is closed. `MARKET_HASH_NAME_UNRESOLVED` and
+    `METADATA_NOT_FOUND` are the canonical pre-13O reasons.
+    `INTRINSIC_FLAG_UNRESOLVED` was added in Phase 13O to surface the
+    three-state intrinsic-flag representation (`True` / `False` /
+    `None`) without silently coercing `None` to `False`.
+    """
 
     MARKET_HASH_NAME_UNRESOLVED = "market_hash_name_unresolved"
     METADATA_NOT_FOUND = "metadata_not_found"
+    INTRINSIC_FLAG_UNRESOLVED = "intrinsic_flag_unresolved"
 
 
 @dataclass(frozen=True, kw_only=True, repr=False)
@@ -151,6 +159,18 @@ class InMemoryTradeUpInputEnricher:
             return TradeUpEnrichmentRejection(
                 candidate=candidate,
                 reason=TradeUpEnrichmentRejectionReason.MARKET_HASH_NAME_UNRESOLVED,
+            )
+        # Phase 13O: intrinsic flags are now `bool | None`. A `None`
+        # value means the upstream source did not establish the flag;
+        # the enricher refuses to coerce `None` to `False` and fails
+        # closed with `INTRINSIC_FLAG_UNRESOLVED`. The candidate's
+        # constructor already rejected malformed (non-bool, non-None)
+        # values, so the only remaining `None` here is the legitimate
+        # unknown-source state.
+        if candidate.stattrak is None or candidate.souvenir is None:
+            return TradeUpEnrichmentRejection(
+                candidate=candidate,
+                reason=TradeUpEnrichmentRejectionReason.INTRINSIC_FLAG_UNRESOLVED,
             )
         metadata = self._metadata_resolver.resolve(candidate.market_hash_name)
         if metadata is None:

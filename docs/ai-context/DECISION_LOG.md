@@ -275,6 +275,180 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 - **Alternatives considered:** A (BUFF native) — rejected above. B (SteamDT) — rejected above. C (SteamApis) — rejected above. D (manual offline mapping) — permissible only under the five constraints; not implemented in 13L-0.
 - **Future revisit:** only when a verified source is obtained (independently verified anonymous/read-only BUFF endpoint, or an attested offline mapping file satisfying `FR-4.1`–`FR-4.5`). Reopening this decision requires explicit new evidence; do not reopen speculatively.
 
+## D-IDENTITY-004 — Anonymous BUFF sell-order response field inventory: no intrinsic flags exposed
+
+- **Date:** 2026-08-22 (Phase 13N-1)
+- **Status:** Active (historical record).
+- **Decision:** A deep audit of the anonymous BUFF sell-order response confirms the parser reads exactly six item-level fields per listing: `id`, `price`, `asset_info.paintwear`, `asset_info.assetid`, optional `asset_info.paintseed`, and the caller-supplied `goods_id` (request context). The parser deliberately does NOT read any intrinsic-flag field (`stattrak`, `souvenir`, etc.) from the response. `BuffListing.market_hash_name` is structurally hardcoded to `None`.
+- **Source verdict:** the anonymous BUFF `GET /api/market/goods/sell_order` endpoint does NOT currently expose authoritative intrinsic flags in its first-page response.
+- **Reason:** preserves the rule that the provider never invents fields; structural placeholders (`None`) flow through the seam as `MARKET_HASH_NAME_UNRESOLVED` (or `INTRINSIC_FLAG_UNRESOLVED` once Phase 13O lands).
+- **Alternatives considered:** inferring `stattrak`/`souvenir` from `paintseed`, `assetid`, `price`, or any other response field — rejected (would silently invent data).
+- **Future revisit:** only if a future audit discovers that the anonymous BUFF endpoint does in fact expose intrinsic flags in a documented field. Phase 13O-1A confirms this is still UNKNOWN.
+
+## D-IDENTITY-005 — BUF goods-info endpoint survey: no verified live source
+
+- **Date:** 2026-08-22 (Phase 13N-2)
+- **Status:** Active (historical record).
+- **Decision:** A focused audit of the BUF goods-info endpoint survey concluded that no verified anonymous/read-only BUF goods-info endpoint is currently available. `BuffGoodsInfo` remains a placeholder dataclass; `BuffHttpClient.get_goods_info` raises `NotImplementedError`. Endpoint is recorded as TODO `#5` in `docs/BUFF_API_NOTES.md`. No live probe was authorized or executed.
+- **Source verdict:** the BUF native metadata endpoint is NOT usable as a verified identity source.
+- **Reason:** preserves the policy that the project refuses to log into BUF, scrape cookies, bypass CAPTCHA, or rotate user-agents; the goods-info endpoint was not authorized for live probing.
+- **Alternatives considered:** automated or authenticated probing — rejected (violates project policy).
+- **Future revisit:** only if a verified lawful BUF goods-info endpoint becomes available through a documented sanctioned developer API.
+
+## D-IDENTITY-006 — Community offline catalog is acceptable as a provisional V1 identity source
+
+- **Date:** 2026-08-22 (Phase 13N-3A; **implementation completed 2026-08-22 in Phase 13N-3B**)
+- **Status:** Active. Implementation completed: snapshot committed, runtime resolver implemented, not yet wired into the candidate pipeline.
+- **Implementation status (Phase 13N-3B):** `data/identity/buff_identity_v1.json` is the canonical snapshot (SHA-256 `e3aab46d570869e0b6866eac44b26bca7492ea7c2c54669e74b2b4feeec506ac`). `scripts/build_buff_identity_snapshot.py` is the deterministic offline builder (verifies raw source SHA-256 against `a7f370a61dd34f7d206e0372f6806cbcb936e1ba89e33f48bbb89adaa273d72f`). `app/services/buff_community_identity_resolver.py` is the runtime resolver (forward + reverse, O(1), zero network I/O). Resolver exists but is not yet wired into the candidate pipeline.
+- **Previous decisions remain historically correct.** `D-IDENTITY-001` through `D-IDENTITY-005` are not modified. They continue to describe what was true at their respective dates. The new evidence supplements them; it does not invalidate them.
+- **What this changes:**
+  - The abstract `BuffItemIdentityResolver` Protocol is no longer the only public surface for identity.
+  - A concrete `BuffItemIdentityResolver` implementation may now be built (Phase 13N-3B).
+  - The forward `resolve(market_hash_name) -> identity` direction remains the only Protocol direction. Reverse lookup `goods_id -> market_hash_name` is implemented as an in-memory inverted index on the snapshot, not as a Protocol change.
+  - The downstream `TradeUpInputEnrichment` seam continues to operate as designed.
+- **What this does NOT change:**
+  - `BuffListing.market_hash_name = None` production behavior (until the resolver is wired in a future phase).
+  - `BuffGoodsInfo` dataclass shape (it remains a placeholder).
+  - `BuffListingCandidateAdapter` rejection vocabulary and adapter behavior.
+  - `TradeUpInputEnrichment` rejection vocabulary and seam contract.
+  - The frozen canonical path.
+  - Any Protected Core module.
+  - The `D-AUTH-001` anonymous client contract.
+- **Operating model:**
+  - The catalog is committed to the project tree as a static data file with a documented provenance header.
+  - The CC-BY-4.0 attribution requirement is preserved in the data file's provenance header.
+  - Runtime performs zero network I/O.
+  - Mapping lookups are exact-string equality on `market_hash_name` (no fuzzy inference, no normalization).
+  - Missing entries yield `None`.
+- **Reason:**
+  - High coverage (99.96% valid records).
+  - Zero in-source collisions.
+  - 99.997% independent agreement with ModestSerhat on 34,273 overlapping keys (one disagreement on a recent Austin 2025 souvenir charm, plausibly a freshness race).
+  - CC-BY-4.0 license is clear and permissive (attribution only).
+  - Commit SHA + file SHA-256 enable exact reproduction.
+  - Runtime can operate fully offline via version-controlled snapshot.
+  - Downstream code does not need to treat the data as official BUF data.
+  - Future first-party verification can supersede or audit.
+- **Alternatives considered:**
+  - A (BLOCKED): all five prior `D-IDENTITY-*` decisions remain accurate as historical records. Pure "stay blocked" would ignore new evidence.
+  - B (PROVISIONAL): chosen. Specific catalog named.
+  - C (MORE_EVIDENCE_REQUIRED): not needed. The independent verification pair (EricZhu-42 vs ModestSerhat) is already decisive.
+- **Why not use ModestSerhat as primary:** license is unclear (no LICENSE file).
+- **Why not use TimofeyIvanenko:** derived from EricZhu + ModestSerhat + ByMykel; not independent evidence.
+- **Future revisit:**
+  - When a verified first-party BUF goods-info endpoint becomes available (see `D-IDENTITY-005`), it may supersede or audit community mappings.
+  - When ModestSerhat's license is clarified, it may become a consistency-checker.
+  - When EricZhu-42 (or its successor) adds new items, the project should re-pin a new snapshot manually.
+  - **Do NOT auto-refresh at runtime.** Refresh is a manual, version-controlled operation.
+
+## D-IDENTITY-007 — Identity binding inserts between BuffListingProvider and BuffListingCandidateAdapter; adapter does not resolve identity
+
+- **Date:** 2026-08-22 (Phase 13N-3C, implementation completed 2026-08-22)
+- **Status:** Active. Implementation completed; production wiring into orchestration pending.
+- **Decision:**
+  - Insert a thin composition layer `IdentityResolvingBuffListingProvider` (module `app/services/buff_identity_listing_provider.py`) **between** `BuffListingProvider` and `BuffListingCandidateAdapter`.
+  - The composition layer wraps the raw provider and a `BuffGoodsIdIdentityResolver` (forward direction of the existing `BuffItemIdentityResolver` protocol is unused).
+  - The composition layer performs exactly **one** `resolve_goods_id(goods_id)` call per provider fetch (the BUFF sell-order page is already scoped to one caller-provided `goods_id`).
+  - The composition layer rebinds `BuffListing.market_hash_name` to the resolved exact name. Every other field (`listing_id`, `goods_id`, `price_cny`, `paintwear`, `asset_id`, `paintseed`, `source`) is preserved verbatim via `dataclasses.replace`.
+  - The composition layer fails closed on three closed integrity violations:
+    - `resolver_goods_id_mismatch` — resolver returned an identity whose `goods_id` did not equal the requested `goods_id`;
+    - `listing_goods_id_mismatch` — provider returned a listing whose `goods_id` did not equal the requested `goods_id`;
+    - `market_hash_name_conflict` — provider returned a listing whose existing `market_hash_name` did not equal the resolved exact name.
+  - When `resolve_goods_id` returns `None`, the binding layer leaves `BuffListing.market_hash_name` unchanged (typically `None`); the downstream adapter continues to produce `TradeUpInputCandidate(market_hash_name=None)`, which the existing `TradeUpInputEnrichment` rejects as `MARKET_HASH_NAME_UNRESOLVED`. No new rejection vocabulary is introduced at the adapter boundary.
+  - `MemoryError` from the resolver propagates verbatim (consistent with `D-MEMORY-001`); no fallback I/O is attempted.
+- **What this changes:**
+  - The pipeline gains an explicit identity-binding step between provider and adapter. This is the production seam that closes the gap identified in 13N-3B (resolver implemented but not wired).
+  - The downstream `BuffListingCandidateAdapter` continues to operate unchanged (it reads `market_hash_name` off the supplied DTO).
+  - The frozen contracts of `buff_listing_provider.py`, `buff_anonymous_listing_client.py`, `buff_listing_candidate_adapter.py`, `buff_item_identity.py`, and `buff_community_identity_resolver.py` are all preserved verbatim.
+- **What this does NOT change:**
+  - `BuffListingCandidateAdapter` rejection vocabulary remains closed (5 codes; see `D-ADAPTER-002`, `D-ADAPTER-003`).
+  - `TradeUpInputEnrichment` rejection vocabulary remains closed (2 codes; see `D-ENRICH-001`).
+  - The frozen canonical path remains `BuffListing → TradeUpInputCandidate → TradeUpInputEnrichment → InputItem`.
+  - The community catalog snapshot remains `D-IDENTITY-006`'s provisional source.
+  - No Protected Core module is modified.
+  - No live BUFF HTTP, no SteamDT, no SteamApis, no metadata backend, no scheduler, no Redis, no Discord.
+- **Reason:**
+  - The adapter must not own identity resolution (`D-ADAPTER-003`, `D-IDENTITY-003`).
+  - The resolver must be invoked exactly once per fetch to avoid O(N) identity lookups (per phase prompt section 4).
+  - The composition seam preserves all frozen contracts and enables the adapter to remain identity-free.
+  - The three closed integrity failures defend the seam against silent contract drift between provider, resolver, and adapter.
+- **Future revisit:**
+  - When the orchestration runtime is built (13M-0 follow-on), this composition layer is the insertion point between the scanner and the candidate adapter.
+  - When a first-party BUFF identity source is verified, the resolver bound to the binding layer can be replaced without changing the binding layer's API.
+  - When `BuffListing` (or its successor) exposes `stattrak` and `souvenir` (per `D-MIGRATION-002`), the binding layer remains unchanged because it does not own those fields; the adapter will then forward them.
+
+## D-INTRINSIC-001 — Intrinsic flags have three-state representation: `True` / `False` / `None`
+
+- **Date:** 2026-08-23 (Phase 13O)
+- **Status:** Active. Implementation completed.
+- **Decision:**
+  - The candidate DTO `TradeUpInputCandidate.stattrak` and `.souvenir` are widened from `bool = False` to `bool | None = None`. The three states are explicit:
+    - `True` = established true by the verified source;
+    - `False` = established false by the verified source;
+    - `None` = not established by this source (capability unknown / unverified).
+  - The new module `app/services/buff_listing_intrinsic_flags.py` defines `BuffListingIntrinsicFlags`, a wrapper around `BuffListing` that adds `stattrak` and `souvenir` and preserves every other field via `dataclasses.replace` + `__getattr__` delegation.
+  - `coerce_intrinsic_flag(value, field)` accepts only `True`, `False`, and `None`. Anything else (`int 0/1`, `str "true"/"false"`, `float`, `bool` subclasses, etc.) raises `IntrinsicFlagValidationError`.
+  - The adapter reads intrinsic flags via `getattr(listing, "stattrak", None)` / `getattr(listing, "souvenir", None)` and forwards them verbatim into the candidate. The adapter never coerces `None` to `False`. Malformed values trigger a new closed adapter rejection `INTRINSIC_FLAG_INVALID`.
+  - The enricher rejects a candidate whose `stattrak` or `souvenir` is `None` with a new closed enrichment rejection `INTRINSIC_FLAG_UNRESOLVED`. The enricher's existing checks (`MARKET_HASH_NAME_UNRESOLVED`, `METADATA_NOT_FOUND`) are preserved.
+  - The `IdentityResolvingBuffListingProvider` accepts optional `stattrak` and `souvenir` keyword arguments per fetch. The binding layer forwards them verbatim onto every returned listing via `BuffListingIntrinsicFlags`. The binding layer never infers either value from `goods_id`, `listing_id`, `asset_id`, `paintseed`, `price`, or any other upstream field. The defaults are `None`.
+  - **No Protected Core file is modified.** The frozen `BuffListing` DTO is wrapped, not edited. The frozen `InputItem` (`bool` typed) is not modified; the enricher fails closed before reaching it.
+- **What this changes:**
+  - The legacy `False` default (which silently fabricated certainty) is replaced by `None` (explicit unknown).
+  - The candidate layer now correctly distinguishes "established false" from "not established".
+  - The adapter gains one new closed rejection code (`INTRINSIC_FLAG_INVALID`) and the enricher gains one new closed rejection code (`INTRINSIC_FLAG_UNRESOLVED`). Both are documented; both reject rather than coerce.
+- **What this does NOT change:**
+  - The frozen `BuffListing` DTO is not modified.
+  - The frozen `InputItem` (`tradeup_engine.py`) is not modified.
+  - The frozen `BuffListingProvider` is not modified.
+  - Phase-12 BUFF domain (`buff_listing_facts.py`, etc.) is not modified.
+  - The identity-binding seam (`D-IDENTITY-007`) is preserved; the binding layer adds the optional flags argument without changing its existing semantics.
+- **Reason:**
+  - The legacy `stattrak=False, souvenir=False` default was a documented debt item (per `D-MIGRATION-001`, `D-MIGRATION-002`). Phase 13O is the explicit migration that resolves the representation.
+  - The current authorized anonymous BUFF sell-order payload does not expose these fields; the source capability is **UNKNOWN**. The only correct representation of "unknown" is `None`, not `False`.
+  - Inferring intrinsic flags from `goods_id`, `listing_id`, `asset_id`, `paintseed`, `price`, or any other BUFF response field would silently invent data; this is forbidden by project policy.
+- **Future revisit:**
+  - When a verified BUFF source supplies these fields (any future phase), the binding layer will accept them via the new keyword arguments and the enricher will accept candidates whose flags are `True`/`False`. No further candidate-side change is required.
+  - When `InputItem.stattrak` is later widened to `bool | None` (a downstream change to Protected Core), the enrichment-layer `INTRINSIC_FLAG_UNRESOLVED` rejection may be retired; until then, it is the canonical fail-closed signal.
+
+## D-INTRINSIC-002 — Canonical `market_hash_name` prefix is the authoritative classifier for `stattrak` and `souvenir`
+
+- **Date:** 2026-08-23 (Phase 13O-1; revised 2026-08-23 by Phase 13O-1A)
+- **Status:** Active. Implementation completed; Phase 13O-1A corrected counts and terminology.
+- **Decision:**
+  - The intrinsic-flag classifier uses the canonical Steam community market naming convention, applied as an exact canonical-string prefix test on the resolved `market_hash_name`:
+    - `stattrak=True` iff the name starts with the exact canonical string `'StatTrak™ '` (the trademark sign U+2122 followed by a single ASCII space; 10 Unicode codepoints; 12 UTF-8 bytes).
+    - `souvenir=True` iff the name starts with the exact canonical string `'Souvenir '` (a single ASCII space; 9 Unicode codepoints; 9 UTF-8 bytes).
+    - Otherwise the corresponding flag is `False`.
+  - The two prefixes are mutually exclusive: a canonical name cannot start with both. This invariant holds for the entire pinned identity catalog.
+  - The classifier is **pure**: no HTTP, no filesystem mutation, no BUFF / SteamDT / SteamApis / Redis / DB / Discord. It depends only on its string input.
+  - The classifier rejects malformed input (non-string, empty, whitespace-padded) with a fixed-message `IntrinsicFlagInputError`. It never silently fixes bad input.
+  - The classifier never produces `None` for a well-formed canonical name; the three states (`True`, `False`, `None`) are produced only when the input fails validation, when `market_hash_name` is `None` (identity unresolved), or when the caller wraps an unknown-source resolver.
+- **Evidence source:**
+  - Catalog-derived exact canonical-name classification, corroborated by observed Steam community market naming/category behavior across 34,402 pinned entries. The repository does NOT contain a formal "authoritative Steam schema contract"; the rule rests on observed naming convention rather than a published spec.
+  - Empirical validation against the pinned identity catalog `data/identity/buff_identity_v1.json` (SHA-256 `e3aab46d...`, 34,402 accepted entries):
+    - 3,377 names start with `'StatTrak™ '` (`stattrak=True`).
+    - 2,345 names start with `'Souvenir '` (`souvenir=True`).
+    - 28,680 names start with neither prefix (`stattrak=False`, `souvenir=False`).
+    - 0 names start with both prefixes simultaneously.
+    - 0 empty or whitespace-padded names.
+    - All `'StatTrak™ '` canonical-prefix variants are exact; no alternative spellings.
+  - Independent totals (Phase 13O-1A verified):
+    - `stattrak_true=3377`, `stattrak_false=31025` (= 34402 − 3377).
+    - `souvenir_true=2345`, `souvenir_false=32057` (= 34402 − 2345).
+    - Joint counts: `(True, True)=0`, `(True, False)=3377`, `(False, True)=2345`, `(False, False)=28680`. The four joint counts partition the catalog.
+- **Validation population:**
+  - 34,402 accepted catalog entries (100% coverage; no entry remains unclassified).
+  - 12-spot-check across weapon / knife / sticker / case / StatTrak / Souvenir categories (Phase 13N-3A evidence; `D-IDENTITY-006`).
+- **Contradictions:** 0 (zero contradictions under the canonical-name rule on the pinned catalog).
+- **Unknown behavior:** None for a well-formed canonical name. `None` is the explicit value emitted when (a) the input fails validation, (b) `market_hash_name` is `None` (identity unresolved), or (c) the caller wraps an unknown-source resolver.
+- **Provenance:** the canonical Steam community market naming convention. The classifier does NOT depend on a live BUFF endpoint, a SteamDT field, or a SteamApis assumption. It depends only on the canonical name itself.
+- **Important distinction:** the BUFF `sell_order` payload itself does NOT provide these flags. The flags are derived from the canonical `market_hash_name`. The anonymous sell-order parser (Phase 13N-1; `D-IDENTITY-004`) reads exactly six item-level fields and never reads any intrinsic-flag field.
+- **Why this does not relax the Phase 13O three-state contract:** the classifier emits `True` or `False` for every well-formed canonical name; it does not coerce `None` to `False`. The three-state representation is preserved at the candidate boundary; the classifier simply establishes the value where the canonical name itself provides evidence.
+- **Why this is "catalog-derived intrinsic classification", not "BUFF-supplied intrinsic flag":** the classifier establishes the value from the canonical name, not from the live BUFF sell-order payload. A future verified BUFF endpoint that supplies these fields directly would be a separate (and stronger) source; this classifier remains the conservative catalog-derived baseline.
+- **Future revisit:**
+  - When a verified BUFF endpoint supplies `stattrak` / `souvenir` directly in the sell-order payload, the canonical-name classifier may be retired in favor of the verified source.
+  - The classifier is robust against new catalog entries; any future pinned snapshot that introduces a non-canonical name (e.g. `statTrak` lowercase) will be classified `False` and may warrant review, but the rule itself does not change.
+
 ## D-MIGRATION-002 — Intrinsic flag migration remains a production wiring requirement
 
 - **Date:** 2026-08-22 (Phase 13K-1)

@@ -55,8 +55,8 @@ class TradeUpInputCandidate:
     paintwear: Decimal
     asset_id: str
     source: str = "buff"
-    stattrak: bool = False
-    souvenir: bool = False
+    stattrak: bool | None = None
+    souvenir: bool | None = None
 
     def __post_init__(self) -> None:
         _validate_exact_string(self.listing_id, field="listing_id")
@@ -67,8 +67,8 @@ class TradeUpInputCandidate:
         _validate_paintwear(self.paintwear)
         _validate_exact_string(self.asset_id, field="asset_id")
         _validate_exact_string(self.source, field="source")
-        _validate_exact_bool(self.stattrak, field="stattrak")
-        _validate_exact_bool(self.souvenir, field="souvenir")
+        _validate_intrinsic_flag(self.stattrak, field="stattrak")
+        _validate_intrinsic_flag(self.souvenir, field="souvenir")
 
 
 def _validate_exact_string(value: object, *, field: str) -> str:
@@ -98,3 +98,16 @@ def _validate_paintwear(value: object) -> None:
 def _validate_exact_bool(value: object, *, field: str) -> None:
     if type(value) is not bool:
         raise TradeUpInputCandidateValidationError(field=field)
+
+
+def _validate_intrinsic_flag(value: object, *, field: str) -> None:
+    """Accept exactly `True`, `False`, or `None`. Reject everything else.
+
+    This is the migration target. The legacy strict-bool validator
+    (`_validate_exact_bool`) is preserved for backward-compatibility
+    with the `_ALLOWED_FIELDS` allowlist but no longer guards the
+    intrinsic-flag fields.
+    """
+    if value is True or value is False or value is None:
+        return
+    raise TradeUpInputCandidateValidationError(field=field)

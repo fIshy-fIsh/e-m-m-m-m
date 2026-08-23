@@ -6,6 +6,10 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Protocol
 
+from app.services.buff_listing_intrinsic_flags import (
+    IntrinsicFlagValidationError,
+    coerce_intrinsic_flag,
+)
 from app.services.buff_listing_provider import BuffListing
 from app.services.trade_up_input_candidate import TradeUpInputCandidate
 
@@ -27,6 +31,12 @@ class CandidateAdapterRejectionReason(StrEnum):
     The adapter does not own identity derivation. Unresolved identity flows
     through as a candidate with `market_hash_name=None`; downstream
     `TradeUpInputEnrichment` rejects it as `MARKET_HASH_NAME_UNRESOLVED`.
+
+    `INTRINSIC_FLAG_INVALID` rejects malformed intrinsic-flag values
+    (non-bool and non-`None`). The adapter does NOT silently coerce
+    `None` to `False` and does NOT infer the flag from any upstream
+    field. The intrinsic-flag representation is documented in
+    `app/services/buff_listing_intrinsic_flags.py`.
     """
 
     MISSING_IDENTITY = "missing_identity"
@@ -34,6 +44,7 @@ class CandidateAdapterRejectionReason(StrEnum):
     INVALID_FLOAT = "invalid_float"
     MISSING_ASSET_ID = "missing_asset_id"
     UNSUPPORTED_SOURCE = "unsupported_source"
+    INTRINSIC_FLAG_INVALID = "intrinsic_flag_invalid"
 
 
 @dataclass(frozen=True, kw_only=True, repr=False)
@@ -84,6 +95,14 @@ def convert_buff_listing_to_candidate(
     will surface that as `MARKET_HASH_NAME_UNRESOLVED`. `MISSING_IDENTITY`
     is reserved for explicit refusal at the adapter layer and is not
     triggered in this synthetic phase.
+
+    Intrinsic flags (`stattrak`, `souvenir`) are read off the listing
+    via `getattr(..., default=None)` so any object with the
+    `BuffListing` attribute surface works (plain `BuffListing`,
+    `BuffListingIntrinsicFlags` wrapper, or test stubs). The adapter
+    forwards each flag verbatim into the candidate and **never**
+    coerces `None` to `False`. Malformed values (non-bool, non-`None`)
+    trigger `INTRINSIC_FLAG_INVALID`.
     """
 
     if not hasattr(listing, "market_hash_name"):
@@ -133,6 +152,17 @@ def convert_buff_listing_to_candidate(
     goods_id: str = getattr(listing, "goods_id", "")
     listing_id: str = getattr(listing, "listing_id", "")
 
+    raw_stattrak = getattr(listing, "stattrak", None)
+    raw_souvenir = getattr(listing, "souvenir", None)
+    try:
+        stattrak: bool | None = coerce_intrinsic_flag(raw_stattrak, field="stattrak")
+        souvenir: bool | None = coerce_intrinsic_flag(raw_souvenir, field="souvenir")
+    except IntrinsicFlagValidationError:
+        return CandidateAdapterRejection(
+            listing=listing,
+            reason=CandidateAdapterRejectionReason.INTRINSIC_FLAG_INVALID,
+        )
+
     return TradeUpInputCandidate(
         listing_id=listing_id,
         goods_id=goods_id,
@@ -141,8 +171,8 @@ def convert_buff_listing_to_candidate(
         paintwear=paintwear,
         asset_id=asset_id,
         source=source,
-        stattrak=False,
-        souvenir=False,
+        stattrak=stattrak,
+        souvenir=souvenir,
     )
 
 

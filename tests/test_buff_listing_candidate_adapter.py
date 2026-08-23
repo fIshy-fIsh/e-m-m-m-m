@@ -78,6 +78,7 @@ def test_rejection_reason_vocabulary_is_closed() -> None:
         CandidateAdapterRejectionReason.INVALID_FLOAT,
         CandidateAdapterRejectionReason.MISSING_ASSET_ID,
         CandidateAdapterRejectionReason.UNSUPPORTED_SOURCE,
+        CandidateAdapterRejectionReason.INTRINSIC_FLAG_INVALID,
     )
 
 
@@ -161,18 +162,111 @@ def test_unsupported_source_returns_unsupported_source_rejection() -> None:
     assert outcome.reason == CandidateAdapterRejectionReason.UNSUPPORTED_SOURCE
 
 
-def test_stattrak_default_is_false() -> None:
+def test_stattrak_default_is_none_when_listing_does_not_expose_it() -> None:
+    """Phase 13O: when the listing does not expose `stattrak`, the adapter
+    forwards `None` (not `False`). The legacy `False` default silently
+    fabricated certainty; the new `None` default explicitly represents
+    the unknown-upstream state.
+    """
     listing = _listing()
     outcome = convert_buff_listing_to_candidate(listing)
+    assert isinstance(outcome, TradeUpInputCandidate)
+    assert outcome.stattrak is None
+
+
+def test_souvenir_default_is_none_when_listing_does_not_expose_it() -> None:
+    listing = _listing()
+    outcome = convert_buff_listing_to_candidate(listing)
+    assert isinstance(outcome, TradeUpInputCandidate)
+    assert outcome.souvenir is None
+
+
+def test_stattrak_true_is_forwarded_verbatim() -> None:
+    class Stub:
+        market_hash_name = NAME
+        price_cny = Decimal("10.00")
+        paintwear = Decimal("0.1")
+        asset_id = "asset-1"
+        source = "buff"
+        goods_id = "g-1"
+        listing_id = "l-1"
+        stattrak = True
+        souvenir = False
+
+    outcome = convert_buff_listing_to_candidate(Stub())  # type: ignore[arg-type]
+    assert isinstance(outcome, TradeUpInputCandidate)
+    assert outcome.stattrak is True
+    assert outcome.souvenir is False
+
+
+def test_souvenir_true_is_forwarded_verbatim() -> None:
+    class Stub:
+        market_hash_name = NAME
+        price_cny = Decimal("10.00")
+        paintwear = Decimal("0.1")
+        asset_id = "asset-1"
+        source = "buff"
+        goods_id = "g-1"
+        listing_id = "l-1"
+        stattrak = False
+        souvenir = True
+
+    outcome = convert_buff_listing_to_candidate(Stub())  # type: ignore[arg-type]
     assert isinstance(outcome, TradeUpInputCandidate)
     assert outcome.stattrak is False
+    assert outcome.souvenir is True
 
 
-def test_souvenir_default_is_false() -> None:
-    listing = _listing()
-    outcome = convert_buff_listing_to_candidate(listing)
+def test_intrinsic_flag_none_is_forwarded_verbatim() -> None:
+    class Stub:
+        market_hash_name = NAME
+        price_cny = Decimal("10.00")
+        paintwear = Decimal("0.1")
+        asset_id = "asset-1"
+        source = "buff"
+        goods_id = "g-1"
+        listing_id = "l-1"
+        stattrak = None
+        souvenir = None
+
+    outcome = convert_buff_listing_to_candidate(Stub())  # type: ignore[arg-type]
     assert isinstance(outcome, TradeUpInputCandidate)
-    assert outcome.souvenir is False
+    assert outcome.stattrak is None
+    assert outcome.souvenir is None
+
+
+def test_intrinsic_flag_malformed_value_returns_rejection() -> None:
+    """Non-bool, non-None intrinsic-flag values trigger INTRINSIC_FLAG_INVALID."""
+
+    class StubInteger:
+        market_hash_name = NAME
+        price_cny = Decimal("10.00")
+        paintwear = Decimal("0.1")
+        asset_id = "asset-1"
+        source = "buff"
+        goods_id = "g-1"
+        listing_id = "l-1"
+        stattrak = 1
+        souvenir = False
+
+    outcome = convert_buff_listing_to_candidate(StubInteger())  # type: ignore[arg-type]
+    assert isinstance(outcome, CandidateAdapterRejection)
+    assert outcome.reason == CandidateAdapterRejectionReason.INTRINSIC_FLAG_INVALID
+
+    class StubString:
+        market_hash_name = NAME
+        price_cny = Decimal("10.00")
+        paintwear = Decimal("0.1")
+        asset_id = "asset-1"
+        source = "buff"
+        goods_id = "g-1"
+        listing_id = "l-1"
+        stattrak = "true"
+        souvenir = False
+
+    outcome = convert_buff_listing_to_candidate(StubString())  # type: ignore[arg-type]
+    assert isinstance(outcome, CandidateAdapterRejection)
+    assert outcome.reason == CandidateAdapterRejectionReason.INTRINSIC_FLAG_INVALID
 
 
 def test_no_metadata_fields_created_on_candidate() -> None:
@@ -275,8 +369,27 @@ def test_convert_buff_listings_partitions_correctly() -> None:
 
 
 def test_adapters_output_flows_into_enrichment_seam() -> None:
-    listing = _listing()
-    outcome = convert_buff_listing_to_candidate(listing)
+    """Listing exposes established `stattrak=False, souvenir=False`.
+
+    Phase 13O migration: the listing must explicitly carry the
+    intrinsic flags for the seam to succeed. A plain `BuffListing`
+    (with no flags exposed) propagates `None` through the adapter and
+    the enricher rejects it as `INTRINSIC_FLAG_UNRESOLVED`. This
+    test exercises the established-false branch.
+    """
+    class StubListing:
+        listing_id = "listing-synthetic-1"
+        goods_id = "goods-synthetic-1"
+        market_hash_name = NAME
+        price_cny = Decimal("12.34")
+        paintwear = Decimal("0.1234")
+        asset_id = "asset-synthetic-1"
+        paintseed = 123
+        source = "buff"
+        stattrak = False
+        souvenir = False
+
+    outcome = convert_buff_listing_to_candidate(StubListing())  # type: ignore[arg-type]
     assert isinstance(outcome, TradeUpInputCandidate)
     resolver = InMemoryTradeUpInputMetadataResolver({NAME: _metadata()})
     enricher = InMemoryTradeUpInputEnricher(resolver)
@@ -294,12 +407,44 @@ def test_unresolved_identity_is_rejected_by_enrichment() -> None:
     listing = _listing(market_hash_name=None)
     outcome = convert_buff_listing_to_candidate(listing)
     assert isinstance(outcome, TradeUpInputCandidate)
+    assert outcome.stattrak is None
+    assert outcome.souvenir is None
     resolver = InMemoryTradeUpInputMetadataResolver({NAME: _metadata()})
     enricher = InMemoryTradeUpInputEnricher(resolver)
     result = enrich_candidates([outcome], enricher)
     assert len(result.enriched) == 0
     assert len(result.rejected) == 1
+    # When `market_hash_name` is `None`, the enricher surfaces
+    # `MARKET_HASH_NAME_UNRESOLVED` first (the intrinsic-flag check
+    # runs only after the market-hash-name check passes). The
+    # `INTRINSIC_FLAG_UNRESOLVED` branch is exercised in the next
+    # test.
     assert result.rejected[0].reason.value == "market_hash_name_unresolved"
+
+
+def test_unresolved_intrinsic_flags_are_rejected_by_enrichment() -> None:
+    """Even with a known market_hash_name, `None` flags fail closed."""
+    class StubListing:
+        listing_id = "listing-synthetic-2"
+        goods_id = "goods-synthetic-2"
+        market_hash_name = NAME
+        price_cny = Decimal("12.34")
+        paintwear = Decimal("0.1234")
+        asset_id = "asset-synthetic-2"
+        paintseed = 123
+        source = "buff"
+        stattrak = None
+        souvenir = None
+
+    outcome = convert_buff_listing_to_candidate(StubListing())  # type: ignore[arg-type]
+    assert isinstance(outcome, TradeUpInputCandidate)
+    assert outcome.stattrak is None
+    resolver = InMemoryTradeUpInputMetadataResolver({NAME: _metadata()})
+    enricher = InMemoryTradeUpInputEnricher(resolver)
+    result = enrich_candidates([outcome], enricher)
+    assert len(result.enriched) == 0
+    assert len(result.rejected) == 1
+    assert result.rejected[0].reason.value == "intrinsic_flag_unresolved"
 
 
 def test_non_buff_listing_argument_raises_type_error() -> None:

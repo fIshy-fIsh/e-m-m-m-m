@@ -64,14 +64,24 @@ The missing bridge `market_hash_name ↔ BUFF goods_id` has **no verified source
 ## Current Git State (verify live; authoritative snapshot)
 
 - **Branch:** `feature/steamdt-cache-rate-limit`
-- **HEAD:** `a70b0e63661ad7165bd023fa9a35d82b21bf4310` — `add identity and orchestration architecture reviews`
+- **HEAD:** `481dafb63661ad7165bd023fa9a35d82b21bf4310` — `add identity and orchestration architecture reviews`
 - **Latest completed phases:**
+  - **Phase 13O-1A** — Intrinsic classifier correctness audit (IMPLEMENTED; counts and terminology corrected; per-page resolver invocation; new tests for matrix invariants).
+  - **Phase 13O-1** — Intrinsic-flag canonical-name classifier + binding separation (IMPLEMENTED; `app/services/buff_intrinsic_flag_resolver.py` provides the pure exact-canonical-string-prefix classifier; `app/services/buff_intrinsic_flag_listing_provider.py` provides the separate composition layer; identity-binding layer restored to identity-only).
+  - **Phase 13O** — Intrinsic-flag three-state representation (IMPLEMENTED; `bool | None = None` for `stattrak` / `souvenir` at the candidate boundary; `INTRINSIC_FLAG_UNRESOLVED` enrichment rejection; `INTRINSIC_FLAG_INVALID` adapter rejection).
+  - **Phase 13N-3C** — BUF listing identity binding (IMPLEMENTED; identity-only).
+  - **Phase 13N-3B** — Offline BUFF identity snapshot + bidirectional resolver (IMPLEMENTED).
+  - **Phase 13N-3A** — BUF community catalog identity revalidation.
   - **Phase 13M-0** — production scanner orchestration architecture review (committed `a70b0e6`, design only).
   - **Phase 13L-0** — identity bridge architecture review (committed `a70b0e6`, design only; new decision `D-IDENTITY-003`).
+  - **Phase 13N-1** — BUF anonymous response field inventory (committed; decision `D-IDENTITY-004`).
+  - **Phase 13N-2** — BUF goods-info endpoint survey (committed; decision `D-IDENTITY-005`).
   - **Phase 13K-3** — BuffListing candidate adapter boundary commit (`5d19096`).
   - **Phase 13K-1** — synthetic BuffListing candidate adapter implementation (`5d19096`).
   - **Phase 13J-1** — synthetic scanner-scale validation implementation (`1549248`).
   - **Phase 13I-3** — trade-up input enrichment boundary (`f34f25f`).
-- **Working tree:** clean after the 13M-0 documentation checkpoint. Local branch is 18 commits ahead of `origin/feature/steamdt-cache-rate-limit`; no remote-only divergence.
+- **Identity status:** **PROVISIONAL** under `D-IDENTITY-006` — community catalog (EricZhu-42) implemented as version-pinned offline source. Resolver exists (13N-3B). Identity binding between `BuffListingProvider` and `BuffListingCandidateAdapter` exists (13N-3C) and is **identity-only** (Phase 13O-1 removed the intrinsic-flag kwargs). The candidate adapter itself still does NOT resolve identity.
+- **Intrinsic-flag status:** **THREE-STATE** under `D-INTRINSIC-001` (Phase 13O); **canonical-name classifier** under `D-INTRINSIC-002` (Phase 13O-1). The classifier establishes `True` / `False` for every well-formed canonical name using the exact-byte prefix rule (`'StatTrak™ '` and `'Souvenir '`). `None` is reserved for unresolved identity or unknown-source resolvers. The classifier is pure: no HTTP, no filesystem mutation, no BUFF / SteamDT / SteamApis / Redis / DB / Discord.
+- **Working tree:** contains Phase 13O-1 implementation (canonical-name classifier + binding separation + AI context updates) on top of Phase 13O (intrinsic-flag wrapper module + 3-state representation), 13N-3C (binding layer), 13N-3B (resolver/snapshot/builder), and 13N-3A (spec trilogy and research artifacts).
 
 > Prefer `git status` and `git log --oneline -n 20` over this snapshot.
