@@ -30,6 +30,14 @@ from app.clients.buff_anonymous_listing_client import BuffAnonymousListingHttpCl
 from app.clients.steamdt_client import SteamDTClientConfig, SteamDTHttpClient
 from app.services.buff_community_identity_resolver import BuffCommunityIdentityResolver
 from app.services.buff_listing_provider import BuffListingProvider
+from app.services.market_universe_builder import (
+    BoundedMarketUniverseBuilderError,
+    MarketUniverseResult,
+    MarketUniverseSpec,
+    SouvenirInclusion,
+    StatTrakMode,
+    build_universe_goods_ids,
+)
 from app.services.recipe_solver import RecipeSolverConfig
 from app.services.risk_filter import RiskFilterConfig
 from app.services.scanner_orchestrator import LiveScannerOrchestrator, ScannerRunResult
@@ -73,15 +81,36 @@ class LiveScanSettings(BaseSettings):
     )
 
 
+VALID_RARITIES: tuple[str, ...] = (
+    "Consumer Grade",
+    "Industrial Grade",
+    "Mil-Spec Grade",
+    "Restricted",
+    "Classified",
+)
+VALID_STATTRAK_MODES: tuple[str, ...] = ("normal", "stattrak")
+VALID_SOUVENIR_POLICIES: tuple[str, ...] = ("include", "exclude")
+UNIVERSE_HARD_MAX: int = 10
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="READ ONLY: run one bounded BUFF opportunity scan and exit"
     )
-    parser.add_argument(
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument(
         "--goods-id",
         action="append",
-        required=True,
+        default=None,
         help="BUFF goods_id to scan (repeatable; max 10; deduplicated in order)",
+    )
+    source.add_argument(
+        "--auto-universe",
+        action="store_true",
+        help=(
+            "Build the bounded goods-id universe from the pinned identity "
+            "and metadata catalogs instead of supplying manual IDs"
+        ),
     )
     parser.add_argument(
         "--identity-snapshot",
@@ -95,8 +124,38 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--rarity",
+        choices=VALID_RARITIES,
         default="Restricted",
-        help="Input rarity passed to the existing RecipeSolverConfig",
+        help="Productive input rarity (excludes Covert)",
+    )
+    parser.add_argument(
+        "--stattrak-mode",
+        choices=VALID_STATTRAK_MODES,
+        default="normal",
+        help="Homogeneous StatTrak mode for the bounded universe (auto-universe only)",
+    )
+    parser.add_argument(
+        "--souvenir",
+        choices=VALID_SOUVENIR_POLICIES,
+        default="include",
+        help="Souvenir input inclusion policy (auto-universe only)",
+    )
+    parser.add_argument(
+        "--collection",
+        action="append",
+        default=[],
+        help="Exact collection allowlist (repeatable; auto-universe only)",
+    )
+    parser.add_argument(
+        "--max-goods-ids",
+        type=int,
+        default=UNIVERSE_HARD_MAX,
+        help="Maximum auto-universe goods IDs to scan (1..10; auto-universe only)",
+    )
+    parser.add_argument(
+        "--universe-preview",
+        action="store_true",
+        help="Print the auto-universe plan and exit before any network/client work",
     )
     parser.add_argument(
         "--max-valuation-requests",
@@ -327,8 +386,199 @@ def print_effective_config(
     print()
 
 
+def _build_market_universe_spec(args: argparse.Namespace) -> MarketUniverseSpec:
+    if not args.auto_universe:
+        raise BoundedMarketUniverseBuilderError(reason="unsupported_rarity")
+    if (
+        type(args.max_goods_ids) is not int
+        or args.max_goods_ids < 1
+        or args.max_goods_ids > UNIVERSE_HARD_MAX
+    ):
+        raise BoundedMarketUniverseBuilderError(reason="universe_over_hard_max")
+    if args.stattrak_mode not in VALID_STATTRAK_MODES:
+        raise BoundedMarketUniverseBuilderError(reason="unsupported_rarity")
+    if args.souvenir not in VALID_SOUVENIR_POLICIES:
+        raise BoundedMarketUniverseBuilderError(reason="unsupported_rarity")
+    return MarketUniverseSpec(
+        rarity=args.rarity,
+        stattrak_mode=(
+            StatTrakMode.STATTRAK
+            if args.stattrak_mode == "stattrak"
+            else StatTrakMode.NORMAL
+        ),
+        souvenir_inclusion=(
+            SouvenirInclusion.EXCLUDE
+            if args.souvenir == "exclude"
+            else SouvenirInclusion.INCLUDE
+        ),
+        cap=args.max_goods_ids,
+        collection_allowlist=tuple(args.collection),
+    )
+
+
+def _build_market_universe(
+    args: argparse.Namespace,
+    *,
+    identity_resolver: BuffCommunityIdentityResolver,
+    metadata_resolver: PinnedSkinMetadataResolver,
+) -> MarketUniverseResult:
+    spec = _build_market_universe_spec(args)
+    return build_universe_goods_ids(
+        identity_resolver=identity_resolver,
+        metadata_resolver=metadata_resolver,
+        spec=spec,
+    )
+
+
+def print_universe_preview(
+    result: MarketUniverseResult,
+    *,
+    max_valuation_requests: int,
+) -> None:
+    print("AUTO UNIVERSE PREVIEW")
+    print(f"input rarity:               {result.spec.rarity}")
+    print(f"stattrak mode:              {result.spec.stattrak_mode.value}")
+    print(f"souvenir policy:            {result.spec.souvenir_inclusion.value}")
+    print(
+        "collection allowlist:       "
+        + (", ".join(result.spec.collection_allowlist) or "(all)")
+    )
+    print(f"cap:                        {result.spec.cap}")
+    print(f"selected goods_ids:         {len(result.goods_ids)}")
+    print(f"logical valuation cap:      {max_valuation_requests}")
+    print(f"max BUFF requests (upper):  {len(result.goods_ids)}")
+    print()
+    diagnostics = result.diagnostics
+    print("CATALOG DIAGNOSTICS")
+    print(f"  metadata rows:            {diagnostics.catalog_metadata_rows}")
+    print(f"  identity rows:            {diagnostics.catalog_identity_rows}")
+    print(f"  eligible before bound:    {diagnostics.eligible_before_bound}")
+    print(f"  excluded no identity:     {diagnostics.excluded_no_identity}")
+    print(f"  excluded no metadata:     {diagnostics.excluded_no_metadata}")
+    print(f"  excluded invalid rarity:  {diagnostics.excluded_invalid_rarity}")
+    print(f"  excluded no collection:   {diagnostics.excluded_no_collection}")
+    print(f"  excluded no valid output: {diagnostics.excluded_no_valid_output}")
+    print(f"  excluded intrinsic policy:{diagnostics.excluded_intrinsic_policy}")
+    print(f"  excluded by allowlist:    {diagnostics.excluded_by_allowlist}")
+    print()
+    print("SELECTED TARGETS")
+    for index, (goods_id, market_hash_name) in enumerate(
+        zip(result.goods_ids, result.selected_market_hash_names, strict=False),
+        start=1,
+    ):
+        print(f"  {index}. goods_id={goods_id} market_hash_name={market_hash_name}")
+
+
+def _universe_preview_to_jsonable(
+    result: MarketUniverseResult,
+    *,
+    max_valuation_requests: int,
+) -> dict[str, object]:
+    diagnostics = result.diagnostics
+    return {
+        "kind": "live_scan_universe_preview",
+        "spec": {
+            "rarity": result.spec.rarity,
+            "stattrak_mode": result.spec.stattrak_mode.value,
+            "souvenir_policy": result.spec.souvenir_inclusion.value,
+            "cap": result.spec.cap,
+            "collection_allowlist": list(result.spec.collection_allowlist),
+        },
+        "selected_count": len(result.goods_ids),
+        "selected_goods_ids": list(result.goods_ids),
+        "selected_market_hash_names": list(result.selected_market_hash_names),
+        "catalog_diagnostics": {
+            "metadata_rows": diagnostics.catalog_metadata_rows,
+            "identity_rows": diagnostics.catalog_identity_rows,
+            "eligible_before_bound": diagnostics.eligible_before_bound,
+            "excluded_no_identity": diagnostics.excluded_no_identity,
+            "excluded_no_metadata": diagnostics.excluded_no_metadata,
+            "excluded_invalid_rarity": diagnostics.excluded_invalid_rarity,
+            "excluded_no_collection": diagnostics.excluded_no_collection,
+            "excluded_no_valid_output": diagnostics.excluded_no_valid_output,
+            "excluded_intrinsic_policy": diagnostics.excluded_intrinsic_policy,
+            "excluded_by_allowlist": diagnostics.excluded_by_allowlist,
+        },
+        "preflight": {
+            "max_buff_requests": len(result.goods_ids),
+            "max_steamdt_valuation_requests": max_valuation_requests,
+        },
+        "http_clients_constructed": False,
+        "http_requests_sent": 0,
+    }
+
+
+def run_universe_preview(args: argparse.Namespace) -> int:
+    """Build the auto-universe, print it, and exit BEFORE any client work."""
+    identity_resolver = BuffCommunityIdentityResolver.from_snapshot_path(
+        args.identity_snapshot
+    )
+    metadata_resolver = PinnedSkinMetadataResolver.from_snapshot_path(
+        args.metadata_snapshot
+    )
+    result = _build_market_universe(
+        args,
+        identity_resolver=identity_resolver,
+        metadata_resolver=metadata_resolver,
+    )
+    if args.json:
+        print(
+            json.dumps(
+                _universe_preview_to_jsonable(
+                    result, max_valuation_requests=args.max_valuation_requests
+                ),
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        print_universe_preview(
+            result, max_valuation_requests=args.max_valuation_requests
+        )
+    return 0
+
+
 async def _main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.universe_preview:
+        if not args.auto_universe:
+            print("UNIVERSE_PREVIEW_REQUIRES_AUTO_UNIVERSE")
+            return 2
+        try:
+            return run_universe_preview(args)
+        except BoundedMarketUniverseBuilderError as exc:
+            print("MARKET_UNIVERSE_BUILDER_BLOCKED")
+            print(f"reason: {exc.reason}")
+            return 2
+        except (
+            BuffCommunityIdentityResolver.__class__,
+            PinnedSkinMetadataResolver.__class__,
+        ):
+            return 2
+    if args.auto_universe:
+        if args.max_valuation_requests > 20:
+            args.max_valuation_requests = 20
+        try:
+            identity_resolver = BuffCommunityIdentityResolver.from_snapshot_path(
+                args.identity_snapshot
+            )
+            metadata_resolver = PinnedSkinMetadataResolver.from_snapshot_path(
+                args.metadata_snapshot
+            )
+            universe = _build_market_universe(
+                args,
+                identity_resolver=identity_resolver,
+                metadata_resolver=metadata_resolver,
+            )
+        except BoundedMarketUniverseBuilderError as exc:
+            print("MARKET_UNIVERSE_BUILDER_BLOCKED")
+            print(f"reason: {exc.reason}")
+            return 2
+        args.goods_id = list(universe.goods_ids)
+        if not args.json:
+            print_universe_preview(
+                universe, max_valuation_requests=args.max_valuation_requests
+            )
     settings = LiveScanSettings()
     try:
         validate_live_valuation_config(

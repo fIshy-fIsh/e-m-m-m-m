@@ -129,11 +129,25 @@ class BuffCommunityIdentityResolver:
         self._forward = dict(forward)
         self._reverse = dict(reverse)
         self._items_tuple = tuple(forward.items())
+        self._identities_public = tuple(
+            sorted(self._forward.items(), key=lambda kv: (len(kv[0]), kv[0]))
+        )
         self._metadata = metadata
 
     @property
     def metadata(self) -> BuffCommunitySnapshotMetadata:
         return self._metadata
+
+    @property
+    def identities(self) -> tuple[tuple[str, str], ...]:
+        """Immutable `((market_hash_name, goods_id), ...)` view over accepted identities.
+
+        Ordered by `(len(market_hash_name), market_hash_name)` for determinism,
+        mirroring `PinnedSkinMetadataResolver.skins` shape and intent. The
+        returned tuple contains only forward-mapped exact identities from
+        the snapshot; ``resolve`` does not need to be awaited.
+        """
+        return self._identities_public
 
     @classmethod
     def from_snapshot_path(cls, path: Path | str) -> BuffCommunityIdentityResolver:
