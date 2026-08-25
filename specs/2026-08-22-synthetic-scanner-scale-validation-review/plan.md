@@ -54,7 +54,7 @@
 
 4.1. For each `SyntheticScaleCase`, build `output_candidates_by_collection` using a small hand-curated `SkinMetadata` fixture (per collection; rarity chosen to be one tier below `target_rarity` per `RarityOrder`). Use `build_output_candidates_by_collection` from `metadata_service.py`; do not bypass it.
 
-4.2. Group enriched inputs by collection. For each collection with `>= 10` enriched inputs of the same `stattrak` / `souvenir` class, attempt `calculate_tradeup_results`. Capture both successes and `ValueError`s from `_validate_input_items` (mixed-rarity, mixed-stattrak, mixed-souvenir, missing-collection).
+4.2. Group enriched inputs by collection. For each collection with `>= 10` enriched inputs of the same `stattrak` / `souvenir` class, attempt `calculate_tradeup_results`. Capture both successes and `ValueError`s from `_validate_input_items` (mixed-rarity, mixed-stattrak, mixed-souvenir, missing-collection). **Historical review plan: Phase 13P-4 / `D-TRADEUP-001` supersedes the homogeneous-Souvenir assumption for current standard trade-ups.**
 
 4.3. Determinism check: rerun the entire basket pipeline twice and assert `ConstructedRecipe.recipe_hash` equality for any recipe that succeeded both times. (Engine math is already deterministic per the existing tests; we just confirm that holds under scale.)
 

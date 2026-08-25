@@ -29,7 +29,7 @@ Validate that the existing trade-up chain — `TradeUpInputCandidate → TradeUp
 
 ### FR-4 — Engine math stability
 
-- FR-4.1 For each basket, group the enriched inputs by collection. For each collection with at least 10 enriched inputs of homogeneous `stattrak` / `souvenir` / `rarity`, attempt `calculate_tradeup_results` against an `output_candidates_by_collection` built via `build_output_candidates_by_collection` from a hand-curated `SkinMetadata` fixture set.
+- FR-4.1 For each basket, group the enriched inputs by collection. For each collection with at least 10 enriched inputs of homogeneous `stattrak` / `souvenir` / `rarity`, attempt `calculate_tradeup_results` against an `output_candidates_by_collection` built via `build_output_candidates_by_collection` from a hand-curated `SkinMetadata` fixture set. **Historical synthetic-validation requirement: Phase 13P-4 / `D-TRADEUP-001` supersedes homogeneous Souvenir grouping for the current standard Trade Up Contract path; normal and Souvenir inputs may coexist and outputs are non-Souvenir.**
 - FR-4.2 Successful recipes must be reproducible: running the basket through the full pipeline twice must produce `ConstructedRecipe` instances with identical `recipe_hash` (where `recipe_hash` is the SHA-256 from `recipe_solver.build_recipe_hash`).
 - FR-4.3 For every successful recipe, `sum(result.probability for result in recipe.tradeup_results) == 1.0` within `1e-9` (mirroring `PROBABILITY_TOLERANCE`).
 - FR-4.4 Engine `ValueError` failures from `_validate_input_items` (mixed-rarity, mixed-stattrak, mixed-souvenir, missing-collection) must be captured as redacted reason strings (substring of the error message, no input identity leakage) and routed to a `recipes_rejected_by_engine` bucket.

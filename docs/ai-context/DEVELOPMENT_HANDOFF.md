@@ -3,11 +3,9 @@
 ## Current Git State (verify live)
 
 - **Branch:** `feature/steamdt-cache-rate-limit`
-- **HEAD:** `481dafb81e0f52ae650c3773517013b45f7c6ff4`
-- **HEAD message:** `sync ai context after identity and orchestration reviews`
-- **Uncommitted work:** Phase 13O-1 implementation is uncommitted in the working tree. Uncommitted changes remain working tree state and are not part of the canonical committed baseline:
-  - Modified: `docs/ai-context/DECISION_LOG.md`, `docs/ai-context/ARCHITECTURE_STATE.md`, `docs/ai-context/PROJECT_CONTEXT.md`, `docs/ai-context/DEVELOPMENT_HANDOFF.md`.
-  - Untracked: `specs/2026-08-22-buff-identity-reality-verification/`, `specs/2026-08-22-buff-native-goods-identity-investigation/`, `specs/2026-08-22-buff-community-identity-revalidation/`, `research/identity_revalidation/`, `data/identity/buff_identity_v1.json`, `app/services/buff_community_identity_resolver.py`, `app/services/buff_identity_listing_provider.py`, `app/services/buff_listing_intrinsic_flags.py`, `app/services/buff_intrinsic_flag_resolver.py`, `app/services/buff_intrinsic_flag_listing_provider.py`, `scripts/build_buff_identity_snapshot.py`, `scripts/analyze_intrinsic_prefix_catalog.py`, `tests/test_build_buff_identity_snapshot.py`, `tests/test_buff_community_identity_resolver.py`, `tests/test_buff_identity_pinned_snapshot.py`, `tests/test_buff_identity_listing_provider.py`, `tests/test_buff_identity_listing_provider_pinned_snapshot.py`, `tests/test_buff_listing_intrinsic_flags.py`, `tests/test_buff_intrinsic_flag_resolver.py`.
+- **HEAD:** `8f78bb4a78dd98ae30f00c9b24a0f02eaf0219b6`
+- **HEAD message:** `add offline BUFF identity and intrinsic catalog resolution`
+- **Uncommitted work:** Phase 13P through Phase 13P-4 implementation is ready for the final checkpoint; Phase 13P-5 added live validation evidence only. The metadata source/snapshot, scanner services, manual CLI, tests, and context/spec updates are the intended checkpoint. `research/identity_revalidation/data/modest_serhat.json` and `research/identity_revalidation/data/timofey_ivanenko.json` remain intentionally local and excluded.
 
 Recent commit history (oldest → newest, including the latest 18 unpushed local commits on this branch):
 
@@ -402,12 +400,75 @@ The components remain in the tree as paused, offline-tested optional infrastruct
   - The previous binding layer invoked the intrinsic resolver once per listing. After auditing, the binding layer now invokes the resolver exactly once per page because every non-`None` `market_hash_name` in the page must share the same canonical value (an invariant the identity-binding stage already enforces; the new check is a defensive guard).
 - **Validation:** ruff passes; mypy passes (`78 source files`); pytest passes 3126 / 23 skipped / 1 warning.
 
+### Phase 13P — Live read-only one-shot opportunity scanner MVP (uncommitted)
+
+- **Application files added:**
+  - `app/services/scanner_orchestrator.py` — `LiveScannerOrchestrator.run_once(goods_ids)`, immutable `ScannerRunResult`, `ScannerRunStageCounters`, `ScannerRunDiagnostics`, `LiveOpportunity`.
+  - `app/services/skin_metadata_resolver.py` — pinned local exact-name `PinnedSkinMetadataResolver` implementing the existing `TradeUpInputMetadataResolver` and exposing the immutable existing `SkinMetadata` catalog to `recipe_solver`.
+  - `scripts/run_live_scan_once.py` — explicit manual CLI, one cycle, human or `--json` output, then exit. Read-only.
+  - `scripts/build_skin_metadata_snapshot.py` — deterministic offline builder for the pinned metadata snapshot; verifies ByMykel raw SHA-256 and emits canonical compact UTF-8 JSON.
+  - `data/metadata/skin_metadata_v1.json` — pinned metadata snapshot derived from `ByMykel/CSGO-API` at commit `8a785962b291d57a023b79408416c6792782712e`; raw source SHA-256 `7aeb9582c5f3308be78c78d2fd3681e3c469c67c0aeeeb7a9e54adb5c3be32d7`; canonical snapshot SHA-256 `55e4d446a5343e1932f24b9069090431f87b0c750d2cb4c091947ec2411dc421`; MIT. 16,868 exact wear-qualified variants.
+  - `research/metadata/by_mykel_skins.json` — pinned raw source required for snapshot reproducibility (5.5 MB).
+- **Tests added:**
+  - `tests/test_skin_metadata_resolver.py` — exact lookup, unknown/case/whitespace no-match, Unicode, malformed/duplicate snapshot rejection, validation, O(1), static/no-network, MemoryError, pinned catalog load.
+  - `tests/test_scanner_orchestrator.py` — clean run, zero listings, per-goods failure isolation, unresolved identity/intrinsic, metadata unresolved, recipe/valuation/risk branches, ordering, diagnostics, invocation counts, hard max, MemoryError, repeatability, pinned full seam.
+- **Pipeline:** `BuffListingProvider → IdentityResolvingBuffListingProvider → IntrinsicFlagResolvingBuffListingProvider → BuffListingCandidateAdapter → TradeUpInputCandidate → TradeUpInputEnrichment → InputItem → recipe_solver.construct_recipe_selections → ValuationService.value_tradeup_results → calculate_opportunity_metrics → evaluate_opportunity → LiveOpportunity`.
+- **Opportunity acceptance:** complete valuation + existing `RiskDecision.passed == True`; no Phase-13P-specific thresholds. Config values come from existing settings (`sell_fee_rate`, `min_roi`, `min_expected_profit_cny`, `max_worst_case_loss_pct`, `min_profit_probability`, `max_input_total_cost_cny`).
+- **Universe:** explicit goods-id allowlist, first-seen dedupe, hard max 10, sequential processing (concurrency 1).
+- **Safety:** no scheduler, daemon, background loop, Discord requirement, auto-buy, purchase, login, cookies, marketplace writes, browser automation, CAPTCHA/risk-control bypass, proxy/UA rotation, new BUFF endpoint, Redis, or DB changes.
+- **Protected Core:** unchanged; the new orchestrator composes existing public APIs.
+- **Validation:** ruff passes; mypy passes (80 source files); pytest passes 3160 / 23 skipped / 1 warning. Manual live smoke completed (read-only): goods_id `34279`, 1 BUFF request, 10 listings/candidates/metadata/InputItems, 1 recipe, 0 opportunities. Valuation failed closed because `STEAMDT_DRY_RUN=true` and no API key was available; the rest of the seam was verified live.
+
+### Phase 13P-1 — Live SteamDT valuation verification + request guard (uncommitted)
+
+- **Live gate:** `scripts/run_live_scan_once.py::validate_live_valuation_config` refuses live work unless `STEAMDT_DRY_RUN=false`, `STEAMDT_API_KEY` is present, and valuation cap is 1..60. Gate executes before HTTP client construction. Current configuration is blocked (`dry_run=True`, key absent), producing `LIVE_VALUATION_BLOCKED_BY_CONFIGURATION` and exit code 2. No second live BUFF or SteamDT request was issued.
+- **Request cap:** `LiveScannerOrchestrator(max_valuation_requests_per_run=...)` requires an explicit finite cap in `[1, 60]`; CLI default is 5. Unique output names are counted before each valuation. If the remaining budget is insufficient, the entire recipe is rejected before any lookup; no partial or fabricated valuation.
+- **Accounting:** `ScannerRunStageCounters` now exposes `recipes_fully_valued`, `recipes_valuation_failed`, `valuation_requests_attempted`, `valuation_requests_succeeded`, `valuation_requests_failed`, `valuation_requests_blocked`. `LiveRecipeEvaluation` records requested output names, resolved-price count, missing names, errors, valued results, existing metrics, existing RiskDecision, and rejection reason.
+- **Completeness:** missing names, provider errors, fewer quotes than requested, exceptions, and cap rejection cannot produce `LiveOpportunity`. Opportunity rule remains complete valuation + existing `RiskDecision.passed is True`.
+- **CLI:** preserves `--json`; human output now prints valuation accounting and live-valued recipe metrics/risk reasons from existing DTO values without recomputation.
+- **Units:** BUFF input `price_cny` and SteamDT BUFF output sell prices are interpreted as CNY under `D-STEAMDT-002`; no FX conversion. Fees are Decimal fractions; EV/profit/worst/best values are CNY; ROI dimensionless Decimal; probabilities float.
+- **Freshness/cache:** SteamDT source `update_time` is not exposed by generic `PriceQuote(raw=None)`. Current CLI directly wires SteamDTHttpClient; cache-hit count and source timestamp are not measurable and are not invented.
+- **Tests added/updated:** config-gate refusal/acceptance, cap validation/exact boundary/exceeded, incomplete valuation, complete risk pass/fail, request counts, MemoryError, unit invariants, effective CLI default. Normal pytest remains offline.
+- **Validation:** ruff passes; mypy passes (80 source files); pytest passes 3177 / 23 skipped / 1 warning; synthetic scale gate 20 passes. Protected Core unchanged.
+
+### Phase 13P-3 — SteamDT live price-provider diagnosis (uncommitted)
+
+- **Diagnosis:** `ROOT_CAUSE_CONFIRMED`. The Phase 13P CLI injected `httpx.AsyncClient(timeout=10.0)` without `base_url`; `SteamDTHttpClient._request_json` uses a relative endpoint path for injected clients. The previous 4/4 failures were `SteamDTTransportError` before HTTP status/parse, surfaced as `STEAMDT_BUFF_PRICE_LOOKUP_FAILED`.
+- **Minimal fix:** `scripts/run_live_scan_once.py::build_steamdt_http_client` creates the injected client with `base_url=settings.steamdt_base_url`. No endpoint, authentication, headers, timeout, retry, rate-limit, valuation, EV, or risk semantics changed. Protected Core unchanged.
+- **Regression:** `tests/test_run_live_scan_once.py::test_steamdt_borrowed_http_client_has_configured_base_url` verifies the borrowed client has `https://open.steamdt.com` as its base URL.
+- **Post-fix diagnostic:** exactly four sequential `PRICE_SINGLE` calls; all HTTP 200 and parsed. BUFF price selection succeeded for 3/4. `M4A1-S | Knight (Minimal Wear)` failed strict selection as `buff_sell_price_non_positive`; all other requested names produced a selected BUFF sell price. No additional BUFF scan was performed.
+- **Response shape:** wrapper keys `data`, `errorCode`, `errorCodeStr`, `errorData`, `errorMsg`, `success`; data is list; row keys `platform`, `platformItemId`, `sellPrice`, `sellCount`, `biddingPrice`, `biddingCount`, `updateTime`; exactly one BUFF row in each response.
+- **Validation:** full regression rerun because code changed; ruff/mypy/pytest/synthetic-scale/diff-check all pass (see latest session report).
+
+### Phase 13P-4 — Current trade-up intrinsic semantics correction (uncommitted)
+
+- **Domain correction:** Valve's rule effective May 21, 2026 permits Souvenir quality items alongside normal quality items in the standard Trade Up Contract. Selected Souvenir input attributes are removed for result construction, and the resulting item is normal quality one tier higher from represented collections. Older statements that Souvenir cannot trade up, normal/Souvenir cannot mix, or Souvenir input implies Souvenir output are superseded by `D-TRADEUP-001`.
+- **Pre-fix reproduction:** `metadata_service.build_output_candidates_by_collection` admitted every next-rarity row from the full pinned catalog. For The Cobblestone Collection / Restricted input this yielded four Knight names: normal Factory New, normal Minimal Wear, Souvenir Factory New, and Souvenir Minimal Wear.
+- **Application file added:** `app/services/scanner_recipe_composition.py` — pure current-rule composition boundary. It validates candidate-owned facts, applies `target_souvenir` before projection, buckets StatTrak independently, selects canonical `souvenir=False` output metadata with matching StatTrak mode, invokes unchanged Protected Core through an internal `souvenir=False` compatibility view, and restores exact candidate-owned `InputItem` values before return. No prefix stripping or canonical metadata mutation.
+- **Orchestrator change:** `app/services/scanner_orchestrator.py` now accumulates enriched inputs/listing provenance across the existing bounded goods-ID run and constructs once after acquisition. Per-goods acquisition isolation, hard max 10, sequential execution, valuation cap/accounting, EV/ROI, risk, and no-write behavior remain unchanged. Duplicate cross-page listing IDs fail closed.
+- **Knight correction:** current output names are exactly `M4A1-S | Knight (Factory New)` and `M4A1-S | Knight (Minimal Wear)`; no `Souvenir M4A1-S | Knight ...` reaches valuation.
+- **Input/provenance invariant:** normal-only, Souvenir-only, and mixed normal/Souvenir inputs are supported. Returned recipe inputs and risk evaluation retain exact candidate-owned Souvenir facts; the compatibility projection cannot escape.
+- **StatTrak invariant:** unchanged and separate. StatTrak/non-StatTrak inputs are never mixed; canonical output records match the input StatTrak mode while remaining non-Souvenir.
+- **Metadata integrity:** `data/metadata/skin_metadata_v1.json` is unchanged; Souvenir variants still exist and remain exactly resolvable as inputs.
+- **Tests:** new `tests/test_scanner_recipe_composition.py`; expanded `tests/test_scanner_orchestrator.py` for run-wide mixed inputs, provenance, risk visibility, normal-only valuation names, duplicate IDs, and MemoryError identity.
+- **Protected Core / provider:** no Protected Core, SteamDT provider/policy/client, BUFF provider/client, profitability threshold, valuation formula, scheduler, or universe change. Phase 13P-3 HTTPX `base_url` fix remains intact; `buff_sell_price_non_positive` remains strict failure.
+- **Network:** Phase 13P-4 is entirely offline; BUFF requests 0, SteamDT requests 0.
+### Phase 13P-5 — Post-semantics fully live opportunity-path validation (no code changes)
+
+- **Status:** `LIVE_OPPORTUNITY_PATH_VERIFIED` on 2026-08-25.
+- **Knight gate:** one bounded live scan for goods ID `34279` consumed ten real BUFF listings and requested exactly `M4A1-S | Knight (Factory New)` plus `M4A1-S | Knight (Minimal Wear)`; no Souvenir Knight output reached SteamDT. Factory New resolved. Minimal Wear retained the strict expected `buff_sell_price_non_positive` selection failure, so the recipe stayed incomplete without any fallback.
+- **Complete path:** a second bounded technical scan selected goods ID `35458` solely because exact identity/metadata and a two-name canonical output universe were available. Ten real `MAC-10 | Urban DDPAT (Well-Worn)` BUFF listings formed one recipe. Both `PP-Bizon | Carbon Fiber` output prices resolved through the live SteamDT BUFF sell policy, valuation completed, `calculate_opportunity_metrics` ran, and `evaluate_opportunity` returned a real `RiskDecision.passed=False` under unchanged thresholds.
+- **Outcome:** zero opportunities passed, but the complete `live BUFF → identity → intrinsic → metadata → recipe → SteamDT → valuation → EV/ROI → RiskDecision` path is verified. No projected compatibility input escaped; the live recipes retained original non-Souvenir/non-StatTrak input facts.
+- **Request totals:** two bounded BUFF requests and four SteamDT price requests across the two manual runs; concurrency one; no scheduler/loop.
+- **Safety:** no code/config changes, threshold changes, price substitution, auto-buy, login, cookies, marketplace writes, browser automation, or evasion behavior.
+
 ## Current Status
 
 - BUFF anonymous listing acquisition: **solved** (provider works; gated, read-only).
-- SteamDT output valuation: **solved** (aggregate output valuation).
-- Goods identity bridge: **abstraction only**; no verified resolver backend.
-- Trade-up input normalization boundary: **not yet built** (Phase 13E-0).
+- SteamDT output valuation: **fully live path verified** (strict BUFF sell policy; one complete real recipe reached EV/ROI and `RiskDecision`).
+- Goods identity bridge: **provisional offline resolver and runtime binding implemented** (`D-IDENTITY-006` / `D-IDENTITY-007`).
+- Trade-up input normalization and current Souvenir output semantics: **implemented** (Phase 13O through 13P-4).
+- Scheduler/continuous scanning: **not implemented**.
 
 ## Next Action (ordered)
 

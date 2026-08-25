@@ -27,6 +27,45 @@ BUFF_READONLY_SMOKE_GOODS_ID (caller context, not response-derived)
 
 `BuffListing` fields: `listing_id`, `goods_id` (request context), `market_hash_name` (always `None` currently), `price_cny`, `paintwear`, `asset_id` (required string), `paintseed` (optional), `source="buff"`.
 
+### Phase 13P live one-shot opportunity scan (read-only; manual; no scheduler)
+
+```
+configured ordered goods_id allowlist (dedupe; hard max 10)
+  → BuffListingProvider.get_listings
+  → IdentityResolvingBuffListingProvider
+  → IntrinsicFlagResolvingBuffListingProvider
+  → convert_buff_listing_to_candidate
+  → TradeUpInputCandidate
+  → TradeUpInputEnrichment values accumulated across the bounded run
+  → scanner_recipe_composition.construct_scanner_recipe_selections
+      → candidate-owned intrinsic validation and StatTrak bucketing
+      → internal `souvenir=False` compatibility view
+      → canonical non-Souvenir output eligibility projection
+      → recipe_solver.construct_recipe_selections (Protected Core unchanged)
+      → exact candidate-owned InputItem rehydration
+  → ValuationService.value_tradeup_results (SteamDTBuffPriceProvider)
+  → calculate_opportunity_metrics
+  → evaluate_opportunity
+  → ScannerRunResult
+```
+
+`app/services/scanner_orchestrator.py::LiveScannerOrchestrator.run_once(goods_ids)` implements one bounded run with dependency injection and per-goods acquisition isolation. Successful enriched inputs are accumulated across the existing hard-max-10 goods-ID universe before recipe construction, allowing exact normal and Souvenir pages to coexist without expanding the scan universe. `scripts/run_live_scan_once.py` is the explicit manual entry point; it performs one run and exits. No APScheduler, daemon, background loop, Discord requirement, or marketplace writes.
+
+Phase 13P-4 applies Valve's current rule effective May 21, 2026: normal and Souvenir inputs may coexist, selected Souvenir input facts remain attached to provenance, and every standard-path output is normal/non-Souvenir. `scanner_recipe_composition` gives unchanged Protected Core a temporary input `souvenir=False` compatibility view, supplies only canonical `SkinMetadata` output records with `souvenir=False` and the matching homogeneous StatTrak mode, then verifies and rehydrates the exact candidate-owned `InputItem` tuple before valuation/risk. No prefix stripping or canonical metadata mutation occurs. The old `tradeup_engine.py` mixed-Souvenir rejection is retained as historical Protected Core behavior and is not the current domain rule at this composition seam. The pinned Knight pre-fix set was four names (two normal, two Souvenir); the corrected set is `M4A1-S | Knight (Factory New)` and `M4A1-S | Knight (Minimal Wear)` only.
+
+Phase 13P-1 adds an explicit live-valuation gate and a run-level request guard:
+
+- CLI refuses live work unless `STEAMDT_DRY_RUN=false` and `STEAMDT_API_KEY` is present.
+- `max_valuation_requests_per_run` is required and validated in `[1, 60]`; CLI default is 5.
+- unique output names are counted before valuation; a recipe that would exceed the remaining cap is rejected without partial lookup.
+- counters expose attempted/succeeded/failed/blocked requests and fully-valued/valuation-failed recipes.
+- `LiveRecipeEvaluation` preserves existing valuation, `OpportunityMetrics`, and `RiskDecision` values for accepted and rejected recipes; CLI/JSON do not recompute domain values.
+- current CLI directly uses `SteamDTHttpClient`; existing cache adapters are not wired, so no cache-hit metric or freshness timestamp is invented.
+
+Current live valuation status (Phase 13P-5): **full read-only opportunity path verified**. The Phase 13P-3 `base_url` transport fix remains active. A post-semantics Knight scan requested only the two canonical normal Knight outputs; Factory New resolved while Minimal Wear remained an expected strict `buff_sell_price_non_positive` selection failure. A second bounded technical scan for goods ID `35458` consumed ten real BUFF listings, resolved both canonical `PP-Bizon | Carbon Fiber` output prices through SteamDT's strict BUFF sell policy, completed valuation and EV/ROI, and produced a real `RiskDecision.passed=False` under unchanged thresholds. No opportunity passed, but the complete `BUFF → recipe → SteamDT → valuation → metrics → risk` path is verified. No scheduler, auto-buy, or marketplace writes were introduced.
+
+Metadata uses the pinned local snapshot `data/metadata/skin_metadata_v1.json` (ByMykel/CSGO-API at commit `8a785962...`, MIT, raw SHA-256 `7aeb9582...`, canonical snapshot SHA-256 `55e4d446...`). `scripts/build_skin_metadata_snapshot.py` reproduces it byte-for-byte from `research/metadata/by_mykel_skins.json`. `app/services/skin_metadata_resolver.py::PinnedSkinMetadataResolver` performs exact-string O(1) lookup and exposes the immutable existing `SkinMetadata` catalog to the existing recipe solver. Runtime metadata lookup performs zero network I/O.
+
 ### Identity bridge (runtime resolver + binding layer; provisional under D-IDENTITY-006)
 
 ```
@@ -128,7 +167,10 @@ BuffListing → TradeUpInputCandidate → TradeUpInputEnrichment → (future tra
 - `app/services/buff_identity_listing_provider.py` — identity-binding composition layer (13N-3C); wraps `BuffListingProvider` and a `BuffGoodsIdIdentityResolver`, performs exactly one `resolve_goods_id` lookup per fetch, and rebinds `BuffListing.market_hash_name` before the adapter sees it.
 - `app/services/buff_listing_intrinsic_flags.py` — three-state intrinsic-flag representation (13O); `BuffListingIntrinsicFlags` wrapper, `coerce_intrinsic_flag`, `IntrinsicFlagValidationError`. Distinguishes `True` / `False` / `None`. Source capability was UNKNOWN at the start of 13O; the canonical-name classifier (13O-1) now establishes `True` / `False` for every well-formed canonical name, leaving `None` only for unresolved identity (`D-INTRINSIC-002`).
 - `app/services/buff_intrinsic_flag_resolver.py` — canonical-name exact-canonical-string-prefix classifier (13O-1). Pure: no I/O, no network. Verifies the canonical Steam community market prefix rule against every pinned catalog entry with zero contradictions.
-- `app/services/buff_intrinsic_flag_listing_provider.py` — intrinsic-flag binding composition layer (13O-1). Identity-only provider output → intrinsic-flag-wrapped listings; one resolver call per listing.
+- `app/services/buff_intrinsic_flag_listing_provider.py` — intrinsic-flag binding composition layer (13O-1). Identity-only provider output → intrinsic-flag-wrapped listings; one resolver call per page after exact page-identity consistency validation.
+- `app/services/skin_metadata_resolver.py` — pinned local exact-name `TradeUpInputMetadataResolver` + immutable `SkinMetadata` catalog (13P); O(1), zero runtime network I/O.
+- `app/services/scanner_orchestrator.py` — dependency-injected read-only one-shot opportunity scanner (13P/13P-4); bounded goods-id universe, per-goods acquisition isolation, run-wide enriched-input pool, existing valuation/EV/risk composition, no scheduler.
+- `app/services/scanner_recipe_composition.py` — Phase 13P-4 current-rule output-eligibility and Protected Core compatibility seam; candidate-owned filtering, homogeneous StatTrak buckets, canonical non-Souvenir outputs, exact input rehydration, no name mutation.
 - `app/services/trade_up_input_candidate.py` — `TradeUpInputCandidate` DTO (13I-2 intrinsic flags `stattrak`/`souvenir`; widened to `bool | None = None` in 13O).
 - `app/services/trade_up_input_enrichment.py` — `TradeUpInputMetadata`, `TradeUpInputMetadataResolver`, `TradeUpInputEnricher`, `enrich_candidates`, rejection model (13I-3, offline only).
 - `app/clients/buff_client.py` — legacy `BuffHttpClient` (unimplemented), `MockBuffClient`, `DryRunBuffClient`, legacy `BuffSellOrder`/`BuffGoodsInfo`.
@@ -191,6 +233,7 @@ BuffListing → TradeUpInputCandidate → TradeUpInputEnrichment → (future tra
 - Intrinsic-flag three-state representation (13O): `app/services/buff_listing_intrinsic_flags.py` defines `BuffListingIntrinsicFlags` (wraps `BuffListing`, adds `stattrak: bool | None` and `souvenir: bool | None`); `coerce_intrinsic_flag` enforces strict `True` / `False` / `None` acceptance; rejects `int 0/1`, `str "true"/"false"`, `float`, and `bool` subclasses. `TradeUpInputCandidate.stattrak` and `.souvenir` widened from `bool = False` to `bool | None = None` (the explicit migration target). `BuffListingCandidateAdapter` reads the flags via `getattr(..., default=None)` and forwards them verbatim; it never coerces `None` to `False`; it returns `INTRINSIC_FLAG_INVALID` for malformed values. `TradeUpInputEnrichment` rejects a candidate whose flags are `None` as `INTRINSIC_FLAG_UNRESOLVED`. **No Protected Core file is modified.** Source capability remains **UNKNOWN**: the anonymous BUFF sell-order payload does not currently expose these fields; no verification has been authorized.
 - Intrinsic-flag canonical-name classifier (13O-1; refined by 13O-1A): `app/services/buff_intrinsic_flag_resolver.py` provides `CanonicalNameIntrinsicFlagResolver` — a pure exact-canonical-string-prefix classifier using the canonical Steam community market naming convention (`'StatTrak™ '` prefix → `stattrak=True`; `'Souvenir '` prefix → `souvenir=True`; otherwise `False`). Empirical validation against the pinned 34,402-entry catalog produces zero contradictions. The classifier establishes `True` / `False` for every well-formed canonical name; `None` is reserved for callers that wrap an unknown-source resolver or for inputs that fail input validation (`IntrinsicFlagInputError`). Independent totals (13O-1A verified): `stattrak_true=3377`, `stattrak_false=31025`, `souvenir_true=2345`, `souvenir_false=32057`. Joint counts partition the catalog: `(True,True)=0`, `(True,False)=3377`, `(False,True)=2345`, `(False,False)=28680`.
 - Intrinsic-flag binding composition (13O-1; refined by 13O-1A): `app/services/buff_intrinsic_flag_listing_provider.py` provides `IntrinsicFlagResolvingBuffListingProvider` and `bind_intrinsic_flags_to_provider`. Wraps an upstream provider with a `BuffListingIntrinsicFlagResolver`; **invokes the resolver exactly once per page** (not per listing) — every non-`None` `market_hash_name` in the page is verified to share the same canonical value; conflicting non-`None` values fail closed with `IntrinsicFlagInputError`. Flags are attached via `BuffListingIntrinsicFlags`. Architecture is now three independent stages after the underlying provider: **identity-only** (13N-3C; intrinsic-flag kwargs removed in 13O-1), **intrinsic-flag-only** (13O-1; this module), and the **adapter** (13K-1; reads off the DTO).
+- Live read-only opportunity MVP (13P): `app/services/scanner_orchestrator.py::LiveScannerOrchestrator.run_once(goods_ids)` + `scripts/run_live_scan_once.py`. Manual one-shot, bounded allowlist (hard max 10), sequential acquisition, per-goods failure isolation, pinned local metadata resolver (`data/metadata/skin_metadata_v1.json`, ByMykel MIT pin), existing recipe solver + SteamDT valuation + EV/ROI + `RiskDecision.passed` opportunity acceptance. No scheduler, daemon, Discord requirement, cache subsystem, or marketplace writes.
 
 ## Current Blockers
 
