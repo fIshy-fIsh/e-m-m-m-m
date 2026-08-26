@@ -20,10 +20,8 @@ read-only, one-shot live scan:
     ↓
   run-wide bounded TradeUpEnrichedInput pool
     ↓
-  scanner_recipe_composition
-    ↓  current output eligibility + protected solver compatibility
-  recipe_solver.construct_recipe_selections (existing greedy solver)
-    ↓  exact candidate-owned InputItem rehydration
+  scanner_recipe_composition.enumerate_scanner_recipe_selections
+    ↓  bounded globally ordered exact InputItem selections
   ValuationService.value_tradeup_results     (existing price provider)
     ↓
   calculate_opportunity_metrics              (existing EV / ROI)
@@ -65,11 +63,13 @@ from app.services.ev_service import OpportunityMetrics, calculate_opportunity_me
 from app.services.metadata_models import SkinMetadata
 from app.services.recipe_solver import (
     ConstructedRecipeSelection,
+    RecipeEnumerationConfig,
     RecipeSolverConfig,
 )
 from app.services.risk_filter import RiskDecision, RiskFilterConfig, evaluate_opportunity
 from app.services.scanner_recipe_composition import (
-    construct_scanner_recipe_selections,
+    ScannerRecipeCompositionDiagnostics,
+    enumerate_scanner_recipe_selections,
 )
 from app.services.trade_up_input_candidate import TradeUpInputCandidate
 from app.services.trade_up_input_enrichment import (
@@ -205,6 +205,7 @@ class ScannerRunDiagnostics:
     candidate_rejection_histogram: tuple[tuple[str, int], ...] = ()
     metadata_rejection_histogram: tuple[tuple[str, int], ...] = ()
     recipe_rejection_histogram: tuple[tuple[str, int], ...] = ()
+    recipe_composition: ScannerRecipeCompositionDiagnostics | None = None
 
 
 @dataclass(frozen=True, kw_only=True, repr=False)
@@ -246,6 +247,7 @@ class LiveScannerOrchestrator:
         max_valuation_requests_per_run: int,
         solver_config: RecipeSolverConfig,
         risk_config: RiskFilterConfig,
+        enumeration_config: RecipeEnumerationConfig | None = None,
     ) -> None:
         if listing_provider is None:
             raise TypeError("listing_provider is required")
@@ -257,6 +259,22 @@ class LiveScannerOrchestrator:
             raise TypeError("solver_config is required")
         if risk_config is None:
             raise TypeError("risk_config is required")
+        if enumeration_config is not None and type(
+            enumeration_config
+        ) is not RecipeEnumerationConfig:
+            raise TypeError("enumeration_config must be a RecipeEnumerationConfig")
+        bounded_enumeration_config = (
+            RecipeEnumerationConfig()
+            if enumeration_config is None
+            else RecipeEnumerationConfig(
+                max_recipe_candidates_returned=(
+                    enumeration_config.max_recipe_candidates_returned
+                ),
+                max_candidate_states_explored=(
+                    enumeration_config.max_candidate_states_explored
+                ),
+            )
+        )
         if (
             type(max_valuation_requests_per_run) is not int
             or max_valuation_requests_per_run <= 0
@@ -277,6 +295,7 @@ class LiveScannerOrchestrator:
         self._metadata_resolver = metadata_resolver
         self._enricher = InMemoryTradeUpInputEnricher(metadata_resolver)
         self._solver_config = solver_config
+        self._enumeration_config = bounded_enumeration_config
         self._risk_config = risk_config
         self._valuation_service = valuation_service
         self._max_valuation_requests_per_run = max_valuation_requests_per_run
@@ -381,16 +400,14 @@ class LiveScannerOrchestrator:
                 listing_index[listing.listing_id] = listing
             run_enriched_inputs.extend(enriched_inputs)
 
-        if len(run_enriched_inputs) >= self._solver_config.input_count:
-            selections = construct_scanner_recipe_selections(
-                enriched_inputs=run_enriched_inputs,
-                canonical_skins=self._metadata_resolver.skins,
-                solver_config=self._solver_config,
-            )
-        else:
-            selections = []
+        composition = enumerate_scanner_recipe_selections(
+            enriched_inputs=run_enriched_inputs,
+            canonical_skins=self._metadata_resolver.skins,
+            solver_config=self._solver_config,
+            enumeration_config=self._enumeration_config,
+        )
 
-        for selection in selections:
+        for selection in composition.selections:
             counters = replace(
                 counters,
                 recipes_evaluated=counters.recipes_evaluated + 1,
@@ -426,25 +443,11 @@ class LiveScannerOrchestrator:
                     counters.valuation_requests_attempted + requested_count
                 ),
             )
-            try:
-                evaluation = await self._evaluate_selection(
-                    selection,
-                    listing_index,
-                    requested_names,
-                )
-            except MemoryError:
-                raise
-            except Exception as exc:
-                counters = replace(
-                    counters,
-                    recipes_valuation_failed=counters.recipes_valuation_failed + 1,
-                    recipes_rejected=counters.recipes_rejected + 1,
-                    valuation_requests_failed=(
-                        counters.valuation_requests_failed + requested_count
-                    ),
-                )
-                recipe_rejections[_safe_reason(exc)] += 1
-                continue
+            evaluation = await self._evaluate_selection(
+                selection,
+                listing_index,
+                requested_names,
+            )
 
             recipe_evaluations.append(evaluation)
             resolved_count = evaluation.valuation_prices_resolved
@@ -507,6 +510,7 @@ class LiveScannerOrchestrator:
                 candidate_rejection_histogram=tuple(sorted(candidate_rejections.items())),
                 metadata_rejection_histogram=tuple(sorted(metadata_rejections.items())),
                 recipe_rejection_histogram=tuple(sorted(recipe_rejections.items())),
+                recipe_composition=composition.diagnostics,
             ),
             recipe_evaluations=tuple(recipe_evaluations),
             opportunities=tuple(opportunities),

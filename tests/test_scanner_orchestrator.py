@@ -10,11 +10,26 @@ from app.services.buff_intrinsic_flag_resolver import (
 )
 from app.services.buff_item_identity import BuffItemIdentity
 from app.services.buff_listing_provider import BuffListing
-from app.services.price_provider import MockPriceProvider, PriceQuote
-from app.services.recipe_solver import RecipeSolverConfig
-from app.services.risk_filter import SOUVENIR_EXCLUDED, RiskFilterConfig
+from app.services.price_provider import MockPriceProvider, PriceLookupResult, PriceQuote
+from app.services.recipe_solver import (
+    ConstructedRecipe,
+    ConstructedRecipeSelection,
+    RecipeEnumerationConfig,
+    RecipeSolverConfig,
+)
+from app.services.risk_filter import (
+    SOUVENIR_EXCLUDED,
+    RiskDecision,
+    RiskFilterConfig,
+)
 from app.services.scanner_orchestrator import LiveScannerOrchestrator
+from app.services.scanner_recipe_composition import (
+    ScannerRecipeBucketDiagnostics,
+    ScannerRecipeCompositionDiagnostics,
+    ScannerRecipeCompositionResult,
+)
 from app.services.skin_metadata_resolver import PinnedSkinMetadataResolver
+from app.services.tradeup_engine import InputItem, TradeupResult
 from app.services.valuation_service import ValuationConfig, ValuationService
 
 INPUT_NAME = "AK-47 | Redline (Field-Tested)"
@@ -126,6 +141,7 @@ def _orchestrator(
     price_provider: MockPriceProvider | None = None,
     exclude_souvenir: bool = False,
     intrinsic_resolver: object | None = None,
+    enumeration_config: RecipeEnumerationConfig | None = None,
 ) -> LiveScannerOrchestrator:
     valuation: ValuationService | None = None
     if with_valuation:
@@ -154,6 +170,7 @@ def _orchestrator(
             input_count=10,
             sell_fee_rate=Decimal("0"),
         ),
+        enumeration_config=enumeration_config,
         risk_config=RiskFilterConfig(
             min_roi=Decimal("-1"),
             min_expected_profit_cny=min_expected_profit,
@@ -648,7 +665,7 @@ def test_recipe_composition_memory_error_propagates_verbatim(
         raise sentinel
 
     monkeypatch.setattr(
-        "app.services.scanner_orchestrator.construct_scanner_recipe_selections",
+        "app.services.scanner_orchestrator.enumerate_scanner_recipe_selections",
         fail,
     )
 
@@ -664,3 +681,592 @@ def test_repeatability() -> None:
     assert a.counters == b.counters
     assert a.diagnostics == b.diagnostics
     assert a.opportunities == b.opportunities
+
+
+OUTPUT_B = "USP-S | Orion (Factory New)"
+OUTPUT_C = "AWP | BOOM (Factory New)"
+
+
+def _controlled_selection(
+    listing_indexes: tuple[int, ...],
+    output_names: tuple[str, ...],
+    *,
+    souvenir: bool = False,
+) -> ConstructedRecipeSelection:
+    probabilities = [1.0 / len(output_names)] * len(output_names)
+    if len(output_names) == 3:
+        probabilities = [0.25, 0.25, 0.5]
+    return ConstructedRecipeSelection(
+        recipe=ConstructedRecipe(
+            input_items=tuple(
+                InputItem(
+                    market_hash_name=INPUT_NAME,
+                    collection_name="Test Collection",
+                    rarity="Restricted",
+                    actual_float=0.15,
+                    min_float=0.10,
+                    max_float=0.70,
+                    price_cny=Decimal("10"),
+                    souvenir=souvenir,
+                )
+                for _ in listing_indexes
+            ),
+            tradeup_results=tuple(
+                TradeupResult(
+                    output_market_hash_name=name,
+                    probability=probability,
+                    output_float=0.05,
+                    output_wear="Factory New",
+                    estimated_price_cny=Decimal("0"),
+                    expected_value_contribution=Decimal("0"),
+                )
+                for name, probability in zip(
+                    output_names,
+                    probabilities,
+                    strict=True,
+                )
+            ),
+            paint_seeds=(),
+        ),
+        selected_listing_ids=tuple(
+            f"listing-{index}" for index in listing_indexes
+        ),
+    )
+
+
+def _composition_result(
+    selections: tuple[ConstructedRecipeSelection, ...],
+    *,
+    states_explored: int | None = None,
+    active_bucket_count: int = 1,
+    participating_bucket_count: int = 1,
+    aggregate_candidate_limit: int | None = None,
+) -> ScannerRecipeCompositionResult:
+    returned = len(selections)
+    candidate_limit = aggregate_candidate_limit or max(1, returned)
+    states = states_explored if states_explored is not None else returned
+    if active_bucket_count == 0:
+        buckets: tuple[ScannerRecipeBucketDiagnostics, ...] = ()
+    elif active_bucket_count == 1:
+        buckets = (
+            ScannerRecipeBucketDiagnostics(
+                stattrak=False,
+                candidate_quota=candidate_limit,
+                state_quota=max(candidate_limit, states),
+                returned_candidates=returned,
+                states_explored=states,
+                baseline_state_rejected=False,
+            ),
+        )
+    else:
+        first_returned = min(1, returned)
+        buckets = (
+            ScannerRecipeBucketDiagnostics(
+                stattrak=False,
+                candidate_quota=1,
+                state_quota=max(1, states // 2 + states % 2),
+                returned_candidates=first_returned,
+                states_explored=states // 2 + states % 2,
+                baseline_state_rejected=False,
+            ),
+            ScannerRecipeBucketDiagnostics(
+                stattrak=True,
+                candidate_quota=max(0, candidate_limit - 1),
+                state_quota=states // 2,
+                returned_candidates=returned - first_returned,
+                states_explored=states // 2,
+                baseline_state_rejected=False,
+            ),
+        )
+    return ScannerRecipeCompositionResult(
+        selections=selections,
+        diagnostics=ScannerRecipeCompositionDiagnostics(
+            aggregate_candidate_limit=candidate_limit,
+            aggregate_state_limit=max(candidate_limit, states, 1),
+            active_bucket_count=active_bucket_count,
+            participating_bucket_count=participating_bucket_count,
+            buckets=buckets,
+            returned_candidates=returned,
+            states_explored=states,
+        ),
+    )
+
+
+def _listing_provider(count: int = 12) -> FakeListingProvider:
+    return FakeListingProvider(
+        listings_by_goods={GOODS_ID: [_listing(index) for index in range(count)]}
+    )
+
+
+class RecordingPriceProvider(MockPriceProvider):
+    def __init__(self, names: tuple[str, ...]) -> None:
+        super().__init__(
+            {
+                name: PriceQuote(
+                    market_hash_name=name,
+                    price_cny=Decimal("200"),
+                    source="test",
+                )
+                for name in names
+            }
+        )
+        self.calls: list[tuple[str, ...]] = []
+
+    async def get_prices(self, market_hash_names: list[str]) -> PriceLookupResult:
+        self.calls.append(tuple(market_hash_names))
+        return await super().get_prices(market_hash_names)
+
+
+def test_enumeration_config_defaults_and_explicit_dependency_are_forwarded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[RecipeEnumerationConfig] = []
+
+    def compose(**kwargs):  # type: ignore[no-untyped-def]
+        config = kwargs["enumeration_config"]
+        seen.append(config)
+        return _composition_result(
+            (),
+            states_explored=0,
+            active_bucket_count=0,
+            participating_bucket_count=0,
+            aggregate_candidate_limit=config.max_recipe_candidates_returned,
+        )
+
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.enumerate_scanner_recipe_selections",
+        compose,
+    )
+    asyncio.run(
+        _orchestrator(
+            provider=FakeListingProvider(listings_by_goods={GOODS_ID: []})
+        ).run_once([GOODS_ID])
+    )
+    explicit = RecipeEnumerationConfig(
+        max_recipe_candidates_returned=1,
+        max_candidate_states_explored=1,
+    )
+    asyncio.run(
+        _orchestrator(
+            provider=FakeListingProvider(listings_by_goods={GOODS_ID: []}),
+            enumeration_config=explicit,
+        ).run_once([GOODS_ID])
+    )
+
+    assert seen[0] == RecipeEnumerationConfig(
+        max_recipe_candidates_returned=2,
+        max_candidate_states_explored=256,
+    )
+    assert seen[1] == explicit
+    assert seen[1] is not explicit
+
+
+def test_one_recipe_bounded_compatibility() -> None:
+    result = asyncio.run(
+        _orchestrator(
+            enumeration_config=RecipeEnumerationConfig(
+                max_recipe_candidates_returned=1,
+                max_candidate_states_explored=1,
+            )
+        ).run_once([GOODS_ID])
+    )
+
+    assert result.counters.recipes_evaluated == 1
+    assert result.counters.recipes_fully_valued == 1
+    assert result.counters.valuation_requests_attempted == 1
+    assert result.counters.valuation_requests_succeeded == 1
+    assert result.counters.recipes_rejected == 0
+    assert result.counters.opportunities_found == 1
+    assert result.opportunities[0].recipe.selected_listing_ids == tuple(
+        f"listing-{index}" for index in range(10)
+    )
+    assert result.opportunities[0].metrics == result.recipe_evaluations[0].metrics
+    assert result.diagnostics.recipe_composition is not None
+    assert result.diagnostics.recipe_composition.aggregate_candidate_limit == 1
+    assert result.diagnostics.recipe_composition.aggregate_state_limit == 1
+
+
+def test_multi_recipe_happy_path_processes_every_selection_in_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    selections = (
+        _controlled_selection(tuple(range(10)), (OUTPUT_NAME,)),
+        _controlled_selection((*range(9), 10), (OUTPUT_B,)),
+    )
+    composition_calls: list[dict[str, object]] = []
+
+    def compose(**kwargs):  # type: ignore[no-untyped-def]
+        composition_calls.append(kwargs)
+        return _composition_result(selections, aggregate_candidate_limit=2)
+
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.enumerate_scanner_recipe_selections",
+        compose,
+    )
+    price_provider = RecordingPriceProvider((OUTPUT_NAME, OUTPUT_B))
+    metrics_calls: list[tuple[InputItem, ...]] = []
+    risk_calls: list[tuple[InputItem, ...]] = []
+    from app.services import scanner_orchestrator as orchestrator_module
+
+    calculate_metrics = orchestrator_module.calculate_opportunity_metrics
+    evaluate_risk = orchestrator_module.evaluate_opportunity
+
+    def metrics(*args, **kwargs):  # type: ignore[no-untyped-def]
+        input_items = args[0] if args else kwargs["input_items"]
+        metrics_calls.append(tuple(input_items))
+        return calculate_metrics(*args, **kwargs)
+
+    def risk(*args, **kwargs):  # type: ignore[no-untyped-def]
+        input_items = args[1] if args else kwargs["input_items"]
+        risk_calls.append(tuple(input_items))
+        return evaluate_risk(*args, **kwargs)
+
+    monkeypatch.setattr(orchestrator_module, "calculate_opportunity_metrics", metrics)
+    monkeypatch.setattr(orchestrator_module, "evaluate_opportunity", risk)
+
+    result = asyncio.run(
+        _orchestrator(
+            provider=_listing_provider(),
+            price_provider=price_provider,
+        ).run_once([GOODS_ID])
+    )
+
+    assert len(composition_calls) == 1
+    assert price_provider.calls == [(OUTPUT_NAME,), (OUTPUT_B,)]
+    assert len(metrics_calls) == 2
+    assert len(risk_calls) == 2
+    assert result.counters.recipes_evaluated == 2
+    assert result.counters.recipes_fully_valued == 2
+    assert result.counters.opportunities_found == 2
+    assert [
+        opportunity.recipe.selected_listing_ids for opportunity in result.opportunities
+    ] == [selection.selected_listing_ids for selection in selections]
+    assert result.recipe_evaluations[0].listings[0] is result.recipe_evaluations[1].listings[0]
+
+
+def test_mixed_risk_results_process_all_candidates_and_keep_passed_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    selections = (
+        _controlled_selection(tuple(range(10)), (OUTPUT_NAME,)),
+        _controlled_selection((*range(9), 10), (OUTPUT_NAME,)),
+        _controlled_selection((*range(9), 11), (OUTPUT_NAME,)),
+    )
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.enumerate_scanner_recipe_selections",
+        lambda **kwargs: _composition_result(  # type: ignore[no-untyped-def]
+            selections,
+            aggregate_candidate_limit=3,
+        ),
+    )
+    decisions = iter((False, True, True))
+    risk_calls: list[bool] = []
+
+    def risk(*args, **kwargs):  # type: ignore[no-untyped-def]
+        passed = next(decisions)
+        risk_calls.append(passed)
+        return RiskDecision(
+            passed=passed,
+            reasons=[] if passed else ["rejected"],
+            reason_codes=[] if passed else ["TEST_REJECTION"],
+            risk_score=Decimal("0") if passed else Decimal("1"),
+        )
+
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.evaluate_opportunity",
+        risk,
+    )
+    price_provider = RecordingPriceProvider((OUTPUT_NAME,))
+    result = asyncio.run(
+        _orchestrator(
+            provider=_listing_provider(),
+            price_provider=price_provider,
+            enumeration_config=RecipeEnumerationConfig(
+                max_recipe_candidates_returned=3,
+                max_candidate_states_explored=3,
+            ),
+        ).run_once([GOODS_ID])
+    )
+
+    assert risk_calls == [False, True, True]
+    assert len(price_provider.calls) == 3
+    assert result.counters.recipes_evaluated == 3
+    assert result.counters.recipes_fully_valued == 3
+    assert result.counters.recipes_rejected == 1
+    assert [
+        opportunity.recipe.selected_listing_ids for opportunity in result.opportunities
+    ] == [
+        selections[1].selected_listing_ids,
+        selections[2].selected_listing_ids,
+    ]
+
+
+def test_incomplete_recipe_valuation_skips_metrics_and_continues(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    selections = (
+        _controlled_selection(tuple(range(10)), (OUTPUT_NAME,)),
+        _controlled_selection((*range(9), 10), (OUTPUT_NAME,)),
+    )
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.enumerate_scanner_recipe_selections",
+        lambda **kwargs: _composition_result(  # type: ignore[no-untyped-def]
+            selections,
+            aggregate_candidate_limit=2,
+        ),
+    )
+
+    class FirstMissingPriceProvider(RecordingPriceProvider):
+        async def get_prices(self, market_hash_names: list[str]) -> PriceLookupResult:
+            self.calls.append(tuple(market_hash_names))
+            if len(self.calls) == 1:
+                return PriceLookupResult(
+                    quotes={},
+                    missing=list(market_hash_names),
+                    errors=[],
+                )
+            return await MockPriceProvider.get_prices(self, market_hash_names)
+
+    price_provider = FirstMissingPriceProvider((OUTPUT_NAME,))
+    metrics_calls: list[int] = []
+    risk_calls: list[int] = []
+    from app.services import scanner_orchestrator as orchestrator_module
+
+    calculate_metrics = orchestrator_module.calculate_opportunity_metrics
+    evaluate_risk = orchestrator_module.evaluate_opportunity
+
+    def metrics(*args, **kwargs):  # type: ignore[no-untyped-def]
+        metrics_calls.append(1)
+        return calculate_metrics(*args, **kwargs)
+
+    def risk(*args, **kwargs):  # type: ignore[no-untyped-def]
+        risk_calls.append(1)
+        return evaluate_risk(*args, **kwargs)
+
+    monkeypatch.setattr(orchestrator_module, "calculate_opportunity_metrics", metrics)
+    monkeypatch.setattr(orchestrator_module, "evaluate_opportunity", risk)
+
+    result = asyncio.run(
+        _orchestrator(
+            provider=_listing_provider(),
+            price_provider=price_provider,
+        ).run_once([GOODS_ID])
+    )
+
+    assert price_provider.calls == [(OUTPUT_NAME,), (OUTPUT_NAME,)]
+    assert metrics_calls == [1]
+    assert risk_calls == [1]
+    assert result.counters.recipes_evaluated == 2
+    assert result.counters.recipes_fully_valued == 1
+    assert result.counters.recipes_valuation_failed == 1
+    assert result.counters.recipes_rejected == 1
+    assert result.counters.opportunities_found == 1
+    assert result.recipe_evaluations[0].valuation_completed is False
+    assert result.recipe_evaluations[1].valuation_completed is True
+
+
+@pytest.mark.parametrize(
+    ("cap", "expected_calls", "attempted", "blocked", "fully_valued"),
+    [
+        (4, [(OUTPUT_NAME, OUTPUT_B), (OUTPUT_NAME, OUTPUT_C)], 4, 0, 2),
+        (3, [(OUTPUT_NAME, OUTPUT_B)], 2, 2, 1),
+    ],
+)
+def test_cumulative_valuation_cap_uses_per_recipe_exact_name_requests(
+    monkeypatch: pytest.MonkeyPatch,
+    cap: int,
+    expected_calls: list[tuple[str, ...]],
+    attempted: int,
+    blocked: int,
+    fully_valued: int,
+) -> None:
+    selections = (
+        _controlled_selection(
+            tuple(range(10)),
+            (OUTPUT_NAME, OUTPUT_NAME, OUTPUT_B),
+        ),
+        _controlled_selection((*range(9), 10), (OUTPUT_NAME, OUTPUT_C)),
+    )
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.enumerate_scanner_recipe_selections",
+        lambda **kwargs: _composition_result(  # type: ignore[no-untyped-def]
+            selections,
+            aggregate_candidate_limit=2,
+        ),
+    )
+    price_provider = RecordingPriceProvider((OUTPUT_NAME, OUTPUT_B, OUTPUT_C))
+
+    result = asyncio.run(
+        _orchestrator(
+            provider=_listing_provider(),
+            price_provider=price_provider,
+            max_valuation_requests=cap,
+        ).run_once([GOODS_ID])
+    )
+
+    assert price_provider.calls == expected_calls
+    assert result.counters.valuation_requests_attempted == attempted
+    assert result.counters.valuation_requests_blocked == blocked
+    assert result.counters.recipes_fully_valued == fully_valued
+    assert result.counters.recipes_valuation_failed == (1 if blocked else 0)
+    if blocked:
+        assert result.recipe_evaluations[1].rejection_reason == (
+            "VALUATION_REQUEST_CAP_EXCEEDED"
+        )
+        assert result.recipe_evaluations[1].valued_tradeup_results == ()
+
+
+def test_empty_bounded_composition_skips_all_recipe_services(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    composition = _composition_result(
+        (),
+        states_explored=0,
+        active_bucket_count=0,
+        participating_bucket_count=0,
+        aggregate_candidate_limit=2,
+    )
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.enumerate_scanner_recipe_selections",
+        lambda **kwargs: composition,  # type: ignore[no-untyped-def]
+    )
+
+    async def fail_valuation(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("valuation must not run")
+
+    monkeypatch.setattr(
+        ValuationService,
+        "value_tradeup_results",
+        fail_valuation,
+    )
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.calculate_opportunity_metrics",
+        lambda *args, **kwargs: (_ for _ in ()).throw(  # type: ignore[no-untyped-def]
+            AssertionError("metrics must not run")
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.evaluate_opportunity",
+        lambda *args, **kwargs: (_ for _ in ()).throw(  # type: ignore[no-untyped-def]
+            AssertionError("risk must not run")
+        ),
+    )
+
+    result = asyncio.run(_orchestrator().run_once([GOODS_ID]))
+
+    assert result.counters.recipes_evaluated == 0
+    assert result.counters.valuation_requests_attempted == 0
+    assert result.counters.opportunities_found == 0
+    assert result.recipe_evaluations == ()
+    assert result.diagnostics.recipe_composition == composition.diagnostics
+
+
+def test_composition_diagnostics_are_preserved_exactly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    selections = (
+        _controlled_selection(tuple(range(10)), (OUTPUT_NAME,)),
+        _controlled_selection((*range(9), 10), (OUTPUT_B,)),
+    )
+    composition = _composition_result(
+        selections,
+        states_explored=17,
+        active_bucket_count=2,
+        participating_bucket_count=2,
+        aggregate_candidate_limit=2,
+    )
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.enumerate_scanner_recipe_selections",
+        lambda **kwargs: composition,  # type: ignore[no-untyped-def]
+    )
+
+    result = asyncio.run(
+        _orchestrator(
+            provider=_listing_provider(),
+            price_provider=RecordingPriceProvider((OUTPUT_NAME, OUTPUT_B)),
+        ).run_once([GOODS_ID])
+    )
+
+    assert result.diagnostics.recipe_composition is composition.diagnostics
+    diagnostics = result.diagnostics.recipe_composition
+    assert diagnostics is not None
+    assert diagnostics.active_bucket_count == 2
+    assert diagnostics.participating_bucket_count == 2
+    assert diagnostics.returned_candidates == 2
+    assert diagnostics.states_explored == 17
+
+
+def test_rehydrated_souvenir_inputs_reach_orchestrator_valuation_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider, identity, metadata = _mixed_run_inputs()
+    orchestrator = _orchestrator(
+        provider=provider,
+        identity=identity,
+        metadata=metadata,
+        price_provider=RecordingPriceProvider((OUTPUT_NAME,)),
+        intrinsic_resolver=MappingIntrinsicResolver(),
+        enumeration_config=RecipeEnumerationConfig(
+            max_recipe_candidates_returned=1,
+            max_candidate_states_explored=1,
+        ),
+    )
+    original_evaluate = orchestrator._evaluate_selection
+    observed: list[tuple[InputItem, ...]] = []
+
+    async def observe(selection, listing_index, requested_names):  # type: ignore[no-untyped-def]
+        observed.append(selection.recipe.input_items)
+        return await original_evaluate(selection, listing_index, requested_names)
+
+    monkeypatch.setattr(orchestrator, "_evaluate_selection", observe)
+    result = asyncio.run(orchestrator.run_once([GOODS_ID, "souvenir-goods"]))
+
+    assert len(observed) == 1
+    assert sum(item.souvenir for item in observed[0]) == 5
+    assert observed[0] == result.recipe_evaluations[0].recipe.recipe.input_items
+    assert any(item.souvenir for item in observed[0])
+
+
+def test_composition_unexpected_exception_propagates_verbatim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sentinel = RuntimeError("composition sentinel")
+
+    def fail(**kwargs):  # type: ignore[no-untyped-def]
+        raise sentinel
+
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.enumerate_scanner_recipe_selections",
+        fail,
+    )
+    with pytest.raises(RuntimeError) as exc_info:
+        asyncio.run(_orchestrator().run_once([GOODS_ID]))
+    assert exc_info.value is sentinel
+
+
+def test_valuation_unexpected_exception_propagates_verbatim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    selection = _controlled_selection(tuple(range(10)), (OUTPUT_NAME,))
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.enumerate_scanner_recipe_selections",
+        lambda **kwargs: _composition_result(  # type: ignore[no-untyped-def]
+            (selection,),
+            aggregate_candidate_limit=1,
+        ),
+    )
+    orchestrator = _orchestrator(
+        enumeration_config=RecipeEnumerationConfig(
+            max_recipe_candidates_returned=1,
+            max_candidate_states_explored=1,
+        )
+    )
+    sentinel = RuntimeError("valuation sentinel")
+
+    async def fail(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise sentinel
+
+    monkeypatch.setattr(orchestrator, "_evaluate_selection", fail)
+    with pytest.raises(RuntimeError) as exc_info:
+        asyncio.run(orchestrator.run_once([GOODS_ID]))
+    assert exc_info.value is sentinel
