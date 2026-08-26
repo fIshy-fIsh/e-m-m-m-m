@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 
 from app.services.market_scan_service import CandidateListing
@@ -10,16 +10,23 @@ from app.services.metadata_service import get_next_rarity
 from app.services.recipe_solver import (
     ConstructedRecipe,
     ConstructedRecipeSelection,
+    RecipeEnumerationConfig,
+    RecipeEnumerationResult,
     RecipeSolverConfig,
     construct_recipe_selections,
+    enumerate_recipe_selections,
 )
 from app.services.trade_up_input_enrichment import TradeUpEnrichedInput
 
 _FIXED_ERROR = "invalid scanner recipe composition"
 
 __all__ = (
+    "ScannerRecipeBucketDiagnostics",
+    "ScannerRecipeCompositionDiagnostics",
     "ScannerRecipeCompositionError",
+    "ScannerRecipeCompositionResult",
     "construct_scanner_recipe_selections",
+    "enumerate_scanner_recipe_selections",
     "is_current_standard_trade_up_output_eligible",
 )
 
@@ -29,6 +36,53 @@ class ScannerRecipeCompositionError(ValueError):
 
     def __init__(self) -> None:
         super().__init__(_FIXED_ERROR)
+
+
+@dataclass(frozen=True, kw_only=True, repr=False)
+class ScannerRecipeBucketDiagnostics:
+    """Allocated and consumed bounds for one active scanner mode bucket."""
+
+    stattrak: bool
+    candidate_quota: int
+    state_quota: int
+    returned_candidates: int
+    states_explored: int
+    baseline_state_rejected: bool
+
+
+@dataclass(frozen=True, kw_only=True, repr=False)
+class ScannerRecipeCompositionDiagnostics:
+    """Aggregate structural accounting for one bounded composition call."""
+
+    aggregate_candidate_limit: int
+    aggregate_state_limit: int
+    active_bucket_count: int
+    participating_bucket_count: int
+    buckets: tuple[ScannerRecipeBucketDiagnostics, ...]
+    returned_candidates: int
+    states_explored: int
+
+
+@dataclass(frozen=True, kw_only=True, repr=False)
+class ScannerRecipeCompositionResult:
+    """Globally ordered rehydrated selections and aggregate diagnostics."""
+
+    selections: tuple[ConstructedRecipeSelection, ...]
+    diagnostics: ScannerRecipeCompositionDiagnostics
+
+
+@dataclass(frozen=True, kw_only=True)
+class _ActiveBucket:
+    stattrak: bool
+    enriched_inputs: tuple[TradeUpEnrichedInput, ...]
+    projection: list[SkinMetadata]
+    compatibility_config: RecipeSolverConfig
+
+
+@dataclass(frozen=True, kw_only=True)
+class _EnumeratedBucket:
+    result: RecipeEnumerationResult
+    selections: tuple[ConstructedRecipeSelection, ...]
 
 
 def is_current_standard_trade_up_output_eligible(
@@ -115,6 +169,150 @@ def construct_scanner_recipe_selections(
         raise
     except Exception:
         raise ScannerRecipeCompositionError from None
+
+
+def enumerate_scanner_recipe_selections(
+    *,
+    enriched_inputs: Sequence[TradeUpEnrichedInput],
+    canonical_skins: Sequence[SkinMetadata],
+    solver_config: RecipeSolverConfig,
+    enumeration_config: RecipeEnumerationConfig,
+) -> ScannerRecipeCompositionResult:
+    """Enumerate bounded current-rule recipes across active mode buckets."""
+
+    try:
+        aggregate_config = _copy_enumeration_config(enumeration_config)
+        config = _copy_solver_config(solver_config)
+        enriched = _validate_enriched_inputs(enriched_inputs)
+        skins, skin_index = _validate_canonical_skins(canonical_skins)
+        _validate_input_metadata(enriched, skin_index)
+
+        filtered = _filter_candidate_owned_intrinsics(enriched, config)
+        active_buckets = _build_active_buckets(
+            enriched_inputs=filtered,
+            canonical_skins=skins,
+            skin_index=skin_index,
+            solver_config=config,
+        )
+        participant_count = min(
+            len(active_buckets),
+            aggregate_config.max_recipe_candidates_returned,
+        )
+        bucket_diagnostics: list[ScannerRecipeBucketDiagnostics] = []
+        enumerated_buckets: list[_EnumeratedBucket] = []
+
+        for index, bucket in enumerate(active_buckets):
+            if index >= participant_count:
+                bucket_diagnostics.append(
+                    ScannerRecipeBucketDiagnostics(
+                        stattrak=bucket.stattrak,
+                        candidate_quota=0,
+                        state_quota=0,
+                        returned_candidates=0,
+                        states_explored=0,
+                        baseline_state_rejected=False,
+                    )
+                )
+                continue
+
+            candidate_quota = _fair_share(
+                aggregate_config.max_recipe_candidates_returned,
+                participant_count,
+                index,
+            )
+            state_quota = 1 + _fair_share(
+                aggregate_config.max_candidate_states_explored
+                - participant_count,
+                participant_count,
+                index,
+            )
+            if state_quota < candidate_quota:
+                raise ScannerRecipeCompositionError
+
+            core_result = enumerate_recipe_selections(
+                _to_legacy_candidates(bucket.enriched_inputs),
+                bucket.projection,
+                bucket.compatibility_config,
+                enumeration_config=RecipeEnumerationConfig(
+                    max_recipe_candidates_returned=candidate_quota,
+                    max_candidate_states_explored=state_quota,
+                ),
+            )
+            if type(core_result) is not RecipeEnumerationResult:
+                raise ScannerRecipeCompositionError
+            selections = tuple(
+                _rehydrate_selection(selection, bucket.enriched_inputs)
+                for selection in core_result.selections
+            )
+            core_diagnostics = core_result.diagnostics
+            if (
+                core_diagnostics.unique_candidates_returned != len(selections)
+                or core_diagnostics.states_explored > state_quota
+                or len(selections) > candidate_quota
+            ):
+                raise ScannerRecipeCompositionError
+            enumerated_buckets.append(
+                _EnumeratedBucket(
+                    result=core_result,
+                    selections=selections,
+                )
+            )
+            bucket_diagnostics.append(
+                ScannerRecipeBucketDiagnostics(
+                    stattrak=bucket.stattrak,
+                    candidate_quota=candidate_quota,
+                    state_quota=state_quota,
+                    returned_candidates=len(selections),
+                    states_explored=core_diagnostics.states_explored,
+                    baseline_state_rejected=(
+                        core_diagnostics.baseline_state_rejected
+                    ),
+                )
+            )
+
+        selections = _order_enumerated_selections(enumerated_buckets)
+        returned_candidates = len(selections)
+        states_explored = sum(
+            bucket.states_explored for bucket in bucket_diagnostics
+        )
+        if (
+            returned_candidates
+            > aggregate_config.max_recipe_candidates_returned
+            or states_explored
+            > aggregate_config.max_candidate_states_explored
+        ):
+            raise ScannerRecipeCompositionError
+        return ScannerRecipeCompositionResult(
+            selections=selections,
+            diagnostics=ScannerRecipeCompositionDiagnostics(
+                aggregate_candidate_limit=(
+                    aggregate_config.max_recipe_candidates_returned
+                ),
+                aggregate_state_limit=(
+                    aggregate_config.max_candidate_states_explored
+                ),
+                active_bucket_count=len(active_buckets),
+                participating_bucket_count=participant_count,
+                buckets=tuple(bucket_diagnostics),
+                returned_candidates=returned_candidates,
+                states_explored=states_explored,
+            ),
+        )
+    except MemoryError:
+        raise
+    except ScannerRecipeCompositionError:
+        raise
+    except ValueError:
+        raise ScannerRecipeCompositionError from None
+
+
+def _copy_enumeration_config(value: object) -> RecipeEnumerationConfig:
+    if type(value) is not RecipeEnumerationConfig:
+        raise ScannerRecipeCompositionError
+    return RecipeEnumerationConfig(
+        max_recipe_candidates_returned=value.max_recipe_candidates_returned,
+        max_candidate_states_explored=value.max_candidate_states_explored,
+    )
 
 
 def _copy_solver_config(value: object) -> RecipeSolverConfig:
@@ -213,6 +411,80 @@ def _filter_candidate_owned_intrinsics(
             or enriched.candidate.souvenir is solver_config.target_souvenir
         )
     )
+
+
+def _build_active_buckets(
+    *,
+    enriched_inputs: Sequence[TradeUpEnrichedInput],
+    canonical_skins: Sequence[SkinMetadata],
+    skin_index: dict[str, SkinMetadata],
+    solver_config: RecipeSolverConfig,
+) -> tuple[_ActiveBucket, ...]:
+    result: list[_ActiveBucket] = []
+    for stattrak_mode in (False, True):
+        bucket = tuple(
+            item
+            for item in enriched_inputs
+            if item.candidate.stattrak is stattrak_mode
+        )
+        if len(bucket) < solver_config.input_count:
+            continue
+        projection = _build_solver_projection(
+            enriched_inputs=bucket,
+            canonical_skins=canonical_skins,
+            skin_index=skin_index,
+            solver_config=solver_config,
+            stattrak_mode=stattrak_mode,
+        )
+        if not projection:
+            continue
+        result.append(
+            _ActiveBucket(
+                stattrak=stattrak_mode,
+                enriched_inputs=bucket,
+                projection=projection,
+                compatibility_config=RecipeSolverConfig(
+                    input_rarity=solver_config.input_rarity,
+                    input_count=solver_config.input_count,
+                    sell_fee_rate=solver_config.sell_fee_rate,
+                    max_candidates_per_collection=(
+                        solver_config.max_candidates_per_collection
+                    ),
+                    target_stattrak=stattrak_mode,
+                    target_souvenir=False,
+                ),
+            )
+        )
+    return tuple(result)
+
+
+def _fair_share(total: int, count: int, index: int) -> int:
+    return total // count + (1 if index < total % count else 0)
+
+
+def _order_enumerated_selections(
+    buckets: Sequence[_EnumeratedBucket],
+) -> tuple[ConstructedRecipeSelection, ...]:
+    baselines: list[ConstructedRecipeSelection] = []
+    alternatives: list[tuple[ConstructedRecipeSelection, ...]] = []
+    for bucket in buckets:
+        if (
+            bucket.selections
+            and not bucket.result.diagnostics.baseline_state_rejected
+        ):
+            baselines.append(bucket.selections[0])
+            alternatives.append(bucket.selections[1:])
+        else:
+            alternatives.append(bucket.selections)
+
+    result = list(baselines)
+    depth = 0
+    while any(depth < len(sequence) for sequence in alternatives):
+        for sequence in alternatives:
+            if depth < len(sequence):
+                result.append(sequence[depth])
+        depth += 1
+    return tuple(result)
 
 
 def _build_solver_projection(
