@@ -1,3 +1,4 @@
+import ast
 import asyncio
 from dataclasses import FrozenInstanceError, fields, replace
 from datetime import UTC
@@ -13,10 +14,14 @@ from app.services.recipe_solver import (
     ConstructedRecipe,
     ConstructedRecipeSelection,
     RecipeCandidate,
+    RecipeEnumerationConfig,
+    RecipeEnumerationDiagnostics,
+    RecipeEnumerationResult,
     RecipeSolverConfig,
     build_recipe_hash,
     construct_recipe_selections,
     construct_recipes,
+    enumerate_recipe_selections,
     solve_recipes,
 )
 from app.services.risk_filter import RiskFilterConfig
@@ -27,18 +32,21 @@ def _make_candidate(
     *,
     market_hash_name: str | None = "AK-47 | Redline (Field-Tested)",
     listing_id: str = "listing-1",
+    goods_id: str = "goods-1",
+    source: str = "buff",
     price_cny: str = "10.00",
     float_value: float | None = 0.10,
     paint_seed: int | None = 123,
 ) -> CandidateListing:
     return CandidateListing(
-        goods_id="goods-1",
+        goods_id=goods_id,
         listing_id=listing_id,
         market_hash_name=market_hash_name,
         price_cny=Decimal(price_cny),
         float_value=float_value,
         paint_seed=paint_seed,
         inspect_link="steam://inspect/test",
+        source=source,
         scanned_at=__import__("datetime").datetime.now(UTC),
         raw={"listing_id": listing_id},
     )
@@ -134,6 +142,60 @@ def _build_basic_construction() -> ConstructedRecipe:
     return constructions[0]
 
 
+def _enumerate(
+    candidates: list[CandidateListing],
+    skins: list[SkinMetadata],
+    *,
+    max_candidates: int = 2,
+    max_states: int = 256,
+    solver_config: RecipeSolverConfig | None = None,
+) -> RecipeEnumerationResult:
+    return enumerate_recipe_selections(
+        candidates,
+        skins,
+        solver_config or _make_solver_config(),
+        enumeration_config=RecipeEnumerationConfig(
+            max_recipe_candidates_returned=max_candidates,
+            max_candidate_states_explored=max_states,
+        ),
+    )
+
+
+def _build_enumeration_inputs(
+    count: int,
+    *,
+    collection_name: str = "Collection Alpha",
+) -> tuple[list[CandidateListing], list[SkinMetadata]]:
+    candidates = [
+        _make_candidate(
+            market_hash_name=f"Enumeration Input {index:03d}",
+            listing_id=f"listing-{index:03d}",
+            goods_id=f"goods-{index:03d}",
+            price_cny=f"{10 + index}.00",
+            float_value=0.01 + index * 0.001,
+            paint_seed=index,
+        )
+        for index in range(count)
+    ]
+    skins = [
+        _make_skin(
+            market_hash_name=f"Enumeration Input {index:03d}",
+            collection_name=collection_name,
+            min_float=0.0,
+            max_float=1.0,
+        )
+        for index in range(count)
+    ] + [
+        _make_skin(
+            market_hash_name="Enumeration Output",
+            rarity="Classified",
+            collection_name=collection_name,
+            min_float=0.0,
+            max_float=1.0,
+        )
+    ]
+    return candidates, skins
+
 
 def test_recipe_solver_public_signatures_remain_exact() -> None:
     construction_parameters = list(signature(construct_recipes).parameters.values())
@@ -191,6 +253,29 @@ def test_recipe_solver_public_signatures_remain_exact() -> None:
         None,
     ]
     assert signature(solve_recipes).return_annotation == list[RecipeCandidate]
+
+    enumeration_parameters = list(
+        signature(enumerate_recipe_selections).parameters.values()
+    )
+    assert [parameter.name for parameter in enumeration_parameters] == [
+        "candidates",
+        "skins",
+        "solver_config",
+        "enumeration_config",
+    ]
+    assert [parameter.kind for parameter in enumeration_parameters] == [
+        Parameter.POSITIONAL_OR_KEYWORD,
+        Parameter.POSITIONAL_OR_KEYWORD,
+        Parameter.POSITIONAL_OR_KEYWORD,
+        Parameter.KEYWORD_ONLY,
+    ]
+    assert all(
+        parameter.default is Parameter.empty
+        for parameter in enumeration_parameters
+    )
+    assert signature(enumerate_recipe_selections).return_annotation is (
+        RecipeEnumerationResult
+    )
 
 
 
@@ -803,6 +888,440 @@ def test_solve_recipes_preserves_exact_evaluated_recipe_contract() -> None:
     assert recipe.risk_decision.risk_score == Decimal("75")
     assert recipe.created_at.tzinfo is not None
 
+
+
+def test_recipe_enumeration_config_defaults() -> None:
+    config = RecipeEnumerationConfig()
+
+    assert config.max_recipe_candidates_returned == 2
+    assert config.max_candidate_states_explored == 256
+
+
+@pytest.mark.parametrize("value", [1, 2, 6])
+def test_recipe_enumeration_config_accepts_candidate_bounds(value: int) -> None:
+    config = RecipeEnumerationConfig(
+        max_recipe_candidates_returned=value,
+        max_candidate_states_explored=max(value, 256),
+    )
+
+    assert config.max_recipe_candidates_returned == value
+
+
+@pytest.mark.parametrize("value", [0, 7, True, "2", 2.0, None])
+def test_recipe_enumeration_config_rejects_invalid_candidate_limit(
+    value: object,
+) -> None:
+    with pytest.raises(ValueError, match="max_recipe_candidates_returned"):
+        RecipeEnumerationConfig(
+            max_recipe_candidates_returned=value,  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.parametrize("value", [1, 256, 1024])
+def test_recipe_enumeration_config_accepts_state_bounds(value: int) -> None:
+    config = RecipeEnumerationConfig(
+        max_recipe_candidates_returned=1,
+        max_candidate_states_explored=value,
+    )
+
+    assert config.max_candidate_states_explored == value
+
+
+@pytest.mark.parametrize("value", [0, 1025, True, "256", 256.0, None])
+def test_recipe_enumeration_config_rejects_invalid_state_limit(
+    value: object,
+) -> None:
+    with pytest.raises(ValueError, match="max_candidate_states_explored"):
+        RecipeEnumerationConfig(
+            max_recipe_candidates_returned=1,
+            max_candidate_states_explored=value,  # type: ignore[arg-type]
+        )
+
+
+def test_recipe_enumeration_config_requires_states_at_least_candidates() -> None:
+    with pytest.raises(ValueError, match="greater than or equal"):
+        RecipeEnumerationConfig(
+            max_recipe_candidates_returned=2,
+            max_candidate_states_explored=1,
+        )
+
+
+def test_recipe_enumeration_contracts_are_immutable_and_redacted() -> None:
+    candidates, skins = _build_basic_recipe_inputs()
+    result = _enumerate(candidates, skins)
+
+    assert [field.name for field in fields(result)] == ["selections", "diagnostics"]
+    assert [field.name for field in fields(result.diagnostics)] == [
+        "eligible_input_count",
+        "retained_input_count",
+        "theoretical_radius_one_states",
+        "states_explored",
+        "raw_candidates_found",
+        "unique_candidates_returned",
+        "duplicates_suppressed",
+        "engine_rejected_states",
+        "baseline_state_rejected",
+        "candidate_limit_reached",
+        "exploration_limit_reached",
+    ]
+    assert type(result.selections) is tuple
+    assert "listing-0" not in repr(result)
+    with pytest.raises(FrozenInstanceError):
+        result.selections = ()  # type: ignore[misc]
+
+
+def test_enumerator_one_one_matches_legacy_for_valid_pool() -> None:
+    candidates, skins = _build_enumeration_inputs(11)
+    legacy = construct_recipe_selections(candidates, skins, _make_solver_config())
+
+    result = _enumerate(candidates, skins, max_candidates=1, max_states=1)
+
+    assert list(result.selections) == legacy
+    assert result.diagnostics == RecipeEnumerationDiagnostics(
+        eligible_input_count=11,
+        retained_input_count=11,
+        theoretical_radius_one_states=11,
+        states_explored=1,
+        raw_candidates_found=1,
+        unique_candidates_returned=1,
+        duplicates_suppressed=0,
+        engine_rejected_states=0,
+        baseline_state_rejected=False,
+        candidate_limit_reached=True,
+        exploration_limit_reached=False,
+    )
+
+
+@pytest.mark.parametrize("count", [0, 9])
+def test_enumerator_one_one_matches_legacy_below_ten(count: int) -> None:
+    candidates, skins = _build_enumeration_inputs(count)
+    legacy = construct_recipe_selections(candidates, skins, _make_solver_config())
+
+    result = _enumerate(candidates, skins, max_candidates=1, max_states=1)
+
+    assert list(result.selections) == legacy == []
+    assert result.diagnostics.theoretical_radius_one_states == 0
+    assert result.diagnostics.states_explored == 0
+
+
+def test_enumerator_one_one_matches_legacy_empty_output_pool() -> None:
+    candidates, skins = _build_enumeration_inputs(10)
+    skins = [skin for skin in skins if skin.rarity != "Classified"]
+
+    legacy = construct_recipe_selections(candidates, skins, _make_solver_config())
+    result = _enumerate(candidates, skins, max_candidates=1, max_states=1)
+
+    assert list(result.selections) == legacy == []
+    assert result.diagnostics.theoretical_radius_one_states == 1
+    assert result.diagnostics.states_explored == 0
+
+
+def test_enumerator_one_one_matches_legacy_collection_cap() -> None:
+    candidates, skins = _build_enumeration_inputs(12)
+    config = _make_solver_config(max_candidates_per_collection=10)
+
+    legacy = construct_recipe_selections(candidates, skins, config)
+    result = _enumerate(
+        candidates,
+        skins,
+        max_candidates=1,
+        max_states=1,
+        solver_config=config,
+    )
+
+    assert list(result.selections) == legacy
+    assert result.diagnostics.eligible_input_count == 12
+    assert result.diagnostics.retained_input_count == 10
+    assert result.diagnostics.theoretical_radius_one_states == 1
+
+
+def test_enumerator_baseline_and_first_alternative_share_nine_offers() -> None:
+    candidates, skins = _build_enumeration_inputs(11)
+
+    result = _enumerate(candidates, skins, max_candidates=2, max_states=2)
+
+    assert len(result.selections) == 2
+    baseline, alternative = result.selections
+    assert baseline.selected_listing_ids == tuple(
+        f"listing-{index:03d}" for index in range(10)
+    )
+    assert alternative.selected_listing_ids == (
+        *(f"listing-{index:03d}" for index in range(9)),
+        "listing-010",
+    )
+    assert len(set(baseline.selected_listing_ids)) == 10
+    assert len(set(alternative.selected_listing_ids)) == 10
+    assert len(set(baseline.selected_listing_ids) & set(alternative.selected_listing_ids)) == 9
+    assert result.diagnostics.states_explored == 2
+    assert result.diagnostics.candidate_limit_reached is True
+    assert result.diagnostics.exploration_limit_reached is False
+
+
+def test_enumerator_continues_after_rejected_baseline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidates, skins = _build_enumeration_inputs(11)
+    original = recipe_solver_module.calculate_tradeup_results
+    calls: list[tuple[str, ...]] = []
+
+    def calculate(
+        input_items: list[InputItem],
+        outputs: dict[str, list[object]],
+    ) -> list[TradeupResult]:
+        names = tuple(item.market_hash_name for item in input_items)
+        calls.append(names)
+        if "Enumeration Input 009" in names:
+            raise ValueError("baseline rejected")
+        return original(input_items, outputs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(recipe_solver_module, "calculate_tradeup_results", calculate)
+
+    strict = _enumerate(candidates, skins, max_candidates=1, max_states=1)
+    expanded = _enumerate(candidates, skins, max_candidates=1, max_states=2)
+
+    assert strict.selections == ()
+    assert strict.diagnostics.baseline_state_rejected is True
+    assert strict.diagnostics.engine_rejected_states == 1
+    assert strict.diagnostics.exploration_limit_reached is True
+    assert len(expanded.selections) == 1
+    assert expanded.selections[0].selected_listing_ids == (
+        *(f"listing-{index:03d}" for index in range(9)),
+        "listing-010",
+    )
+    assert expanded.diagnostics.baseline_state_rejected is True
+    assert expanded.diagnostics.engine_rejected_states == 1
+    assert expanded.diagnostics.states_explored == 2
+    assert calls == [
+        tuple(f"Enumeration Input {index:03d}" for index in range(10)),
+        tuple(f"Enumeration Input {index:03d}" for index in range(10)),
+        tuple(f"Enumeration Input {index:03d}" for index in (*range(9), 10)),
+    ]
+
+
+def test_new_enumerator_rejects_duplicate_offer_before_later_stages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidates, skins = _build_enumeration_inputs(11)
+    candidates[10] = replace(
+        candidates[10],
+        source=candidates[0].source,
+        goods_id=candidates[0].goods_id,
+        listing_id=candidates[0].listing_id,
+    )
+
+    def fail(*args: object, **kwargs: object) -> object:
+        raise AssertionError("later enumeration stage must not run")
+
+    monkeypatch.setattr(recipe_solver_module, "_sort_pairs", fail)
+    monkeypatch.setattr(
+        recipe_solver_module,
+        "build_output_candidates_by_collection",
+        fail,
+    )
+    monkeypatch.setattr(recipe_solver_module, "calculate_tradeup_results", fail)
+
+    with pytest.raises(ValueError, match="^duplicate recipe offer identity$"):
+        _enumerate(candidates, skins)
+
+
+def test_legacy_api_does_not_apply_new_duplicate_offer_preflight() -> None:
+    candidates, skins = _build_enumeration_inputs(10)
+    candidates[1] = replace(
+        candidates[1],
+        source=candidates[0].source,
+        goods_id=candidates[0].goods_id,
+        listing_id=candidates[0].listing_id,
+    )
+
+    selections = construct_recipe_selections(candidates, skins, _make_solver_config())
+
+    assert len(selections) == 1
+    assert selections[0].selected_listing_ids.count(candidates[0].listing_id) == 2
+
+
+def test_same_listing_id_with_different_offer_identity_is_allowed() -> None:
+    candidates, skins = _build_enumeration_inputs(10)
+    candidates[1] = replace(candidates[1], listing_id=candidates[0].listing_id)
+
+    result = _enumerate(candidates, skins)
+
+    assert len(result.selections) == 1
+    keys = {
+        (candidate.source, candidate.goods_id, candidate.listing_id)
+        for candidate in candidates
+    }
+    assert len(keys) == 10
+
+
+def test_recipe_selection_key_is_permutation_invariant_and_offer_sensitive() -> None:
+    candidates, skins = _build_enumeration_inputs(10)
+    lookup = {skin.market_hash_name: skin for skin in skins}
+    pairs = recipe_solver_module._build_eligible_pairs(
+        candidates,
+        lookup,
+        _make_solver_config(),
+    )
+
+    forward = recipe_solver_module._recipe_selection_key(tuple(pairs))
+    reverse = recipe_solver_module._recipe_selection_key(tuple(reversed(pairs)))
+    changed_candidates = list(candidates)
+    changed_candidates[-1] = replace(changed_candidates[-1], listing_id="changed")
+    changed_pairs = recipe_solver_module._build_eligible_pairs(
+        changed_candidates,
+        lookup,
+        _make_solver_config(),
+    )
+
+    assert forward == reverse
+    assert forward != recipe_solver_module._recipe_selection_key(tuple(changed_pairs))
+
+
+def test_enumerator_is_value_deterministic() -> None:
+    candidates, skins = _build_enumeration_inputs(20)
+
+    first = _enumerate(candidates, skins, max_candidates=6, max_states=20)
+    second = _enumerate(candidates, skins, max_candidates=6, max_states=20)
+
+    assert first == second
+
+
+def test_enumerator_natural_neighborhood_exhaustion() -> None:
+    candidates, skins = _build_enumeration_inputs(10)
+
+    result = _enumerate(candidates, skins, max_candidates=2, max_states=2)
+
+    assert len(result.selections) == 1
+    assert result.diagnostics.theoretical_radius_one_states == 1
+    assert result.diagnostics.states_explored == 1
+    assert result.diagnostics.candidate_limit_reached is False
+    assert result.diagnostics.exploration_limit_reached is False
+
+
+def test_enumerator_exploration_limit_stops_before_extra_engine_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidates, skins = _build_enumeration_inputs(20)
+    original = recipe_solver_module.calculate_tradeup_results
+    calls = 0
+
+    def calculate(
+        input_items: list[InputItem],
+        outputs: dict[str, list[object]],
+    ) -> list[TradeupResult]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return original(input_items, outputs)  # type: ignore[arg-type]
+        raise ValueError("alternative rejected")
+
+    monkeypatch.setattr(recipe_solver_module, "calculate_tradeup_results", calculate)
+
+    result = _enumerate(candidates, skins, max_candidates=2, max_states=3)
+
+    assert calls == 3
+    assert result.diagnostics.states_explored == 3
+    assert result.diagnostics.engine_rejected_states == 2
+    assert result.diagnostics.exploration_limit_reached is True
+    assert result.diagnostics.candidate_limit_reached is False
+
+
+@pytest.mark.parametrize(
+    ("count", "theoretical"),
+    [(94, 841), (101, 911)],
+)
+def test_enumerator_large_pool_is_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+    count: int,
+    theoretical: int,
+) -> None:
+    candidates, skins = _build_enumeration_inputs(count)
+    calls = 0
+
+    def reject(*args: object, **kwargs: object) -> list[TradeupResult]:
+        nonlocal calls
+        calls += 1
+        raise ValueError("state rejected")
+
+    monkeypatch.setattr(recipe_solver_module, "calculate_tradeup_results", reject)
+
+    result = _enumerate(candidates, skins, max_candidates=2, max_states=256)
+
+    assert result.selections == ()
+    assert result.diagnostics.retained_input_count == count
+    assert result.diagnostics.theoretical_radius_one_states == theoretical
+    assert result.diagnostics.states_explored == 256
+    assert result.diagnostics.engine_rejected_states == 256
+    assert result.diagnostics.exploration_limit_reached is True
+    assert calls == 256
+
+
+def test_enumerator_does_not_use_exhaustive_combinations() -> None:
+    source = __import__("inspect").getsource(recipe_solver_module)
+    tree = ast.parse(source)
+    names = {
+        node.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name)
+    }
+    attributes = {
+        node.attr
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute)
+    }
+
+    assert "combinations" not in names
+    assert "combinations" not in attributes
+    assert "itertools" not in names
+
+
+def test_enumerator_propagates_memory_error_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidates, skins = _build_enumeration_inputs(10)
+    sentinel = MemoryError("sentinel")
+
+    def fail(*args: object, **kwargs: object) -> list[TradeupResult]:
+        raise sentinel
+
+    monkeypatch.setattr(recipe_solver_module, "calculate_tradeup_results", fail)
+
+    with pytest.raises(MemoryError) as exc_info:
+        _enumerate(candidates, skins)
+
+    assert exc_info.value is sentinel
+
+
+def test_enumerator_propagates_unexpected_engine_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidates, skins = _build_enumeration_inputs(10)
+    sentinel = RuntimeError("sentinel")
+
+    def fail(*args: object, **kwargs: object) -> list[TradeupResult]:
+        raise sentinel
+
+    monkeypatch.setattr(recipe_solver_module, "calculate_tradeup_results", fail)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        _enumerate(candidates, skins)
+
+    assert exc_info.value is sentinel
+
+
+def test_enumerator_results_equal_direct_engine_results() -> None:
+    candidates, skins = _build_enumeration_inputs(11)
+    result = _enumerate(candidates, skins, max_candidates=2, max_states=2)
+    outputs = recipe_solver_module.build_output_candidates_by_collection(
+        skins,
+        "Restricted",
+    )
+
+    for selection in result.selections:
+        direct = recipe_solver_module.calculate_tradeup_results(
+            list(selection.recipe.input_items),
+            outputs,
+        )
+        assert tuple(direct) == selection.recipe.tradeup_results
 
 
 def test_recipe_solver_config_creates_successfully() -> None:
