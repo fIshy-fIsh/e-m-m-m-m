@@ -28,6 +28,7 @@ from app.services.market_universe_builder import (
     MarketUniverseSpec,
     SouvenirInclusion,
     StatTrakMode,
+    UniverseAllocationStrategy,
     build_universe_goods_ids,
 )
 from app.services.recipe_solver import RecipeSolverConfig
@@ -183,6 +184,167 @@ def test_pinned_chalice_pair_produces_two_canonical_normal_outputs(
     )
     assert evaluation.metrics is None
     assert evaluation.valuation_prices_resolved == 0
+
+
+
+
+def _synthetic_structural_pair() -> _IdentityMetadataPair:
+    metadata_entries: list[dict[str, object]] = []
+    forward: dict[str, str] = {}
+    goods_id = 1000
+    for collection_index in range(10):
+        collection_name = f"Collection {collection_index:02d}"
+        capacity = 4 if collection_index < 3 else 1
+        for input_index in range(capacity):
+            name = f"Input {collection_index:02d}-{input_index:02d}"
+            metadata_entries.append(
+                {
+                    "market_hash_name": name,
+                    "collection_name": collection_name,
+                    "rarity": "Restricted",
+                    "min_float": 0.0,
+                    "max_float": 1.0,
+                    "stattrak": False,
+                    "souvenir": False,
+                }
+            )
+            forward[name] = str(goods_id)
+            goods_id += 1
+        metadata_entries.append(
+            {
+                "market_hash_name": f"Output {collection_index:02d}",
+                "collection_name": collection_name,
+                "rarity": "Classified",
+                "min_float": 0.0,
+                "max_float": 1.0,
+                "stattrak": False,
+                "souvenir": False,
+            }
+        )
+    reverse = {value: key for key, value in forward.items()}
+    from app.services.buff_community_identity_resolver import (
+        EXPECTED_SCHEMA_VERSION,
+        BuffCommunitySnapshotMetadata,
+    )
+
+    identity = BuffCommunityIdentityResolver(
+        forward=forward,
+        reverse=reverse,
+        metadata=BuffCommunitySnapshotMetadata(
+            schema_version=EXPECTED_SCHEMA_VERSION,
+            catalog_kind="community_catalog",
+            repository="example/test",
+            file="fixture.json",
+            commit="abc",
+            sha256="deadbeef" * 8,
+            license="CC-BY-4.0",
+            attribution="test",
+            source_count=len(forward),
+            accepted_count=len(forward),
+            rejected_count=0,
+        ),
+    )
+    return _IdentityMetadataPair(
+        identity=identity,
+        metadata=PinnedSkinMetadataResolver.from_payload(metadata_entries),
+    )
+
+
+def test_cohort_depth_creates_deeper_structural_pool_than_breadth() -> None:
+    """Controlled availability demonstrates 0 -> 1 constructible selections.
+
+    Protected Core emits at most one greedy selection per StatTrak bucket.
+    This proves structural purpose only; it is not a live-liquidity or profit
+    claim.
+    """
+    pair = _synthetic_structural_pair()
+    common = {
+        "rarity": "Restricted",
+        "stattrak_mode": StatTrakMode.NORMAL,
+        "souvenir_inclusion": SouvenirInclusion.INCLUDE,
+        "cap": 10,
+    }
+    breadth = build_universe_goods_ids(
+        identity_resolver=pair.identity,
+        metadata_resolver=pair.metadata,
+        spec=MarketUniverseSpec(
+            **common,
+            allocation_strategy=UniverseAllocationStrategy.BREADTH,
+        ),
+    )
+    depth = build_universe_goods_ids(
+        identity_resolver=pair.identity,
+        metadata_resolver=pair.metadata,
+        spec=MarketUniverseSpec(
+            **common,
+            allocation_strategy=UniverseAllocationStrategy.COHORT_DEPTH,
+            target_cohort_count=3,
+        ),
+    )
+    assert breadth.diagnostics.selected_cohort_count == 10
+    assert [
+        cohort.allocated_slots for cohort in depth.diagnostics.selected_cohorts
+    ] == [4, 3, 3]
+
+    deep_names = {
+        entry.market_hash_name
+        for entry in depth.selected_entries
+    }
+
+    def payloads_for(names: tuple[str, ...]) -> dict[str, bytes]:
+        payloads: dict[str, bytes] = {}
+        for name in names:
+            identity = asyncio.run(pair.identity.resolve(name))
+            assert identity is not None
+            available = name in deep_names
+            paintwear = [("0.01", "0.02")] if available else []
+            payloads[identity.goods_id] = _listings_payload(
+                goods_id=identity.goods_id,
+                asset_prefix=f"asset-{identity.goods_id}",
+                listing_prefix=f"listing-{identity.goods_id}",
+                price="1.00",
+                paintwear_range=paintwear,
+            )
+        return payloads
+
+    from app.services.buff_listing_provider import BuffListingProvider
+
+    def run(names: tuple[str, ...], goods_ids: tuple[str, ...]):
+        client = _FakePayloadClient(payloads_for(names))
+        orchestrator = LiveScannerOrchestrator(
+            listing_provider=BuffListingProvider(client),
+            identity_resolver=pair.identity,
+            metadata_resolver=pair.metadata,
+            max_valuation_requests_per_run=20,
+            valuation_service=None,
+            solver_config=RecipeSolverConfig(
+                input_rarity="Restricted",
+                input_count=10,
+                sell_fee_rate=Decimal("0.025"),
+            ),
+            risk_config=RiskFilterConfig(
+                min_roi=Decimal("-1"),
+                min_expected_profit_cny=Decimal("0"),
+                max_worst_case_loss_pct=Decimal("1"),
+                min_profit_probability=0.0,
+                max_input_total_cost_cny=Decimal("999999"),
+            ),
+        )
+        result = asyncio.run(orchestrator.run_once(goods_ids))
+        assert client.calls == list(goods_ids)
+        return result
+
+    breadth_run = run(breadth.selected_market_hash_names, breadth.goods_ids)
+    depth_run = run(depth.selected_market_hash_names, depth.goods_ids)
+    assert breadth_run.counters.goods_ids_requested == 10
+    assert depth_run.counters.goods_ids_requested == 10
+    assert breadth_run.counters.input_items_created == 3
+    assert breadth_run.counters.recipes_evaluated == 0
+    assert depth_run.counters.input_items_created == 10
+    assert depth_run.counters.recipes_evaluated == 1
+    selected = depth_run.recipe_evaluations[0].recipe.recipe.input_items
+    assert len({item.collection_name for item in selected}) == 3
+    assert all(item.stattrak is False for item in selected)
 
 
 def test_auto_universe_drives_full_seam_including_souvenir_inputs(

@@ -22,6 +22,7 @@ from app.services.market_universe_builder import (
     MarketUniverseSpec,
     SouvenirInclusion,
     StatTrakMode,
+    UniverseAllocationStrategy,
     build_universe_goods_ids,
 )
 from app.services.skin_metadata_resolver import PinnedSkinMetadataResolver
@@ -80,9 +81,9 @@ def _resolver_from_metadata(
     entries: list[dict[str, object]],
 ) -> BuffCommunityIdentityResolver:
     pairs = {
-        entry["market_hash_name"]: str(abs(hash(entry["market_hash_name"])) % 100000 + 1)
-        for entry in entries
-    }  # noqa: S324 — deterministic test fixture
+        str(entry["market_hash_name"]): str(index)
+        for index, entry in enumerate(entries, start=1)
+    }
     return _resolver(pairs)
 
 
@@ -459,19 +460,287 @@ def test_memory_error_propagates_verbatim(
     assert info.value is sentinel
 
 
-def test_module_has_no_network_or_async_imports() -> None:
+def _allocation_metadata(
+    capacities: tuple[tuple[str, int, int], ...],
+) -> list[dict[str, object]]:
+    """Build normal/Souvenir Restricted inputs plus canonical outputs."""
+    entries: list[dict[str, object]] = []
+    for collection_name, normal_count, souvenir_count in capacities:
+        for index in range(normal_count):
+            entries.append(
+                _metadata_entry(
+                    market_hash_name=f"{collection_name} Normal {index:02d}",
+                    collection_name=collection_name,
+                    rarity="Restricted",
+                )
+            )
+        for index in range(souvenir_count):
+            entries.append(
+                _metadata_entry(
+                    market_hash_name=f"Souvenir {collection_name} {index:02d}",
+                    collection_name=collection_name,
+                    rarity="Restricted",
+                    souvenir=True,
+                )
+            )
+        entries.append(
+            _metadata_entry(
+                market_hash_name=f"{collection_name} Canonical Output",
+                collection_name=collection_name,
+                rarity="Classified",
+            )
+        )
+    return entries
+
+
+def _build_allocation_universe(
+    capacities: tuple[tuple[str, int, int], ...],
+    *,
+    strategy: UniverseAllocationStrategy,
+    cap: int = 10,
+    target_cohort_count: int = 3,
+    souvenir_inclusion: SouvenirInclusion = SouvenirInclusion.INCLUDE,
+):
+    entries = _allocation_metadata(capacities)
+    return build_universe_goods_ids(
+        identity_resolver=_resolver_from_metadata(entries),
+        metadata_resolver=_metadata_resolver_from_entries(entries),
+        spec=MarketUniverseSpec(
+            rarity="Restricted",
+            stattrak_mode=StatTrakMode.NORMAL,
+            souvenir_inclusion=souvenir_inclusion,
+            cap=cap,
+            allocation_strategy=strategy,
+            target_cohort_count=target_cohort_count,
+        ),
+    )
+
+
+def test_allocation_defaults_preserve_phase_13r_breadth() -> None:
+    spec = MarketUniverseSpec(
+        rarity="Restricted",
+        stattrak_mode=StatTrakMode.NORMAL,
+        souvenir_inclusion=SouvenirInclusion.INCLUDE,
+        cap=2,
+    )
+    assert spec.allocation_strategy is UniverseAllocationStrategy.BREADTH
+    assert spec.target_cohort_count == 3
+
+    result = _build_allocation_universe(
+        (("Collection A", 2, 0), ("Collection B", 2, 0)),
+        strategy=UniverseAllocationStrategy.BREADTH,
+        cap=4,
+    )
+    assert result.selected_market_hash_names == (
+        "Collection A Normal 00",
+        "Collection B Normal 00",
+        "Collection A Normal 01",
+        "Collection B Normal 01",
+    )
+
+
+@pytest.mark.parametrize("target", [0, -1, 11, True])
+def test_target_cohort_count_validation(target: object) -> None:
+    with pytest.raises(BoundedMarketUniverseBuilderError) as info:
+        MarketUniverseSpec(
+            rarity="Restricted",
+            stattrak_mode=StatTrakMode.NORMAL,
+            souvenir_inclusion=SouvenirInclusion.INCLUDE,
+            cap=10,
+            allocation_strategy=UniverseAllocationStrategy.COHORT_DEPTH,
+            target_cohort_count=target,  # type: ignore[arg-type]
+        )
+    assert info.value.reason == "invalid_target_cohort_count"
+
+
+def test_depth_target_greater_than_budget_fails_closed() -> None:
+    with pytest.raises(BoundedMarketUniverseBuilderError) as info:
+        MarketUniverseSpec(
+            rarity="Restricted",
+            stattrak_mode=StatTrakMode.NORMAL,
+            souvenir_inclusion=SouvenirInclusion.INCLUDE,
+            cap=2,
+            allocation_strategy=UniverseAllocationStrategy.COHORT_DEPTH,
+            target_cohort_count=3,
+        )
+    assert info.value.reason == "invalid_target_cohort_count"
+
+
+def test_depth_allocates_ten_slots_as_four_three_three() -> None:
+    result = _build_allocation_universe(
+        (
+            ("Collection A", 10, 0),
+            ("Collection B", 10, 0),
+            ("Collection C", 10, 0),
+            ("Collection D", 9, 0),
+        ),
+        strategy=UniverseAllocationStrategy.COHORT_DEPTH,
+    )
+    assert [
+        cohort.key.collection_name for cohort in result.diagnostics.selected_cohorts
+    ] == ["Collection A", "Collection B", "Collection C"]
+    assert [
+        cohort.allocated_slots for cohort in result.diagnostics.selected_cohorts
+    ] == [4, 3, 3]
+    assert result.diagnostics.eligible_cohort_count == 4
+    assert result.diagnostics.selected_cohort_count == 3
+    assert len(result.goods_ids) == 10
+
+
+def test_depth_redistributes_capacity_limited_slots() -> None:
+    result = _build_allocation_universe(
+        (
+            ("Collection A", 10, 0),
+            ("Collection B", 10, 0),
+            ("Collection C", 2, 0),
+        ),
+        strategy=UniverseAllocationStrategy.COHORT_DEPTH,
+    )
+    assert [
+        cohort.allocated_slots for cohort in result.diagnostics.selected_cohorts
+    ] == [4, 4, 2]
+
+
+def test_depth_does_not_promote_a_fourth_cohort_when_target_is_short() -> None:
+    result = _build_allocation_universe(
+        (
+            ("Collection A", 2, 0),
+            ("Collection B", 1, 0),
+            ("Collection C", 1, 0),
+            ("Collection D", 1, 0),
+        ),
+        strategy=UniverseAllocationStrategy.COHORT_DEPTH,
+        target_cohort_count=2,
+    )
+    assert len(result.goods_ids) == 3
+    assert result.diagnostics.selected_cohort_count == 2
+    assert {
+        cohort.key.collection_name for cohort in result.diagnostics.selected_cohorts
+    } == {"Collection A", "Collection B"}
+
+
+@pytest.mark.parametrize(
+    ("capacities", "expected_slots"),
+    [
+        ((("Collection A", 10, 0),), [10]),
+        ((("Collection A", 10, 0), ("Collection B", 10, 0)), [5, 5]),
+    ],
+)
+def test_depth_supports_fewer_cohorts_than_target(
+    capacities: tuple[tuple[str, int, int], ...],
+    expected_slots: list[int],
+) -> None:
+    result = _build_allocation_universe(
+        capacities,
+        strategy=UniverseAllocationStrategy.COHORT_DEPTH,
+    )
+    assert [
+        cohort.allocated_slots for cohort in result.diagnostics.selected_cohorts
+    ] == expected_slots
+
+
+def test_depth_ranking_uses_capacity_then_lexical_key() -> None:
+    result = _build_allocation_universe(
+        (
+            ("Collection Z", 5, 0),
+            ("Collection B", 7, 0),
+            ("Collection A", 7, 0),
+            ("Collection C", 6, 0),
+        ),
+        strategy=UniverseAllocationStrategy.COHORT_DEPTH,
+        cap=3,
+        target_cohort_count=3,
+    )
+    assert [
+        cohort.key.collection_name for cohort in result.diagnostics.selected_cohorts
+    ] == ["Collection A", "Collection B", "Collection C"]
+
+
+def test_normal_and_souvenir_interleave_in_same_cohort() -> None:
+    result = _build_allocation_universe(
+        (("Collection A", 3, 3),),
+        strategy=UniverseAllocationStrategy.COHORT_DEPTH,
+        cap=6,
+        target_cohort_count=1,
+    )
+    cohort = result.diagnostics.selected_cohorts[0]
+    assert cohort.catalog_capacity == 6
+    assert cohort.normal_identity_count == 3
+    assert cohort.souvenir_identity_count == 3
+    assert cohort.canonical_output_count == 1
+    assert [entry.souvenir for entry in cohort.selected_entries] == [
+        False,
+        True,
+        False,
+        True,
+        False,
+        True,
+    ]
+    assert cohort.key.stattrak is False
+
+
+def test_souvenir_exclusion_changes_effective_catalog_capacity() -> None:
+    result = _build_allocation_universe(
+        (("Collection A", 3, 3),),
+        strategy=UniverseAllocationStrategy.COHORT_DEPTH,
+        cap=3,
+        target_cohort_count=1,
+        souvenir_inclusion=SouvenirInclusion.EXCLUDE,
+    )
+    cohort = result.diagnostics.selected_cohorts[0]
+    assert cohort.catalog_capacity == 3
+    assert cohort.normal_identity_count == 3
+    assert cohort.souvenir_identity_count == 0
+    assert all(not entry.souvenir for entry in cohort.selected_entries)
+
+
+def test_depth_result_and_diagnostics_are_byte_equal() -> None:
+    capacities = (
+        ("Collection A", 6, 4),
+        ("Collection B", 6, 4),
+        ("Collection C", 6, 4),
+    )
+    first = _build_allocation_universe(
+        capacities,
+        strategy=UniverseAllocationStrategy.COHORT_DEPTH,
+    )
+    second = _build_allocation_universe(
+        capacities,
+        strategy=UniverseAllocationStrategy.COHORT_DEPTH,
+    )
+    assert first == second
+    assert len(set(first.goods_ids)) == len(first.goods_ids)
+    assert tuple(entry.goods_id for entry in first.selected_entries) == first.goods_ids
+    assert sum(
+        cohort.allocated_slots for cohort in first.diagnostics.selected_cohorts
+    ) == first.diagnostics.selected_count
+
+
+def test_module_has_no_network_async_or_financial_imports() -> None:
     import ast
 
     source = Path(__file__).with_name("..").joinpath(
         "app", "services", "market_universe_builder.py"
     )
     tree = ast.parse(source.read_text(encoding="utf-8"))
-    forbidden = {"httpx", "asyncio", "requests", "urllib", "socket"}
+    forbidden = {
+        "httpx",
+        "asyncio",
+        "requests",
+        "urllib",
+        "socket",
+        "os",
+        "steamdt_buff_price_provider",
+        "valuation_service",
+        "ev_service",
+        "risk_filter",
+    }
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 top = alias.name.split(".")[0]
                 assert top not in forbidden, top
         elif isinstance(node, ast.ImportFrom) and node.module is not None:
-            top = node.module.split(".")[0]
-            assert top not in forbidden, top
+            parts = node.module.split(".")
+            assert parts[0] not in forbidden, parts[0]
+            assert not any(part in forbidden for part in parts), node.module

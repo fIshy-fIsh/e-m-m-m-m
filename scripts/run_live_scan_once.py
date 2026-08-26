@@ -36,6 +36,7 @@ from app.services.market_universe_builder import (
     MarketUniverseSpec,
     SouvenirInclusion,
     StatTrakMode,
+    UniverseAllocationStrategy,
     build_universe_goods_ids,
 )
 from app.services.recipe_solver import RecipeSolverConfig
@@ -90,6 +91,8 @@ VALID_RARITIES: tuple[str, ...] = (
 )
 VALID_STATTRAK_MODES: tuple[str, ...] = ("normal", "stattrak")
 VALID_SOUVENIR_POLICIES: tuple[str, ...] = ("include", "exclude")
+VALID_ALLOCATION_STRATEGIES: tuple[str, ...] = ("breadth", "cohort-depth")
+DEFAULT_TARGET_COHORT_COUNT: int = 3
 UNIVERSE_HARD_MAX: int = 10
 
 
@@ -151,6 +154,24 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=UNIVERSE_HARD_MAX,
         help="Maximum auto-universe goods IDs to scan (1..10; auto-universe only)",
+    )
+    parser.add_argument(
+        "--allocation",
+        choices=VALID_ALLOCATION_STRATEGIES,
+        default=None,
+        help=(
+            "Auto-universe allocation strategy; defaults to breadth "
+            "(auto-universe only)"
+        ),
+    )
+    parser.add_argument(
+        "--target-cohorts",
+        type=int,
+        default=None,
+        help=(
+            "Number of collection-local cohorts for cohort-depth allocation; "
+            "defaults to 3"
+        ),
     )
     parser.add_argument(
         "--universe-preview",
@@ -388,7 +409,7 @@ def print_effective_config(
 
 def _build_market_universe_spec(args: argparse.Namespace) -> MarketUniverseSpec:
     if not args.auto_universe:
-        raise BoundedMarketUniverseBuilderError(reason="unsupported_rarity")
+        raise BoundedMarketUniverseBuilderError(reason="unsupported_allocation")
     if (
         type(args.max_goods_ids) is not int
         or args.max_goods_ids < 1
@@ -399,6 +420,24 @@ def _build_market_universe_spec(args: argparse.Namespace) -> MarketUniverseSpec:
         raise BoundedMarketUniverseBuilderError(reason="unsupported_rarity")
     if args.souvenir not in VALID_SOUVENIR_POLICIES:
         raise BoundedMarketUniverseBuilderError(reason="unsupported_rarity")
+
+    allocation_value = args.allocation or UniverseAllocationStrategy.BREADTH.value
+    if allocation_value not in VALID_ALLOCATION_STRATEGIES:
+        raise BoundedMarketUniverseBuilderError(reason="unsupported_allocation")
+    allocation_strategy = UniverseAllocationStrategy(allocation_value)
+    target_cohort_count = (
+        DEFAULT_TARGET_COHORT_COUNT
+        if args.target_cohorts is None
+        else args.target_cohorts
+    )
+    if (
+        allocation_strategy is UniverseAllocationStrategy.BREADTH
+        and args.target_cohorts is not None
+    ):
+        raise BoundedMarketUniverseBuilderError(
+            reason="invalid_target_cohort_count"
+        )
+
     return MarketUniverseSpec(
         rarity=args.rarity,
         stattrak_mode=(
@@ -413,6 +452,8 @@ def _build_market_universe_spec(args: argparse.Namespace) -> MarketUniverseSpec:
         ),
         cap=args.max_goods_ids,
         collection_allowlist=tuple(args.collection),
+        allocation_strategy=allocation_strategy,
+        target_cohort_count=target_cohort_count,
     )
 
 
@@ -439,6 +480,8 @@ def print_universe_preview(
     print(f"input rarity:               {result.spec.rarity}")
     print(f"stattrak mode:              {result.spec.stattrak_mode.value}")
     print(f"souvenir policy:            {result.spec.souvenir_inclusion.value}")
+    print(f"allocation strategy:        {result.spec.allocation_strategy.value}")
+    print(f"target cohort count:        {result.spec.target_cohort_count}")
     print(
         "collection allowlist:       "
         + (", ".join(result.spec.collection_allowlist) or "(all)")
@@ -460,13 +503,36 @@ def print_universe_preview(
     print(f"  excluded no valid output: {diagnostics.excluded_no_valid_output}")
     print(f"  excluded intrinsic policy:{diagnostics.excluded_intrinsic_policy}")
     print(f"  excluded by allowlist:    {diagnostics.excluded_by_allowlist}")
+    print(f"  eligible cohorts:         {diagnostics.eligible_cohort_count}")
+    print(f"  selected cohorts:         {diagnostics.selected_cohort_count}")
+    print()
+    print("SELECTED COHORT ALLOCATION")
+    for index, cohort in enumerate(diagnostics.selected_cohorts, start=1):
+        key = cohort.key
+        print(
+            f"  {index}. collection={key.collection_name} rarity={key.rarity} "
+            f"stattrak={key.stattrak}"
+        )
+        print(
+            "     catalog capacity="
+            f"{cohort.catalog_capacity} normal={cohort.normal_identity_count} "
+            f"souvenir={cohort.souvenir_identity_count} "
+            f"canonical outputs={cohort.canonical_output_count} "
+            f"allocated={cohort.allocated_slots}"
+        )
+        for entry in cohort.selected_entries:
+            print(
+                f"     goods_id={entry.goods_id} souvenir={entry.souvenir} "
+                f"market_hash_name={entry.market_hash_name}"
+            )
     print()
     print("SELECTED TARGETS")
-    for index, (goods_id, market_hash_name) in enumerate(
-        zip(result.goods_ids, result.selected_market_hash_names, strict=False),
-        start=1,
-    ):
-        print(f"  {index}. goods_id={goods_id} market_hash_name={market_hash_name}")
+    for index, entry in enumerate(result.selected_entries, start=1):
+        print(
+            f"  {index}. goods_id={entry.goods_id} "
+            f"collection={entry.collection_name} "
+            f"market_hash_name={entry.market_hash_name}"
+        )
 
 
 def _universe_preview_to_jsonable(
@@ -481,12 +547,25 @@ def _universe_preview_to_jsonable(
             "rarity": result.spec.rarity,
             "stattrak_mode": result.spec.stattrak_mode.value,
             "souvenir_policy": result.spec.souvenir_inclusion.value,
+            "allocation_strategy": result.spec.allocation_strategy.value,
+            "target_cohort_count": result.spec.target_cohort_count,
             "cap": result.spec.cap,
             "collection_allowlist": list(result.spec.collection_allowlist),
         },
         "selected_count": len(result.goods_ids),
         "selected_goods_ids": list(result.goods_ids),
         "selected_market_hash_names": list(result.selected_market_hash_names),
+        "selected_entries": [
+            {
+                "goods_id": entry.goods_id,
+                "market_hash_name": entry.market_hash_name,
+                "collection": entry.collection_name,
+                "rarity": entry.rarity,
+                "stattrak": entry.stattrak,
+                "souvenir": entry.souvenir,
+            }
+            for entry in result.selected_entries
+        ],
         "catalog_diagnostics": {
             "metadata_rows": diagnostics.catalog_metadata_rows,
             "identity_rows": diagnostics.catalog_identity_rows,
@@ -498,6 +577,31 @@ def _universe_preview_to_jsonable(
             "excluded_no_valid_output": diagnostics.excluded_no_valid_output,
             "excluded_intrinsic_policy": diagnostics.excluded_intrinsic_policy,
             "excluded_by_allowlist": diagnostics.excluded_by_allowlist,
+            "allocation_strategy": diagnostics.allocation_strategy.value,
+            "target_cohort_count": diagnostics.target_cohort_count,
+            "eligible_cohort_count": diagnostics.eligible_cohort_count,
+            "selected_cohort_count": diagnostics.selected_cohort_count,
+            "selected_cohorts": [
+                {
+                    "collection": cohort.key.collection_name,
+                    "rarity": cohort.key.rarity,
+                    "stattrak": cohort.key.stattrak,
+                    "catalog_capacity": cohort.catalog_capacity,
+                    "normal_identity_count": cohort.normal_identity_count,
+                    "souvenir_identity_count": cohort.souvenir_identity_count,
+                    "canonical_output_count": cohort.canonical_output_count,
+                    "allocated_slots": cohort.allocated_slots,
+                    "selected_identities": [
+                        {
+                            "goods_id": entry.goods_id,
+                            "market_hash_name": entry.market_hash_name,
+                            "souvenir": entry.souvenir,
+                        }
+                        for entry in cohort.selected_entries
+                    ],
+                }
+                for cohort in diagnostics.selected_cohorts
+            ],
         },
         "preflight": {
             "max_buff_requests": len(result.goods_ids),
@@ -540,6 +644,11 @@ def run_universe_preview(args: argparse.Namespace) -> int:
 
 async def _main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if not args.auto_universe and (
+        args.allocation is not None or args.target_cohorts is not None
+    ):
+        print("AUTO_UNIVERSE_OPTION_REQUIRES_AUTO_UNIVERSE")
+        return 2
     if args.universe_preview:
         if not args.auto_universe:
             print("UNIVERSE_PREVIEW_REQUIRES_AUTO_UNIVERSE")

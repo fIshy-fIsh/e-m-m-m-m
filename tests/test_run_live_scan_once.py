@@ -7,6 +7,7 @@ import pytest
 from scripts.run_live_scan_once import (
     LiveScanSettings,
     LiveValuationConfigurationError,
+    _build_market_universe_spec,
     build_parser,
     build_steamdt_http_client,
     validate_live_valuation_config,
@@ -116,6 +117,87 @@ def test_parser_auto_universe_defaults() -> None:
     assert args.stattrak_mode == "normal"
     assert args.souvenir == "include"
     assert args.max_goods_ids == 10
+    assert args.allocation is None
+    assert args.target_cohorts is None
+
+
+def test_auto_universe_effective_defaults_preserve_breadth() -> None:
+    from app.services.market_universe_builder import UniverseAllocationStrategy
+
+    args = build_parser().parse_args(["--auto-universe"])
+    spec = _build_market_universe_spec(args)
+    assert spec.allocation_strategy is UniverseAllocationStrategy.BREADTH
+    assert spec.target_cohort_count == 3
+
+
+def test_parser_maps_explicit_cohort_depth_configuration() -> None:
+    from app.services.market_universe_builder import UniverseAllocationStrategy
+
+    args = build_parser().parse_args(
+        [
+            "--auto-universe",
+            "--allocation",
+            "cohort-depth",
+            "--target-cohorts",
+            "2",
+        ]
+    )
+    spec = _build_market_universe_spec(args)
+    assert spec.allocation_strategy is UniverseAllocationStrategy.COHORT_DEPTH
+    assert spec.target_cohort_count == 2
+
+
+def test_explicit_target_with_breadth_fails_closed() -> None:
+    from app.services.market_universe_builder import (
+        BoundedMarketUniverseBuilderError,
+    )
+
+    args = build_parser().parse_args(
+        [
+            "--auto-universe",
+            "--allocation",
+            "breadth",
+            "--target-cohorts",
+            "3",
+        ]
+    )
+    with pytest.raises(BoundedMarketUniverseBuilderError) as info:
+        _build_market_universe_spec(args)
+    assert info.value.reason == "invalid_target_cohort_count"
+
+
+def test_manual_mode_rejects_explicit_auto_allocation_before_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts import run_live_scan_once
+
+    def fail_settings(*args: object, **kwargs: object) -> None:
+        raise AssertionError("LiveScanSettings must not be constructed")
+
+    monkeypatch.setattr(run_live_scan_once, "LiveScanSettings", fail_settings)
+    exit_code = run_live_scan_once.main(
+        ["--goods-id", "34279", "--allocation", "breadth"]
+    )
+    assert exit_code == 2
+    assert "AUTO_UNIVERSE_OPTION_REQUIRES_AUTO_UNIVERSE" in capsys.readouterr().out
+
+
+def test_manual_mode_rejects_explicit_target_before_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts import run_live_scan_once
+
+    def fail_settings(*args: object, **kwargs: object) -> None:
+        raise AssertionError("LiveScanSettings must not be constructed")
+
+    monkeypatch.setattr(run_live_scan_once, "LiveScanSettings", fail_settings)
+    exit_code = run_live_scan_once.main(
+        ["--goods-id", "34279", "--target-cohorts", "3"]
+    )
+    assert exit_code == 2
+    assert "AUTO_UNIVERSE_OPTION_REQUIRES_AUTO_UNIVERSE" in capsys.readouterr().out
 
 
 def test_parser_rejects_unsupported_rarity() -> None:
@@ -166,6 +248,115 @@ def test_parser_accepts_repeatable_collection() -> None:
         "The Cobblestone Collection",
         "The Ancient Collection",
     ]
+
+
+def test_successful_depth_preview_is_structured_and_no_network(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import json
+
+    from scripts import run_live_scan_once
+
+    metadata_items: list[dict[str, object]] = []
+    identities: dict[str, str] = {}
+    for collection_index, collection_name in enumerate(
+        ("Collection A", "Collection B", "Collection C")
+    ):
+        for input_index in range(4):
+            name = f"{collection_name} Input {input_index}"
+            metadata_items.append(
+                {
+                    "market_hash_name": name,
+                    "collection_name": collection_name,
+                    "rarity": "Restricted",
+                    "min_float": 0.0,
+                    "max_float": 1.0,
+                    "stattrak": False,
+                    "souvenir": False,
+                }
+            )
+            identities[name] = str(collection_index * 10 + input_index + 1)
+        metadata_items.append(
+            {
+                "market_hash_name": f"{collection_name} Output",
+                "collection_name": collection_name,
+                "rarity": "Classified",
+                "min_float": 0.0,
+                "max_float": 1.0,
+                "stattrak": False,
+                "souvenir": False,
+            }
+        )
+    identity_payload = {
+        "schema_version": 1,
+        "catalog_kind": "community_catalog",
+        "source": {
+            "repository": "example/repo",
+            "file": "x.json",
+            "commit": "abc",
+            "sha256": "deadbeef" * 8,
+            "license": "CC-BY-4.0",
+            "attribution": "test",
+        },
+        "counts": {
+            "source": len(identities),
+            "accepted": len(identities),
+            "rejected": 0,
+        },
+        "items": identities,
+    }
+    identity_path = tmp_path / "identity.json"
+    metadata_path = tmp_path / "metadata.json"
+    identity_path.write_text(json.dumps(identity_payload), encoding="utf-8")
+    metadata_path.write_text(
+        json.dumps({"items": metadata_items}), encoding="utf-8"
+    )
+
+    failures: list[str] = []
+
+    def fail_constructor(*args: object, **kwargs: object) -> None:
+        failures.append("live-constructor")
+
+    monkeypatch.setattr(run_live_scan_once, "LiveScanSettings", fail_constructor)
+    monkeypatch.setattr("httpx.AsyncClient", fail_constructor)
+    monkeypatch.setattr(
+        run_live_scan_once, "BuffAnonymousListingHttpClient", fail_constructor
+    )
+    monkeypatch.setattr(run_live_scan_once, "SteamDTHttpClient", fail_constructor)
+    monkeypatch.setattr(run_live_scan_once, "ValuationService", fail_constructor)
+    monkeypatch.setattr(run_live_scan_once, "LiveScannerOrchestrator", fail_constructor)
+
+    exit_code = run_live_scan_once.main(
+        [
+            "--auto-universe",
+            "--allocation",
+            "cohort-depth",
+            "--target-cohorts",
+            "3",
+            "--max-goods-ids",
+            "10",
+            "--universe-preview",
+            "--identity-snapshot",
+            str(identity_path),
+            "--metadata-snapshot",
+            str(metadata_path),
+            "--json",
+        ]
+    )
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["spec"]["allocation_strategy"] == "cohort-depth"
+    assert payload["spec"]["target_cohort_count"] == 3
+    diagnostics = payload["catalog_diagnostics"]
+    assert diagnostics["selected_cohort_count"] == 3
+    assert [
+        cohort["allocated_slots"] for cohort in diagnostics["selected_cohorts"]
+    ] == [4, 3, 3]
+    assert payload["http_clients_constructed"] is False
+    assert payload["http_requests_sent"] == 0
+    assert failures == []
 
 
 def test_universe_preview_does_not_construct_clients(
