@@ -66,7 +66,10 @@
 6. 检查是否把未确认的 BUFF API 细节错误写死进代码。
 
 ## 当前阶段指针
-- 阶段：`PHASE_13T_COMPLETE` (HEAD `92887947`)。
+- 阶段：`PHASE_13T_COMPLETE`。
+- Phase 13T production / test checkpoint：`9288794`（`add bounded multi-recipe scale validation`）。
+- Post-Phase-13T handoff baseline：`bb09068`（`sync AI context after Phase 13T`）。
+- 当前 Git HEAD 必须通过仓库实时验证（`git rev-parse HEAD` / `git status --short`），不在此处硬编码。
 - 当前 bounded multi-recipe 校验：`tests/test_multi_recipe_scanner_scale_validation.py`。
 - 权威交接文档：`docs/ai-context/DEVELOPMENT_HANDOFF.md`。
 

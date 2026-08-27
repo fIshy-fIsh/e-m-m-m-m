@@ -61,10 +61,29 @@ The bridge `market_hash_name ↔ BUFF goods_id` is the **provisional community c
 10. Normalize provider fields before they enter engine/service; keep raw provider shapes out of core domain.
 11. Add/update these AI context files after every significant phase.
 
-## Current Git State (verify live; authoritative snapshot)
+## Git / Phase Baselines
 
-- **Branch:** `feature/steamdt-cache-rate-limit`
-- **HEAD:** `92887947e0e1808f1bc23258cf53adb10a0036ee` — `add bounded multi-recipe scale validation`
+```text
+Current phase:                              PHASE_13T_COMPLETE
+
+Latest production / test checkpoint:        9288794
+                                            add bounded multi-recipe scale validation
+                                            (full SHA 92887947e0e1808f1bc23258cf53adb10a0036ee)
+
+Post-Phase-13T AI-context synchronization
+baseline:                                    bb09068
+                                            sync AI context after Phase 13T
+                                            (full SHA bb090686407032b915172eaed2424bf2dd41a9a3)
+
+Live repository HEAD / branch / working tree:
+  MUST be verified from Git at task entry.
+  Do not infer current HEAD from this document.
+  Use:
+    git rev-parse HEAD
+    git rev-parse @{u}
+    git rev-list --left-right --count HEAD...@{u}
+    git status --short
+```
 - **Phase:** `PHASE_13T_COMPLETE`. Phase 13T-1 through 13T-4A are committed and pushed (latest commit `9288794`); Phase 13T-4B is a live-only validation performed against that commit and intentionally produced no commit and no repository artifact.
 - **Latest completed phases:**
   - **Phase 13T-4B** — `LIVE_VALIDATION_PASSED_NO_COMPLETE_VALUATION` (live-only validation; no commit, no repository artifact; performed against `9288794`). One bounded live `--auto-universe --allocation cohort-depth --target-cohorts 3` run selected 10 goods IDs across three cohorts; 10/10 BUFF pages succeeded; 95 listings → 95 enriched InputItems; real bounded composition returned 2 real recipe candidates; under effective `max_valuation_requests_per_run=5` the two recipes required 10 + 20 unique output names and were atomically blocked before any SteamDT HTTP/provider request; 0 fully valued, 0 risk evaluated, 0 opportunities. SteamDT live mode configured: YES. SteamDT HTTP/provider requests issued during Phase 13T-4B: 0. Frozen contracts held.

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cs2-buff-tradeup-scanner"
 version = "0.1.0"
-description = "Skeleton for a CS2 BUFF trade-up opportunity scanner"
+description = "Read-only CS2 BUFF trade-up opportunity scanner with bounded multi-recipe enumeration"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

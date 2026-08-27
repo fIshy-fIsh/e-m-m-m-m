@@ -1,32 +1,46 @@
 # CS2 BUFF Trade-up Opportunity Scanner — Technical Specification
 
-## 1. 项目目标
-本项目的目标是构建一个后端优先、可 24h 无人值守运行的 CS2 trade-up 机会扫描系统，用于持续发现并提醒高质量 BUFF 炼金机会。
+## 1. Project Goal
 
-系统需要完成以下闭环：
-1. 定时扫描 BUFF 市场上的候选炼金材料
-2. 获取并保留价格、float、goods_id、挂单上下文等市场数据
-3. 结合 CS2 metadata 归一化得到 collection、rarity、min_float、max_float 与可产出结果池
-4. 计算 trade-up 输出概率、输出 float、EV、ROI、worst-case loss 与 profit probability
-5. 使用保守高质量策略过滤低质量机会
-6. 通过 Discord Webhook 发送提醒
+This project is a backend-first, **read-only** CS2 trade-up opportunity scanner. It discovers trade-up opportunities from BUFF marketplace listings, evaluates each opportunity against the canonical trade-up rules and a SteamDT-based output valuation, and surfaces only opportunities that satisfy explicit quality thresholds.
 
-V1 的定位是 **notification-only scanner**，不进行任何交易执行。
+The system performs the following closed loop:
 
-## 2. 非目标
-V1 明确不做：
-- 自动购买
-- 自动登录
-- Cookie 抓取
-- 验证码绕过
-- BUFF 风控绕过
-- 浏览器模拟购买
-- 非官方规避检测 / 反风控技术
-- Telegram 或多渠道提醒
-- 多数据源自动切换
-- 资金管理、自动仓位分配、组合层回测
+1. Fetch candidate BUFF material listings through the anonymous read-only sell-order path.
+2. Resolve listing identity through a pinned offline community catalog using exact fail-closed matching.
+3. Pin and normalize canonical CS2 metadata (collection, rarity, min/max float, paint-seed bounds) from the local metadata snapshot. No runtime metadata network I/O.
+4. Construct the bounded automatic universe of goods IDs (BREADTH default; COHORT_DEPTH opt-in).
+5. Enrich listings into the trade-up `InputItem` pool.
+6. Run the bounded multi-recipe enumeration (default 2 candidates / 256 states) with deterministic baseline + radius-one substitutions.
+7. Compute output pool, output probability, output float, output wear, and per-recipe geometry.
+8. Value every output through the strict SteamDT-BUFF aggregate sell price path. No fallback valuation.
+9. Calculate EV, ROI, worst-case loss, and profit probability per candidate.
+10. Filter weak opportunities using configurable risk rules.
+11. Emit structured opportunity reports for human review.
 
-## 3. 技术栈
+V1 is **notification-only**. It does not place purchases, automate account actions, or bypass BUFF risk controls.
+
+## 2. Non-Goals
+
+V1 explicitly does **not**:
+
+- implement automatic purchasing / auto-buy
+- implement automatic trading
+- implement automatic login
+- extract cookies
+- bypass CAPTCHA
+- bypass BUFF risk control
+- use browser automation for purchases
+- use non-official anti-detection or evasion techniques
+- use invented BUFF endpoints, signatures, request parameters, or response field mappings
+- use fallback valuation (no second-platform substitute, no bid substitution, no metadata-zero reuse)
+- renormalize solver-computed probabilities
+- implement Telegram or multi-channel alerting
+- implement multi-source automatic switching
+- implement capital management, automated position allocation, or portfolio-level backtesting
+
+## 3. Tech Stack
+
 - Python 3.12
 - FastAPI
 - PostgreSQL
@@ -41,527 +55,323 @@ V1 明确不做：
 - mypy
 - Docker Compose
 
-技术栈原则：
-- modular monolith 架构
-- 外部依赖通过 client/provider abstraction 隔离
-- 核心公式、过滤规则与配置分离
-- 所有 secret 从 `.env` 读取，不允许硬编码
+Stack principles:
 
-## 4. 系统架构
-建议采用以下逻辑分层：
+- modular monolith with clear boundaries
+- external dependencies are isolated behind client / provider abstractions
+- core formulas, filter rules, and configuration are separated
+- all secrets are read from `.env`; nothing is hardcoded
+
+## 4. System Architecture
+
+The project uses the following logical layering. The current production scanner exercises a subset of this layering end-to-end; the rest is implemented as offline cores, opt-in factory wiring, or unit-tested seams.
 
 ### 4.1 API / Ops Layer
-职责：
-- FastAPI 健康检查
-- 最近扫描状态查询
-- 最近机会与提醒记录查询
-- 运维/调试接口（如手动触发一次扫描）
+
+Responsibilities:
+
+- FastAPI health check (`/health`)
+- (Future) recent-scan status, recent opportunities, recent alerts, manual trigger endpoint
 
 ### 4.2 Scheduler Layer
-职责：
-- APScheduler 负责周期任务注册与编排
-- 扫描任务、metadata refresh、清理任务的调度
-- 防重入、失败记录、心跳管理
+
+Responsibilities:
+
+- APScheduler for periodic scan, enrich, compute, and alert workflows
+- re-entrance protection, failure recording, heartbeat management
+
+Current state: APScheduler mock exists for unit tests only; not wired to the live scanner.
 
 ### 4.3 Client / Provider Layer
-职责：
-- `BuffClient`：封装 BUFF 市场数据访问
-- `MetadataProvider` / `MetadataClient`：封装 CS2 metadata 来源
-- `DiscordWebhookClient`：封装提醒发送
+
+Responsibilities:
+
+- `BuffClient`: anonymous read-only BUFF sell-order transport (research-validated field shape; no official OpenAPI integration)
+- `MetadataClient` / `MetadataProvider`: pinned local ByMykel-derived snapshot
+- `DiscordWebhookClient`: Webhook delivery
+- `SteamDTHttpClient`: Bearer-token aggregate market data; typed errors; endpoint-specific rate limiter
+- `RedisPriceCache`: persistent Redis-backed price cache (opt-in)
 
 ### 4.4 Service Layer
-职责：
-- `scan_service`：扫描、解析、落库 listing snapshots
-- `metadata_service`：provider -> internal normalized metadata
-- `opportunity_service`：组织计算、过滤、持久化与提醒
-- `alert_service`：提醒格式化、去重、发送、失败重试
+
+Responsibilities:
+
+- `scan_service`: scanning, parsing, listing snapshots
+- `metadata_service`: provider -> internal normalized metadata
+- `opportunity_service`: composition, calculation, filtering, persistence, alerting
+- `alert_service`: alert formatting, deduplication, sending, failure retry
 
 ### 4.5 Engine Layer
-职责：
-- `tradeup_engine`：输出池与概率
-- `float_engine`：trade-up float 计算
-- `pricing_engine`：材料成本与结果估值汇总
-- `ev_engine`：EV / ROI / worst-case / profit probability
-- `risk_filter`：高质量机会筛选
+
+Responsibilities:
+
+- `tradeup_engine`: output pool, output probability, output float, output wear
+- `ev_service`: EV, ROI, worst-case loss, profit probability
+- `risk_filter`: conservative opportunity filtering
+- `recipe_solver`: bounded multi-recipe enumeration (`enumerate_recipe_selections` / `enumerate_recipe_selections` / `enumerate_scanner_recipe_selections`) plus legacy compatibility (`construct_recipe_selections` / `construct_scanner_recipe_selections`)
 
 ### 4.6 Data Layer
-职责：
-- PostgreSQL：主存储
-- Redis：缓存、锁、重复提醒抑制、短期状态
 
-## 5. 数据来源
+PostgreSQL: durable storage of listings, item metadata mappings, scan runs, computed opportunities, alerts, audit trails. Redis: cache, locks, alert deduplication, short-lived state.
 
-### 5.1 BUFF 市场数据
-目标数据：
-- materials listings
+Current state: PostgreSQL and Redis are provisioned in `.env.example`; they are not yet wired into the live scanner path.
+
+## 5. Data Sources
+
+### 5.1 BUFF Market Data
+
+Current target data:
+
+- materials listings (anonymous sell-order)
 - price
 - goods_id
-- float
-- listing metadata / raw payload
-- availability / quantity if available
+- float if available
+- listing metadata (canonical market hash name + listing identity)
 
-注意：
-- 当前 BUFF endpoint、签名、字段仍有未确认项
-- 所有未确认细节必须记录在 [docs/BUFF_API_NOTES.md](docs/BUFF_API_NOTES.md)
-- 文档阶段不编造 endpoint 和字段
+Notes:
 
-### 5.2 CS2 Metadata 数据
-V1 采用统一 metadata interface：
-- 上层 engine 只依赖统一 `MetadataProvider` / `MetadataClient`
-- 默认规划可优先接入外部 metadata 数据源，例如 ByMykel CSGO-API
-- 保留 `LocalJsonMetadataProvider` 作为 fallback 或测试数据源
-- `metadata_service` 负责 normalize，不允许把外部 provider 字段直接写死到业务逻辑
+- BUFF endpoint, signing, response field mapping still have unconfirmed items
+- unconfirmed items must be tracked in `docs/BUFF_API_NOTES.md`
+- official BUFF product / search / identity API is **not** integrated
 
-### 5.3 估值与提醒数据
-- 输出结果价格可来自后续扩展的市场价格源或同一市场数据抽象
-- Discord Webhook 作为 V1 唯一提醒通道
+### 5.2 CS2 Metadata Data
 
-## 6. 核心模块
-1. **BUFF Scan Module**
-   - 获取 candidate materials
-   - 解析 listing snapshots
-   - 持久化原始市场数据
+V1 uses a unified metadata interface:
+
+- the engine depends only on a unified `MetadataProvider` / `MetadataClient`
+- the default source is the pinned local ByMykel-derived snapshot
+- `metadata_service` is responsible for normalization; raw provider fields are never written directly into business logic
+
+### 5.3 Valuation and Alerting Data
+
+- Output result price comes from the strict SteamDT-BUFF aggregate sell price path (no fallback, no bid substitution)
+- Discord Webhook is the V1 alerting channel (current production does not yet send to Discord)
+
+## 6. Core Modules
+
+1. **BUFF Anonymous Listing Module**
+   - fetch candidate materials through the anonymous sell-order path
+   - normalize into the strict listing observation -> tradable candidate contract
+   - resolve identity through the pinned offline community catalog (exact fail-closed)
+   - classify StatTrak / Souvenir via the canonical-name intrinsic flag resolver
 
 2. **Metadata Normalize Module**
    - provider abstraction
    - collection / rarity / float range normalize
-   - result pool 所需 metadata 组装
+   - result-pool-required metadata assembly
 
 3. **Trade-up Engine Module**
-   - 输入合法性校验
-   - 输出池构建
-   - 输出概率计算
-   - 输出 float 计算
+   - input validation
+   - output pool construction
+   - output probability calculation
+   - output float calculation
 
 4. **Economics Module**
-   - 成本聚合
-   - 卖出价保守估值
-   - EV / ROI / worst-case / profit probability
+   - cost aggregation
+   - conservative output valuation (strict SteamDT-BUFF aggregate sell price)
+   - EV / ROI / worst-case loss / profit probability
 
 5. **Risk Filter Module**
-   - 阈值过滤
-   - 流动性过滤
-   - 异常价格过滤
-   - 数量/可执行性过滤
+   - threshold filtering
+   - liquidity filtering
+   - anomaly price filtering
+   - quantity / executability filtering
 
 6. **Alert Module**
-   - Discord payload formatting
-   - dedupe / cooldown
+   - Discord payload formatting (current production: not wired)
+   - deduplication / cooldown
    - retry / failure logging
 
-7. **Scheduler & Ops Module**
-   - 24h recurring jobs
+7. **Scheduler and Ops Module**
+   - 24-hour recurring jobs (current production: not wired)
    - health checks
    - observability / run history
 
-## 7. 数据模型草案
-以下为 V1 建议的核心实体草案：
+## 7. Bounded Multi-Recipe Enumeration (current production)
 
-### 7.1 scan_runs
-字段建议：
-- id
-- started_at
-- finished_at
-- status
-- source
-- listing_count
-- error_count
-- notes
+```text
+default candidates per run:           2
+default explored states per run:      256
+hard bound candidates:                1 .. 6
+hard bound explored states:           1 .. 1024
+hard bound invariant:                 states >= candidates
+```
 
-### 7.2 market_listings
-字段建议：
-- id
-- scan_run_id
-- source_market
-- listing_id
-- goods_id
-- market_hash_name
-- display_name
-- price_cny
-- float_value
-- available_quantity
-- currency
-- raw_payload_json
-- observed_at
-- parse_status
-- parse_error
+Search semantics:
 
-### 7.3 item_metadata
-字段建议：
-- id
-- item_key
-- provider_name
-- provider_version
-- weapon_name
-- skin_name
-- collection_name
-- rarity
-- min_float
-- max_float
-- normalized_payload_json
-- source_payload_json
-- refreshed_at
+- baseline recipe first
+- then deterministic radius-one substitutions ordered by `(r-d, r, d, RecipeSelectionKey)`
+- no exhaustive combinations
+- no beam search
+- no financial ranking inside the solver
 
-### 7.4 tradeup_candidates
-字段建议：
-- id
-- candidate_key
-- input_rarity
-- target_rarity
-- collection_name
-- input_count
-- total_cost_cny
-- avg_input_float
-- market_snapshot_at
-- metadata_version
+Identity:
 
-### 7.5 tradeup_outputs
-字段建议：
-- id
-- candidate_id
-- output_item_key
-- probability
-- estimated_output_float
-- conservative_sale_price_cny
-- liquidity_score
-- is_profitable
+- canonical offer identity is `(source, goods_id, listing_id)`
+- cross-candidate exact listing reuse is allowed
+- duplicate canonical offer identity fails closed before sort / cap / output / search
 
-### 7.6 opportunities
-字段建议：
-- id
-- opportunity_key
-- candidate_id
-- ev_cny
-- roi_pct
-- expected_profit_cny
-- worst_case_loss_cny
-- worst_case_loss_pct
-- profit_probability
-- liquidity_score
-- filter_status
-- filter_reason
-- created_at
+Atomic valuation budget:
 
-### 7.7 alert_events
-字段建议：
-- id
-- opportunity_id
-- channel
-- dedupe_key
-- payload_json
-- send_status
-- retry_count
-- sent_at
-- error_message
+- per-run hard cap `max_valuation_requests_per_run ∈ [1, 60]`, default 5
+- required logical requests strictly greater than the remaining cap block the whole recipe before any SteamDT HTTP / provider request is sent
 
-说明：
-- 以上为逻辑草案，不代表最终字段完全锁定
-- 未确认的外部字段需通过 raw payload + normalize 模式吸收，而不是直接污染上层模型
+## 8. SteamDT Valuation Boundary (current production)
 
-## 8. BUFF Client 设计
-`BuffClient` 负责外部市场数据获取，其设计要求：
+- The current production valuation path uses only `SteamDTBuffPriceProvider` over `GET /open/cs2/v1/price/single`.
+- The exact case-sensitive `BUFF` aggregate record is the only eligible record.
+- The price uses the project-approved CNY / RMB interpretation; this is **not** an explicit current provider currency guarantee.
+- `biddingPrice` and `biddingCount` are not read and do not substitute for a missing or unusable sell price.
+- The selected aggregate sell price is not an executable listing price or a guaranteed realized proceeds.
 
-### 8.1 设计原则
-- 所有 BUFF 请求统一通过该 client 发出
-- 上层只依赖内部 listing snapshot 模型
-- endpoint、签名、字段不确定项不得在设计中伪造
-- 请求层与解析层分离
+## 9. Phase 12D Cache / Refresh Infrastructure (implemented, not wired into the live scanner)
 
-### 8.2 抽象职责
-- fetch candidate listings
-- parse confirmed fields into internal DTO
-- preserve raw payload for unknown fields and replay
-- classify errors: timeout / rate limit / parsing / upstream failure
-- expose retry-safe interface to services
+Persistent cache snapshot infrastructure that is unit-tested and opt-in behind `STEAMDT_PRICE_CACHE_BACKEND`:
 
-### 8.3 不确定项处理
-- 未确认 endpoint、签名、参数、字段必须写入 [docs/BUFF_API_NOTES.md](docs/BUFF_API_NOTES.md)
-- 可先定义最小 listing DTO：
-  - goods_id
-  - listing_id
-  - price
-  - float if available
-  - quantity if available
-  - observed_at
-  - raw payload
-- 不将假设字段写死为正式 domain 契约
+- `PriceCache` (async cache protocol)
+- `InMemoryPriceCache`
+- `RedisPriceCache`
+- `PriceCacheFactory` (composition / runtime ownership)
+- `SteamDTCachedPriceResolver` (read-only; one `get()` plus selector rerun)
+- `SteamDTPriceSnapshotSource` and `SteamDTSinglePriceSnapshotSource`
+- `SteamDTPriceRefreshService` (single-item write)
+- `SteamDTRefreshPlanner` (dedup + chunk)
+- `SteamDTRefreshExecutor` (sequential chunks; `max_concurrency` is only a work bound, not a rate limit)
 
-## 9. Metadata Client 设计
-V1 采用 provider 抽象：
+The live scanner valuation path does **not** import any Phase 12D cache module. Run-level cross-recipe exact-price reuse (D-CACHE-001) is **not** implemented.
 
-### 9.1 核心原则
-- trade-up engine 只依赖统一 metadata interface
-- `metadata_service` 负责 normalize
-- 不允许在业务逻辑中直接绑定某个外部 provider 的原始字段结构
+## 10. Data Model (current production, in-memory)
 
-### 9.2 设计建议
-- `MetadataProvider`：定义按 item key / collection / rarity 查询的接口
-- `ExternalMetadataProvider`：面向外部 API
-- `LocalJsonMetadataProvider`：面向本地 JSON fallback / test source
-- `metadata_service`：把 provider 输出转换为统一 internal metadata model
+The current production scanner operates entirely in memory. The entities below describe the active DTOs; no PostgreSQL schema is provisioned in this milestone.
 
-### 9.3 统一内部 metadata 模型
-建议至少包含：
-- item_key
-- weapon_name
-- skin_name
-- collection_name
-- rarity
-- min_float
-- max_float
-- output_pool linkage
-- provider provenance
+### 10.1 TradeUpInputCandidate
 
-## 10. Trade-up Engine 设计
-trade-up engine 的职责是从标准化输入构造出可计算的 recipe 与输出池。
+Source-agnostic normalized candidate from BUFF listing normalization.
 
-### 10.1 输入
-- 10 个可用于同一 trade-up 规则的输入材料
-- 每个输入的：
-  - item identity
-  - collection
-  - rarity
-  - input float
-  - acquisition cost
+### 10.2 TradeUpEnrichedInput
 
-### 10.2 核心步骤
-1. 校验输入数量、稀有度一致性与 trade-up 合法性
-2. 识别涉及 collection 集合
-3. 按 collection 规则构造可能输出池
-4. 计算每个输出的概率
-5. 传递输入平均 float 给 float engine
-6. 结合估值模块得到最终经济性结果
+Pinned-metadata-enriched candidate with collection, rarity, min/max float, paint-seed bounds.
 
-### 10.3 结果要求
-输出对象至少应包含：
-- candidate summary
-- output items
-- probability per output
-- output float estimate
-- pricing inputs used
-- economics result
-- filter decision context
+### 10.3 ConstructedRecipe / ConstructedRecipeSelection
 
-## 11. Float 计算设计
-V1 需要把 trade-up 输出 float 作为一等公民处理。
+The ten ordered `InputItem` values, the ordered `TradeupResult` outputs, and the selected non-null paint seeds. No metrics, risk decision, hash, or timestamp stored.
 
-### 11.1 输入
-- 10 个输入材料 float
-- 输出皮肤 min_float / max_float
+### 10.4 RecipeEnumerationConfig
 
-### 11.2 设计原则
-- 使用可审计、可测试的标准 trade-up float 公式
-- 采用高精度数值处理策略，避免隐藏精度误差
-- 对接近边界值的输入（接近 0 或 1）必须有测试覆盖
+```text
+max_candidates_returned:           int (default 2; range 1..6)
+max_candidate_states_explored:     int (default 256; range 1..1024)
+invariant:                         max_candidate_states_explored
+                                   >= max_candidates_returned
+```
 
-### 11.3 输出
-- 每个候选输出的估算 float
-- 结果 float 是否落入特定 wear band 的衍生能力可作为后续扩展，但不是 V1 强制项
+### 10.5 LiveOpportunity / ScannerRunResult
 
-## 12. EV / ROI / Worst Case / Profit Probability 设计
+Per-recipe EV, ROI, expected profit, worst-case loss, profit probability, source IDs, and risk decision.
 
-### 12.1 成本侧
-输入成本必须包含：
-- 10 个材料采购成本汇总
-- 任何显式费用（若有）
+## 11. Risk Filter
 
-### 12.2 收益侧
-输出估值必须采用保守口径：
-- 必须考虑手续费
-- 必须考虑滑点
-- 必须采用保守卖出价，而不是理想最高成交价
-- 应结合流动性和可成交性做保守折扣
+The default `RiskFilterConfig` is:
 
-### 12.3 指标定义
-- **EV**：所有可能输出的概率加权净收益期望值
-- **ROI**：期望净收益 / 总成本
-- **Worst Case Loss**：最差输出结果下的净亏损
-- **Profit Probability**：净利润大于 0 的输出概率总和
+```text
+min_roi:                          0.05
+min_expected_profit_cny:          20
+max_worst_case_loss_pct:          0.25
+min_profit_probability:           0.35
+max_input_total_cost_cny:         1000
+```
 
-### 12.4 边界要求
-- 需明确定义“盈利”的判断标准
-- 需定义手续费、滑点、保守卖出价配置来源
-- 需对 0 利润、负 EV、极低概率大收益场景进行单独测试
+Default policy targets conservative high-quality opportunities: low false positive rate, high liquidity, reproducible, executable.
 
-## 13. Risk Filter 设计
-V1 默认采用保守高质量策略。
+Required filter behavior:
 
-### 13.1 默认过滤目标
-优先减少假阳性，只提醒高置信、高流动性、可复算、可执行的机会。
+- low-liquidity result skins are rejected
+- insufficient material quantity is rejected
+- BUFF price anomalies are rejected
+- isolated listings are rejected
+- clearly low-volume opportunities are rejected
+- single-anomalous-price-driven inflated EV is rejected
 
-### 13.2 默认规则
-建议默认阈值：
-- `min_roi >= 5%`
-- `min_expected_profit_cny >= 20`
-- `profit_probability >= 35%`
-- `worst_case_loss_pct <= 25%`
-- result liquidity score 达标
+The filter must output an explicit reason code and reason text. Thresholds must be configurable.
 
-### 13.3 必须过滤的情况
-- 低流动性结果皮肤
-- 买不齐材料 / 数量不足
-- BUFF 价格异常
-- 孤立挂单
-- 明显低成交量
-- 仅因单个异常价导致的虚高 EV
+## 12. Discord Webhook Alert (current production: not wired)
 
-### 13.4 设计要求
-- filter 应输出明确 reason code / reason text
-- 阈值必须配置化
-- 后续可扩展 balanced / research mode，但 V1 默认只提供保守策略
+Per alert, when wired in a future phase:
 
-## 14. Discord Webhook Alert 设计
-
-### 14.1 发送原则
-- V1 唯一提醒通道为 Discord Webhook
-- Webhook URL 必须从 `.env` 读取
-- 不允许硬编码到代码、测试夹具、日志或文档示例中
-
-### 14.2 alert 内容
-每条提醒至少包含：
-- 机会标识
-- 输入材料摘要
-- 总成本
-- 输出池摘要
+- opportunity identifier
+- input materials summary
+- total cost
+- output pool summary
 - EV
 - ROI
 - worst-case loss
 - profit probability
-- 关键风险说明
-- 手续费 / 滑点 / 价格时间戳等核心假设
+- key risk notes
+- fee / slippage / price timestamp core assumptions
 
-### 14.3 工程要求
-- formatter 与 sender 分离
-- 支持 dedupe / cooldown
-- 支持失败重试
-- 失败不应导致整个扫描主流程崩溃
+Engineering requirements:
 
-## 15. Scheduler 24h 运行设计
+- Webhook URL must be read from `.env`
+- formatter and sender are separate
+- deduplication / cooldown support
+- retry on failure
+- failure must not crash the main scan loop
 
-### 15.1 任务类型
-建议至少规划：
+## 13. Scheduler (current production: not wired)
+
+When wired in a future phase:
+
 - market scan job
 - metadata refresh job
 - opportunity evaluation job
 - alert dispatch job
 - cleanup / housekeeping job
 
-### 15.2 运行要求
-- 支持 24h 无人值守
-- 调度频率配置化
-- 防重入/并发保护
-- 单任务失败不阻塞后续周期
-- 记录每轮运行状态和错误计数
+Operational requirements:
 
-### 15.3 Redis 用途
-- 分布式锁或互斥控制
-- cooldown 与 dedupe key
-- 短期缓存
-- 临时状态保存
+- 24h unattended operation
+- configurable scheduling frequency
+- re-entrance protection
+- single-job failure does not block subsequent cycles
+- per-cycle run state and error counts are recorded
 
-## 16. 测试策略
+Redis uses:
 
-### 16.1 测试层级
-- 单元测试：engine、filter、formatter、parser、settings
-- 集成测试：service orchestration、db、redis、scheduler
-- mock external API tests：BUFF、metadata provider、Discord webhook
-- 少量端到端链路测试：scan -> enrich -> compute -> filter -> alert
+- distributed lock or mutex control
+- cooldown and deduplication key
+- short-lived cache
+- ephemeral state
 
-### 16.2 质量门禁
-- `ruff check .` 通过
-- `mypy app` 通过
-- `pytest` 通过
-- 核心公式测试不可跳过
+## 14. Quality Gates
 
-### 16.3 外部 API 测试原则
-- 不真实请求 BUFF
-- 不依赖第三方 metadata 服务在线
-- Discord 使用 mock endpoint
-- mock 场景需覆盖超时、429、5xx、字段缺失、结构变化
+The project's quality baseline is:
 
-### 16.4 核心计算测试重点
-- float 公式
-- 输出概率总和约等于 1
-- EV / ROI / worst-case / profit probability 样例
-- 手续费、滑点、保守卖出价已纳入结果
+```text
+ruff check .
+mypy app
+pytest
+```
 
-## 17. MVP Roadmap
+Core calculation tests are mandatory. Mock external API tests cover timeout, 429, 5xx, missing fields, and shape changes.
 
-### Phase 1 — Specification and Project Skeleton
-交付：
-- global specs
-- feature specs
-- `docs/SPEC.md`
-- `docs/BUFF_API_NOTES.md`
+## 15. Validation and Acceptance Criteria
 
-### Phase 2 — Foundation and Environment
-交付：
-- FastAPI skeleton
-- settings / logging / db / redis / scheduler
-- Docker Compose
-- lint / type / test baseline
+### 15.1 Production behavior
 
-### Phase 3 — Market Ingestion
-交付：
-- BUFF client abstraction
-- listing fetch + persistence
-- scan run tracking
+The current scanner is acceptable for production usage in its manual one-shot form when:
 
-### Phase 4 — Metadata Enrichment
-交付：
-- metadata provider abstraction
-- normalization pipeline
-- collection / rarity / float range mapping
+- `scripts/run_live_scan_once.py --help` succeeds
+- one bounded one-shot scan returns a structured `ScannerRunResult` with exact ingredient / output / EV / risk fields
+- the scanner never claims auto-buy, auto-trade, login, cookie capture, CAPTCHA bypass, BUFF risk-control bypass, or browser-automation behavior
+- the scanner never invents BUFF endpoints, signatures, parameters, or response field mappings
+- the scanner never falls back to a second-platform price, a bid substitution, or a metadata-zero reuse
+- the scanner never renormalizes solver-computed probabilities
+- all secrets are read from `.env` and are never printed
 
-### Phase 5 — Trade-up Engine
-交付：
-- output pool
-- probability
-- float
-- EV / ROI / worst-case / profit probability
+### 15.2 Roadmap alignment
 
-### Phase 6 — Risk Filtering and Opportunity Selection
-交付：
-- conservative filters
-- liquidity / anomaly / quantity checks
-- opportunity persistence
+This specification is the durable functional contract. The current position in the roadmap and the proposed next functional directions are documented in `specs/roadmap.md`.
 
-### Phase 7 — Alerting and Operations
-交付：
-- Discord webhook alerting
-- dedupe / cooldown
-- recurring scheduler jobs
+## 16. Unconfirmed BUFF API Assumptions
 
-### Phase 8 — Hardening and Release
-交付：
-- integration tests
-- failure handling improvements
-- MVP deployment readiness
-
-## 18. 验收标准
-
-### 18.1 规格阶段验收
-- 范围与非目标清晰
-- 架构与模块边界清晰
-- 数据模型草案可支持后续实现
-- BUFF 不确定项已显式记录，不存在编造字段
-
-### 18.2 实现阶段验收
-- 能周期性获取候选材料 listing
-- 能完成 metadata 归一化与 trade-up 计算
-- 能输出 EV / ROI / worst-case / profit probability
-- 能按保守策略过滤低质量机会
-- 能通过 Discord 发送提醒
-- `ruff` / `mypy` / `pytest` 全部通过
-- mock external API tests 覆盖关键路径
-- 不包含任何自动购买、自动登录、Cookie 抓取、验证码绕过、BUFF 风控绕过或浏览器模拟购买能力
-
-## 19. 当前未确认 API 假设
-当前仍存在以下未确认点：
-- BUFF listing endpoint
-- BUFF 请求签名 / 认证要求
-- BUFF 响应字段命名与稳定性
-- float 是否直接由 listing 接口返回
-- 订单深度 / 流动性字段是否官方可得
-
-这些内容已经被要求记录在 [docs/BUFF_API_NOTES.md](docs/BUFF_API_NOTES.md) 中，后续在获得正式细节前不得编造成正式实现契约。
+Still unconfirmed items remain tracked in `docs/BUFF_API_NOTES.md`. The scanner must continue to operate without resolving them; if an unconfirmed item becomes necessary for a future phase, the project must record the TODO rather than invent the implementation.
