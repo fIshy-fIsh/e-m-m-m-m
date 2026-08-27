@@ -536,3 +536,100 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 - **Live verification:** `Restricted`, normal StatTrak, Souvenir included, cap 10, target 3 selected The 2018 Nuke Collection (4), The Anubis Collection (3), and The Overpass 2024 Collection (3). All 10 BUFF pages succeeded; 94 listings became 94 InputItems; one recipe was constructed and fully valued; all 10 SteamDT requests succeeded; unchanged risk policy rejected it; zero opportunities passed. Phase 13R had one recipe under the same goods-ID budget, so recipe delta was 0 despite deeper structural allocation.
 - **Protected Core and safety:** scanner orchestrator, composition seam, metadata resolver, solver, engine, valuation, EV/risk, providers/clients, thresholds, request caps, concurrency, and no-write/no-scheduler behavior are unchanged. No purchase, order, trade, login, cookie, browser, or evasion capability exists.
 - **Future revisit:** any tuning of target cohort count, rarity, intrinsic policy, or ranking requires a later reviewed phase. Do not tune from this single live observation.
+
+## D-ENUM-001 — Bounded additive multi-recipe enumeration in Protected Core
+
+- **Date:** 2026-08-26 (Phase 13T-1; design freeze Phase 13T)
+- **Status:** Active. Implemented in `app/services/recipe_solver.py` at commit `4a6b85c`. Offline validated (Phase 13T-4A) at commit `9288794`; live observed (Phase 13T-4B).
+- **Decision:** Add an additive bounded enumeration API in Protected Core while preserving the legacy zero-or-one API verbatim:
+  - `RecipeEnumerationConfig(max_recipe_candidates_returned: int, max_candidate_states_explored: int)` with strict `__post_init__` validation: exact `int` (no `bool`) in `[1, 6]` candidates, `[1, 1024]` states, `states >= candidates`. Defaults `2 / 256`.
+  - `RecipeEnumerationDiagnostics` with the exact fields: `eligible_input_count`, `retained_input_count`, `theoretical_radius_one_states`, `states_explored`, `raw_candidates_found`, `unique_candidates_returned`, `duplicates_suppressed`, `engine_rejected_states`, `baseline_state_rejected`, `candidate_limit_reached`, `exploration_limit_reached`.
+  - `RecipeEnumerationResult(selections, diagnostics)`.
+  - `enumerate_recipe_selections(candidates, skins, solver_config, *, enumeration_config)`.
+  - Legacy `construct_recipe_selections`, `construct_recipes`, `solve_recipes` remain unchanged. For eligible unique-offer inputs, `enumerate_recipe_selections` with `max_recipe_candidates_returned=1, max_candidate_states_explored=1` is value-equivalent to the legacy single-selection result. The legacy path deliberately bypasses the stronger new-API duplicate-offer preflight.
+- **Canonical offer identity:** `(source, goods_id, listing_id)`. A duplicate canonical key in the new enumerator input fails closed with exact `ValueError("duplicate recipe offer identity")` before sort/cap/search. Same textual `listing_id` with different source/goods ID is not a duplicate unless the full tuple matches.
+- **Search policy:** baseline state `P0..P9` first; then radius-one substitutions `P[d] -> P[r]` for `d ∈ [0,9]`, `r ≥ 10`, ordered by `(r-d, r, d, RecipeSelectionKey)`. No radius-two. No exhaustive combinations. No beam search. No financial ranking. `calculate_tradeup_results` is reused verbatim; no engine-side math changes.
+- **Selection output order:** baseline candidate (if valid) precedes successful radius-one alternatives; rejected states occupy state budget but no candidate slot. Successful alternatives retain their structural state order.
+- **Phase 13T-4A evidence:** offline real-path validation. 100 retained inputs / 901 theoretical states / 2 returned / 2 explored; primary fixture baseline `P0..P9` and first alternative `P0..P8 + P10`; 10 input offers each, 9 shared, 1 replacement; no duplicate exact offer; engine math unchanged.
+- **Protected Core status:** migration was authorized under explicit Phase 13T review. Public API gained; legacy contract preserved; existing `construct_*` paths retain exact observable behavior.
+- **Future revisit:** if a future phase ever widens Protected Core search semantics (radius-two, beam, financial ranking), it must be a separately reviewed migration; the additive API must remain.
+
+## D-ENUM-002 — Deterministic aggregate candidate/state allocation across normal/StatTrak scanner buckets
+
+- **Date:** 2026-08-26 (Phase 13T-2)
+- **Status:** Active. Implemented in `app/services/scanner_recipe_composition.py` at commit `74332e7`.
+- **Decision:** Scanner composition owns aggregate candidate and state budgets across active normal/StatTrak buckets. Bucket order is `normal → StatTrak`. With active buckets `B`, aggregate candidate budget `C`, and aggregate state budget `S`:
+  - `P = min(B, C)` participating buckets. Only the first `P` receive quota; later active buckets receive `0 / 0` and no enumeration call.
+  - Per participating bucket `i`:
+    - `candidate_quota[i] = C // P + (1 if i < C % P else 0)`
+    - `state_quota[i] = 1 + (S - P) // P + (1 if i < (S - P) % P else 0)`
+  - The `1 +` reserves one baseline state per participant. Quota sums are exactly `C` and `S`. Global configuration invariant `S >= C >= P` ensures every participating bucket satisfies `state_quota >= candidate_quota`.
+  - No redistribution. No second pass. No quota stealing. Actual usage may be lower when a bucket exhausts its bounded neighborhood or reaches its candidate quota early.
+- **Bucket participation precondition:** a bucket participates only when at least `solver_config.input_count` filtered eligible inputs and a nonempty current-rule projection exist (Phase 13T-2 preserves the existing active-bucket rule).
+- **Phase 13T-4A evidence:** real two-bucket fixture (normal + StatTrak both active) under aggregate `C=2, S=256` produced `candidate_quota 1/1` and `state_quota 128/128`; each bucket returned 1 successful candidate and explored 1 state; aggregate `returned_candidates == 2, states_explored == 2`.
+- **Phase 13T-4B evidence:** live single-bucket depth run observed `active_bucket_count == 1, participating_bucket_count == 1, candidate_quota == 2, state_quota == 256`, returned 2 candidates from 2 explored states.
+- **Protected Core:** unchanged. The fair-share split lives entirely in scanner composition.
+- **Future revisit:** no future redistribution/second-pass is permitted; if multi-rarity or dual-bucket simultaneous evaluation is desired, it requires a separately reviewed migration.
+
+## D-ENUM-003 — Per-candidate exact InputItem rehydration after temporary Souvenir solver projection
+
+- **Date:** 2026-08-26 (Phase 13T-2; reaffirmed over Phase 13P-4 / `D-TRADEUP-001`)
+- **Status:** Active. Implemented in `app/services/scanner_recipe_composition.py`.
+- **Decision:** For every returned bounded candidate, the composition layer:
+  1. takes the run-wide enriched `TradeUpEnrichedInput` pool;
+  2. applies a temporary `souvenir=False` candidate-owned view to the protected solver for each bucket;
+  3. after the protected solver returns a `ConstructedRecipeSelection`, verifies the protected `InputItem` tuple against `replace(item, souvenir=False)` for each selected listing ID;
+  4. restores the exact candidate-owned `InputItem` values (including original `souvenir` facts) before downstream services see them.
+- **Invariants:**
+  - Projected `InputItem` values MUST NEVER reach `ValuationService`, `calculate_opportunity_metrics`, `evaluate_opportunity`, `LiveRecipeEvaluation`, `LiveOpportunity`, or any logging/serialization output.
+  - Every returned candidate is rehydrated and validated individually; partial rehydration is not permitted.
+  - Mixed normal/Souvenir input sets are supported and produce rehydrated candidates that retain original Souvenir facts.
+  - Cross-candidate listing reuse remains allowed and is independent of rehydration.
+  - The historical `tradeup_engine.py` mixed-Souvenir rejection text is preserved as a Protected Core compatibility constraint inside the temporary view only; it is not a current game-domain statement at the scanner composition seam.
+- **Phase 13T-4A evidence:** primary fixture contained 50 Souvenir / 50 normal inputs; baseline candidate had 5 Souvenir inputs, first alternative had 4 Souvenir inputs; every rehydrated `InputItem` matched the original listing facts (market name, price, paintwear, collection, rarity, StatTrak, Souvenir); projected views with `souvenir=False` could not satisfy the rehydration assertion.
+- **Phase 13T-4B evidence:** live run observed 4 Souvenir inputs per returned recipe in both candidates; rehydration held; downstream services retained exact Souvenir facts.
+- **Future revisit:** none. This is a permanent structural rule for any new candidate path; do not relax without a separately reviewed decision.
+
+## D-ENUM-004 — Atomic cumulative valuation-request cap semantics for multi-recipe orchestration
+
+- **Date:** 2026-08-26 (Phase 13T-3A; reaffirmed over Phase 13P-1)
+- **Status:** Active. Implemented in `app/services/scanner_orchestrator.py`. Offline validated (Phase 13T-4A) and live observed (Phase 13T-4B).
+- **Decision:** `max_valuation_requests_per_run` is a cumulative orchestrator-owned budget in `[1, 60]` (default CLI value 5). For each returned recipe in structural composition order:
+  - Within one recipe, `first-seen unique exact output market_hash_name` is the logical request set (deduped by `ValuationService` itself within one service call).
+  - Across recipes, there is **no run-level cache**; the same exact output name in a second recipe is a separate logical request.
+  - `required == remaining cap` is allowed; the recipe is valued completely.
+  - `required > remaining cap` causes the entire recipe to be blocked before any provider lookup. The blocked `LiveRecipeEvaluation` records the rejection reason `VALUATION_REQUEST_CAP_EXCEEDED`, zero `valuation_prices_resolved`, zero `valued_tradeup_results`, and no metric/risk/opportunity.
+  - No partial lookup. No zero-price fallback. No output skipping. No probability renormalization. No fabricated fallback price. Existing strict provider/domain errors are preserved verbatim.
+  - `MemoryError` and unexpected system/programmer exceptions are non-swallowed per the existing contracts.
+- **Cap-blocked accounting semantics:** the `valuation_requests_blocked` counter records the full logical demand of the blocked recipe (recipe 0's first-seen unique output name count + recipe 1's count + ...). This is observable from `ScannerRunStageCounters.valuation_requests_blocked`.
+- **Phase 13T-4A evidence:** exact-cap=20 → 2 fully valued, `valuation_requests_attempted == 20`, `blocked == 0`; one-below-cap=19 → 1 fully valued, `attempted == 10`, `blocked == 10` for the second recipe (the 10 remaining request slots were not consumed and `provider_calls` stopped at the completed-recipe boundary). Two-bucket aggregate run under cap=2 → both recipes fully valued with `attempted == 2`.
+- **Phase 13T-4B evidence:** effective cap=5; recipe 0 required 10 unique output names, recipe 1 required 20. Recipe 0 was blocked before any provider lookup (10 blocked); recipe 1 was then blocked before any provider lookup (20 blocked). `attempted == 0`, `blocked == 30`, `provider_calls == 0`, `recipes_fully_valued == 0`. The 5 available slots were not partially consumed by either recipe.
+- **Display vs processing:** structural composition order determines valuation order and cap consumption; the existing final opportunity display ordering by `expected_profit_cny desc, roi desc` does not affect enumeration, valuation order, or risk processing order.
+- **Protected Core:** orchestrator-side integration; no engine-side math change.
+- **Future revisit:** any future run-level cache that changes the within-recipe or across-recipe counting must be a separately reviewed migration; current semantics are fixed.
+
+## D-CACHE-001 — No run-level SteamDT output-price cache
+
+- **Date:** 2026-08-26 (Phase 13T design freeze; reaffirmed in Phase 13T-4A / Phase 13T-4B)
+- **Status:** Active. The cache is **not implemented**.
+- **Decision:** Phase 13T intentionally excludes a run-scoped exact-name SteamDT price cache. Today, the same exact output `market_hash_name` in separate recipe valuation calls is a separate logical request that the orchestrator's cumulative budget must cover. Within one recipe, dedup is performed by `ValuationService` inside one `value_tradeup_results` call; that single-recipe dedup does not extend across recipes.
+- **Why excluded:** cross-recipe deduplication introduces freshness, failure, and request-budget semantics that are not part of the multi-recipe enumeration contract. Phase 13T must not silently redefine the cumulative budget. `valuation_service.py` and `live_recipe_valuation.py` are Protected Core; any cross-recipe cache would require explicit migration authorization.
+- **Operational effect:** under `max_valuation_requests_per_run=5` and a multi-recipe run whose recipes demand `10 + 20` unique output names, both recipes are atomically blocked before any provider lookup (`valuation_requests_blocked == 30`,` `provider_calls == 0`). This is the expected Phase 13T-4B behavior, not a regression.
+- **Future revisit:** only as a separately authorized future phase. The cache must define freshness, failure caching, request accounting, and atomicity explicitly before any implementation; the existence of this decision does not authorize implementation.
+
+## D-PHASE13T-COMPLETE — Phase 13T closed end-to-end
+
+- **Date:** 2026-08-26 (Phase 13T-4B)
+- **Status:** Active.
+- **Decision:** Phase 13T — the additive bounded multi-recipe solver migration — is complete end-to-end:
+  - **Phase 13T Design Freeze** (`010d8cc`): the `specs/2026-08-26-multi-recipe-solver-migration/` trilogy finalized Option B (additive bounded enumerator with strict legacy equivalence, greedy-first + radius-one, default `2/256`, hard bounds `6/1024`, no financial ranking, candidate identity `(source, goods_id, listing_id)`).
+  - **Phase 13T-1** (`4a6b85c`): Protected Core bounded enumerator implemented (`D-ENUM-001`).
+  - **Phase 13T-2** (`74332e7`): Scanner composition enumeration adapter implemented (`D-ENUM-002`, `D-ENUM-003`).
+  - **Phase 13T-3A** (`ac26e9b`): Orchestrator integration implemented (`D-ENUM-004`).
+  - **Phase 13T-3B** (`33675ee`): CLI wiring (`--max-recipe-candidates-returned`, `--max-candidate-states-explored`).
+  - **Phase 13T-4A** (`9288794`): Offline bounded multi-recipe scale validation committed (`tests/test_multi_recipe_scanner_scale_validation.py`).
+  - **Phase 13T-4B** (no commit, no repository artifact; live-only validation performed against `9288794`): One bounded live validation completed as `LIVE_VALIDATION_PASSED_NO_COMPLETE_VALUATION`; effective cap=5 atomically blocked both recipes (10 + 20 = 30 logical demand) before any SteamDT HTTP/provider request; SteamDT live mode configured: YES; SteamDT HTTP/provider requests issued during Phase 13T-4B: 0; all frozen contracts held.
+- **Final authoritative state:** `HEAD = 92887947e0e1808f1bc23258cf53adb10a0036ee`; `GitHub remote = 92887947...`; `ahead/behind = 0 0`; `PHASE_13T_COMPLETE`.
+- **What is NOT implemented:** run-level SteamDT output-price cache (`D-CACHE-001`); any new development phase.
+- **Reason:** every completed phase was committed, pushed, and frozen; subsequent reuse must be a separately reviewed phase.
+- **Future revisit:** only when a new explicit development phase is authorized. Do not reopen completed phases without new evidence.

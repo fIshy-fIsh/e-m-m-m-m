@@ -65,6 +65,11 @@
 5. 检查是否违反本文件安全规则与禁止事项。
 6. 检查是否把未确认的 BUFF API 细节错误写死进代码。
 
+## 当前阶段指针
+- 阶段：`PHASE_13T_COMPLETE` (HEAD `92887947`)。
+- 当前 bounded multi-recipe 校验：`tests/test_multi_recipe_scanner_scale_validation.py`。
+- 权威交接文档：`docs/ai-context/DEVELOPMENT_HANDOFF.md`。
+
 ## 禁止事项
 - 自动购买
 - 自动登录

@@ -3,37 +3,25 @@
 ## Current Git State (verify live)
 
 - **Branch:** `feature/steamdt-cache-rate-limit`
-- **HEAD:** `8f78bb4a78dd98ae30f00c9b24a0f02eaf0219b6`
-- **HEAD message:** `add offline BUFF identity and intrinsic catalog resolution`
-- **Uncommitted work:** Phase 13P through Phase 13P-4 implementation is ready for the final checkpoint; Phase 13P-5 added live validation evidence only. The metadata source/snapshot, scanner services, manual CLI, tests, and context/spec updates are the intended checkpoint. `research/identity_revalidation/data/modest_serhat.json` and `research/identity_revalidation/data/timofey_ivanenko.json` remain intentionally local and excluded.
+- **HEAD:** `92887947e0e1808f1bc23258cf53adb10a0036ee`
+- **HEAD message:** `add bounded multi-recipe scale validation`
+- **Phase:** `PHASE_13T_COMPLETE`
+- **Uncommitted implementation work:** none. The two intentionally excluded research JSON files (`research/identity_revalidation/data/modest_serhat.json`, `research/identity_revalidation/data/timofey_ivanenko.json`) remain local/untracked; they are not product work.
 
-Recent commit history (oldest → newest, including the latest 18 unpushed local commits on this branch):
+Recent push history (oldest → newest) includes:
 
 ```
-1f3355a add steamapis websocket client
-b1650cd add steamapis offer session runner
-768aa65 add live pool recipe construction
-23c2465 add opt-in steamapis live smoke
-eed38f8 add steamdt aggregate market data
-2c01c46 add buff steamdt price policy
-d1e7161 add buff steamdt price provider
-08b919e propagate memory errors in valuation service
-8d757dc compose buff steamdt live valuation
-965164c add live buff steamdt provider smoke
-c54e2f9 add deterministic live recipe fixture
-04dd00a lock verified steamdt smoke output
-fac508c add live steamdt recipe valuation smoke
-04ba133 add buff anonymous schema smoke
-caf5922 add buff listing provider abstraction
-2a8a1e8 harden buff listing provider anonymous contract
-b398bcc add trade-up input candidate boundary
-560f4dd add buff identity contract and ai context
-330bdcb add synthetic trade-up pipeline integration
-f34f25f add trade-up input enrichment boundary
-1549248 add synthetic scanner-scale validation
-5d19096 add BuffListing candidate adapter boundary
-a70b0e6 add identity and orchestration architecture reviews
+9288794 add bounded multi-recipe scale validation
+33675ee wire bounded recipe enumeration CLI
+ac26e9b integrate bounded multi-recipe scanner orchestration
+74332e7 add bounded scanner recipe composition
+4a6b85c add bounded recipe enumeration
+010d8cc design bounded multi-recipe solver migration
+d161ec4 add structural cohort-depth universe allocation
+c543a01 add bounded automatic market universe
 ```
+
+`git status` remains `0 0` against `origin/feature/steamdt-cache-rate-limit`. Phase 13T-4B intentionally produced no commit (live observation only).
 
 ## Completed Milestones
 
@@ -484,46 +472,59 @@ The components remain in the tree as paused, offline-tested optional infrastruct
 - **Request totals:** two bounded BUFF requests and four SteamDT price requests across the two manual runs; concurrency one; no scheduler/loop.
 - **Safety:** no code/config changes, threshold changes, price substitution, auto-buy, login, cookies, marketplace writes, browser automation, or evasion behavior.
 
+### Phase 13T Design Freeze — design only (committed `010d8cc`)
+
+- `specs/2026-08-26-multi-recipe-solver-migration/{requirements,plan,validation}.md` finalized Option B: additive bounded enumerator with strict legacy equivalence, greedy-first + radius-one, default `2 / 256`, hard bounds `6 / 1024`, no financial ranking, candidate identity `(source, goods_id, listing_id)`.
+
+### Phase 13T-1 — Protected Core bounded recipe enumerator (committed `4a6b85c`)
+
+- Adds `RecipeEnumerationConfig`, `RecipeEnumerationDiagnostics`, `RecipeEnumerationResult`, `enumerate_recipe_selections(…)`. Defaults `2 / 256`; hard bounds `1..6` candidates, `1..1024` states with `states >= candidates`; baseline first then deterministic radius-one substitutions ordered by `(r-d, r, d, RecipeSelectionKey)`; canonical offer identity `(source, goods_id, listing_id)`; duplicate canonical key fails closed before sort/cap/search. Legacy `construct_recipe_selections`, `construct_recipes`, `solve_recipes` remain unchanged.
+
+### Phase 13T-2 — Scanner composition enumeration adapter (committed `74332e7`)
+
+- Adds `enumerate_scanner_recipe_selections(…)`, `ScannerRecipeCompositionDiagnostics`, `ScannerRecipeBucketDiagnostics`. Per-bucket fair-share aggregate candidate/state budgets (first `min(active_count, C)` participate; no redistribution; no second pass). Exact candidate-owned `InputItem` rehydration after temporary `souvenir=False` solver projection; projected inputs never escape.
+
+### Phase 13T-3A — Orchestrator bounded enumeration integration (committed `ac26e9b`)
+
+- `LiveScannerOrchestrator` accepts `enumeration_config: RecipeEnumerationConfig | None = None` (default `2 / 256`) and consumes `enumerate_scanner_recipe_selections` in `run_once`. Cumulative valuation budget, atomic fail-closed semantics, sequential valuation, and ordering guarantees preserved.
+
+### Phase 13T-3B — CLI enumeration wiring (committed `33675ee`)
+
+- `scripts/run_live_scan_once.py` exposes `--max-recipe-candidates-returned` and `--max-candidate-states-explored` (argparse integer syntax). CLI constructs exactly one `RecipeEnumerationConfig` and forwards it to `LiveScannerOrchestrator`. Domain validation authority remains `RecipeEnumerationConfig`.
+
+### Phase 13T-4A — Offline bounded multi-recipe scale validation (committed `9288794`)
+
+- `tests/test_multi_recipe_scanner_scale_validation.py` (4 tests). Primary fixture: 10 goods / 100 InputItems / 901 theoretical radius-one states / 2 returned / 2 explored; baseline `P0..P9` and first alternative `P0..P8 + P10`; 10 inputs each, 9 shared, 1 replacement. Exact-cap=20 → 2 fully valued; one-below=19 → 1 fully valued + 1 atomically blocked. Two-bucket fixture under `C=2, S=256`: `candidate_quota 1 / 1` and `state_quota 128 / 128`, both buckets returned 1 candidate / 1 state. 1/1 legacy compatibility verified (bounded orchestrator result equals legacy `construct_scanner_recipe_selections` output for the same enriched inputs). Determinism verified across independently reset runs. Regression baseline: `4 + 100 + 35 + 39 + 37 + 3336 passed, 23 skipped, 20 historical`.
+
+### Phase 13T-4B — One bounded live validation (no commit, no repository artifact; `LIVE_VALIDATION_PASSED_NO_COMPLETE_VALUATION`)
+
+- One `--auto-universe --allocation cohort-depth --target-cohorts 3` run, performed against commit `9288794`. Planned universe: 10 goods IDs across three cohorts (The 2018 Nuke Collection / The Anubis Collection / The Overpass 2024 Collection). Live BUFF pages: 10/10 succeeded; 95 listings → 95 enriched InputItems. Real bounded composition returned 2 recipe candidates; under effective `max_valuation_requests_per_run=5`, recipe 0 required 10 unique output names and recipe 1 required 20. Both recipes were atomically blocked before any SteamDT HTTP/provider request; `valuation_requests_attempted=0`, `valuation_requests_blocked=30` (=10+20), `provider_calls=0`, `recipes_fully_valued=0`, `risk_evaluated=0`, `opportunities=0`. Frozen contracts held.
+- SteamDT live mode configured during Phase 13T-4B: YES (`STEAMDT_DRY_RUN=false`).
+- SteamDT HTTP/provider requests issued during Phase 13T-4B: 0. The cumulative-budget boundary blocked both recipes before any provider lookup; the 5 available request slots were not partially consumed.
+- Phase 13T-4B did not exercise SteamDT HTTP and did not complete a live SteamDT valuation. Run-level SteamDT output-price cache remains NOT IMPLEMENTED.
+
 ## Current Status
 
+- Bounded multi-recipe scanner: **IMPLEMENTED / PRODUCTION** (Phase 13T-1, 13T-2, 13T-3A, 13T-3B). `LiveScannerOrchestrator.run_once` consumes `enumerate_scanner_recipe_selections`; CLI exposes `--max-recipe-candidates-returned` / `--max-candidate-states-explored`; defaults `2 / 256`.
+- Bounded enumeration offline validation: **PASSED** (Phase 13T-4A; `tests/test_multi_recipe_scanner_scale_validation.py`; primary 100/901/2/2 fixture; exact-cap=20 → 2 fully valued; one-below=19 → 1 fully valued + 1 atomically blocked; two-bucket `1 / 1` candidates and `128 / 128` states; 1/1 legacy compatibility; determinism).
+- Bounded enumeration live validation: **LIVE_VALIDATION_PASSED_NO_COMPLETE_VALUATION** (Phase 13T-4B; effective cap=5; 10 + 20 = 30 logical demand atomically blocked; 0 SteamDT HTTP requests; frozen contracts held).
 - BUFF anonymous listing acquisition: **solved** (provider works; gated, read-only).
-- SteamDT output valuation: **fully live path verified** (strict BUFF sell policy; one complete real recipe reached EV/ROI and `RiskDecision`).
+- SteamDT output valuation: **fully live path verified** (Phase 13P-5; strict BUFF sell policy).
 - Goods identity bridge: **provisional offline resolver and runtime binding implemented** (`D-IDENTITY-006` / `D-IDENTITY-007`).
 - Trade-up input normalization and current Souvenir output semantics: **implemented** (Phase 13O through 13P-4).
+- Run-level SteamDT output-price cache: **NOT IMPLEMENTED** (`D-CACHE-001`); known deferred optimization only.
 - Scheduler/continuous scanning: **not implemented**.
 
 ## Next Action (ordered)
 
-1. **Phase 13N-3D — Insert identity binding between BuffListingProvider and BuffListingCandidateAdapter in the orchestration runtime.** Per `D-IDENTITY-007`. The composition layer built in 13N-3C is the production seam. Update tests. **Does not modify the frozen adapter rule (`D-ADAPTER-003`); does not introduce any live BUFF HTTP; does not touch the trade engine.**
-2. Freeze `TradeUpInputCandidate`, `TradeUpInputEnrichment`, and `BuffListingCandidateAdapter`. No new metadata / enrichment abstraction should be introduced.
-3. Before any live wiring of the production provider: design production provider integration along the path
-   ```
-   BuffListingProvider
-        ↓
-   IdentityResolvingBuffListingProvider  (13N-3C)
-        ↓
-   buff_listing_candidate_adapter
-        ↓
-   TradeUpInputCandidate
-        ↓
-   TradeUpInputEnrichment
-        ↓
-   InputItem
-        ↓
-   trade-up engine
-   ```
-   See `D-ADAPTER-001` for the dependency direction; see `D-ADAPTER-004` for the routing rule; see `D-MIGRATION-002` for the intrinsic-flag preservation requirement; see `D-IDENTITY-007` for the identity-binding seam.
-4. Identity resolution is **provisional** (`D-IDENTITY-006`); the resolver is implemented (13N-3B); the identity binding is implemented (13N-3C). Future production wiring is gated on the intrinsic-flag prerequisite (`D-MIGRATION-002`). Do NOT add: BUFF identity guessing, SteamDT identity inference, SteamApis identity assumptions, browser automation, anti-bot bypass.
-5. Synthetic validation (`D-VALIDATION-001`) remains a mandatory regression gate. Any future change to the adapter, the enrichment boundary, or candidate ownership must pass synthetic seam validation.
-6. Intrinsic flag migration is a separate production prerequisite (`D-MIGRATION-002`): `BuffListing` (or its successor) must expose `stattrak` and `souvenir` before any production wiring.
-7. Later: verify quantity / freshness / classification facts before bridging into Phase 12 / solver.
+- **No new development phase is currently authorized.**
+- The completed Phase 13T closed the additive bounded multi-recipe migration end-to-end (`PHASE_13T_COMPLETE` at commit `9288794`).
+- Known deferred optimization (separately authorized future phase; not a current blocker; not a current feature): run-level SteamDT output-price cache / cross-recipe valuation reuse. This optimization is NOT implemented and must be designed as a separate future phase before Protected Core modification (`valuation_service.py`, `live_recipe_valuation.py`). See `D-CACHE-001`.
+- Any future development phase must be explicitly authorized and must not silently relax `D-ENUM-001`–`D-ENUM-004`, `D-CACHE-001`, `D-SCANNER-001`, `D-VALIDATION-001`, `D-MEMORY-001`, `D-ADAPTER-003`, or `D-ADAPTER-004`.
 
 ## Current Blockers
 
-- No verified `market_hash_name ↔ BUFF goods_id` source.
-- BUFF goods/product/search endpoint undocumented/unauthorized.
-- Anonymous sell-order has no verified market name; `BuffListing.market_hash_name` stays `None`.
-- Phase 12 requires market name + quantity + classification facts that are not yet verified for the anonymous path.
+- None for the completed Phase 13T bounded multi-recipe scanner migration.
 
 ## Standing Prohibitions (re-asserted)
 

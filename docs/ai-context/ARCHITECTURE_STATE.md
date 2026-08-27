@@ -27,27 +27,34 @@ BUFF_READONLY_SMOKE_GOODS_ID (caller context, not response-derived)
 
 `BuffListing` fields: `listing_id`, `goods_id` (request context), `market_hash_name` (always `None` currently), `price_cny`, `paintwear`, `asset_id` (required string), `paintseed` (optional), `source="buff"`.
 
-### Phase 13P live one-shot opportunity scan (read-only; manual; no scheduler)
+### Phase 13P / Phase 13T live one-shot opportunity scan (read-only; manual; no scheduler)
 
 ```
-configured ordered goods_id allowlist (dedupe; hard max 10)
+configured ordered goods_id allowlist or bounded auto-universe planner
   → BuffListingProvider.get_listings
-  → IdentityResolvingBuffListingProvider
-  → IntrinsicFlagResolvingBuffListingProvider
+  → IdentityResolvingBuffListingProvider (13N-3C; identity-only)
+  → IntrinsicFlagResolvingBuffListingProvider (13O-1; canonical-name classifier)
   → convert_buff_listing_to_candidate
   → TradeUpInputCandidate
-  → TradeUpInputEnrichment values accumulated across the bounded run
-  → scanner_recipe_composition.construct_scanner_recipe_selections
-      → candidate-owned intrinsic validation and StatTrak bucketing
-      → internal `souvenir=False` compatibility view
-      → canonical non-Souvenir output eligibility projection
-      → recipe_solver.construct_recipe_selections (Protected Core unchanged)
-      → exact candidate-owned InputItem rehydration
-  → ValuationService.value_tradeup_results (SteamDTBuffPriceProvider)
+  → TradeUpInputEnrichment (decimal→float exactly once; candidate-owned Souvenir preserved)
+  → scanner_recipe_composition.enumerate_scanner_recipe_selections (13T-2)
+      → exact eligible pairs
+      → canonical-offer duplicate-identity preflight (fail closed)
+      → per-bucket fair-share aggregate candidate/state budget
+        (first min(active_buckets, C) buckets participate; no redistribution; no second pass)
+      → recipe_solver.enumerate_recipe_selections (13T-1; Protected Core additive API)
+        → baseline P0..P9 first
+        → deterministic radius-one substitutions ordered by (r-d, r, d, RecipeSelectionKey)
+        → existing calculate_tradeup_results (Protected Core engine)
+      → exact candidate-owned InputItem rehydration after temporary souvenir=False view
+      → globally ordered returned candidates
+  → ValuationService.value_tradeup_results (existing ValuationService + recording PriceProvider)
   → calculate_opportunity_metrics
-  → evaluate_opportunity
+  → evaluate_opportunity (existing risk filter)
   → ScannerRunResult
 ```
+
+Production uses `enumerate_scanner_recipe_selections` and `enumerate_recipe_selections`. The legacy `construct_scanner_recipe_selections` and `construct_recipe_selections` paths remain available for compatibility but are not the production run path.
 
 `app/services/scanner_orchestrator.py::LiveScannerOrchestrator.run_once(goods_ids)` implements one bounded run with dependency injection and per-goods acquisition isolation. Successful enriched inputs are accumulated across the existing hard-max-10 goods-ID universe before recipe construction, allowing exact normal and Souvenir pages to coexist without expanding the scan universe. `scripts/run_live_scan_once.py` is the explicit manual entry point; it performs one run and exits. No APScheduler, daemon, background loop, Discord requirement, or marketplace writes.
 
@@ -63,6 +70,29 @@ Phase 13P-1 adds an explicit live-valuation gate and a run-level request guard:
 - current CLI directly uses `SteamDTHttpClient`; existing cache adapters are not wired, so no cache-hit metric or freshness timestamp is invented.
 
 Current live valuation status (Phase 13P-5): **full read-only opportunity path verified**. The Phase 13P-3 `base_url` transport fix remains active. A post-semantics Knight scan requested only the two canonical normal Knight outputs; Factory New resolved while Minimal Wear remained an expected strict `buff_sell_price_non_positive` selection failure. A second bounded technical scan for goods ID `35458` consumed ten real BUFF listings, resolved both canonical `PP-Bizon | Carbon Fiber` output prices through SteamDT's strict BUFF sell policy, completed valuation and EV/ROI, and produced a real `RiskDecision.passed=False` under unchanged thresholds. No opportunity passed, but the complete `BUFF → recipe → SteamDT → valuation → metrics → risk` path is verified. No scheduler, auto-buy, or marketplace writes were introduced.
+
+Bounded multi-recipe enumeration status (Phase 13T-1 through 13T-4A): **bounded additive Protected Core API in production**. The legacy `construct_recipe_selections` retains its zero-or-one behavior. The new `enumerate_recipe_selections(candidates, skins, solver_config, *, enumeration_config)` adds:
+
+- `RecipeEnumerationConfig(max_recipe_candidates_returned, max_candidate_states_explored)` with strict `__post_init__` validation: exact integers in `[1, 6]` candidates, `[1, 1024]` states, `states >= candidates`. Defaults `2 / 256`.
+- `RecipeEnumerationDiagnostics(eligible_input_count, retained_input_count, theoretical_radius_one_states, states_explored, raw_candidates_found, unique_candidates_returned, duplicates_suppressed, engine_rejected_states, baseline_state_rejected, candidate_limit_reached, exploration_limit_reached)`.
+- `RecipeEnumerationResult(selections, diagnostics)`.
+- Canonical offer identity `(source, goods_id, listing_id)`; duplicate canonical keys fail closed before sort/cap/search.
+- Baseline state explored first; radius-one substitutions ordered by `(r-d, r, d, RecipeSelectionKey)`; no radius-two; no beam search; no financial ranking; no exhaustive combinations; cross-candidate listing reuse allowed.
+
+Scanner composition (Phase 13T-2): `enumerate_scanner_recipe_selections` wraps the bounded enumerator across active StatTrak buckets. Aggregate candidate/state budgets are owned by the composition layer:
+
+- Active buckets ordered normal → StatTrak.
+- `P = min(active_buckets, C)` participating buckets; only the first `P` receive quota.
+- Candidate quota per bucket: `C // P + (1 if i < C % P else 0)`.
+- State quota per bucket: `1 + (S - P) // P + (1 if i < (S - P) % P else 0)`.
+- No redistribution, no second pass, no quota stealing.
+- Every returned candidate is rehydrated from the temporary `souvenir=False` solver projection back to exact candidate-owned `InputItem` before downstream services see it.
+
+Orchestrator integration (Phase 13T-3A): `LiveScannerOrchestrator.run_once(goods_ids)` consumes `enumerate_scanner_recipe_selections` and accepts `enumeration_config: RecipeEnumerationConfig | None = None` (default `2 / 256`). Returned recipe candidates are processed in deterministic structural composition order. The existing final opportunity display ordering by `expected_profit_cny desc, roi desc` is unchanged and does not affect enumeration, valuation order, valuation-cap consumption, or risk evaluation order.
+
+CLI wiring (Phase 13T-3B): `scripts/run_live_scan_once.py` exposes `--max-recipe-candidates-returned` and `--max-candidate-states-explored` (argparse integer syntax). The CLI constructs exactly one `RecipeEnumerationConfig` and forwards it to `LiveScannerOrchestrator`; domain validation remains owned by `RecipeEnumerationConfig.__post_init__`.
+
+Valuation budget semantics (orchestrator-owned cumulative): within one recipe, first-seen unique exact output `market_hash_name` is the logical request set. Across recipes there is no run-level cache; the same exact output name in a second recipe is a separate logical request. `required == remaining cap` is allowed. `required > remaining cap` causes the entire recipe to be blocked before any provider lookup, with `VALUATION_REQUEST_CAP_EXCEEDED`; no partial lookup, no zero fallback, no probability renormalization, no metric/risk/opportunity work. Run-level SteamDT output-price cache is **NOT IMPLEMENTED** (Phase 13T intentionally excluded it). Same exact output name in separate recipe valuation calls is a separate logical request today.
 
 Metadata uses the pinned local snapshot `data/metadata/skin_metadata_v1.json` (ByMykel/CSGO-API at commit `8a785962...`, MIT, raw SHA-256 `7aeb9582...`, canonical snapshot SHA-256 `55e4d446...`). `scripts/build_skin_metadata_snapshot.py` reproduces it byte-for-byte from `research/metadata/by_mykel_skins.json`. `app/services/skin_metadata_resolver.py::PinnedSkinMetadataResolver` performs exact-string O(1) lookup and exposes the immutable existing `SkinMetadata` catalog to the existing recipe solver. Runtime metadata lookup performs zero network I/O.
 
@@ -169,14 +199,16 @@ BuffListing → TradeUpInputCandidate → TradeUpInputEnrichment → (future tra
 - `app/services/buff_intrinsic_flag_resolver.py` — canonical-name exact-canonical-string-prefix classifier (13O-1). Pure: no I/O, no network. Verifies the canonical Steam community market prefix rule against every pinned catalog entry with zero contradictions.
 - `app/services/buff_intrinsic_flag_listing_provider.py` — intrinsic-flag binding composition layer (13O-1). Identity-only provider output → intrinsic-flag-wrapped listings; one resolver call per page after exact page-identity consistency validation.
 - `app/services/skin_metadata_resolver.py` — pinned local exact-name `TradeUpInputMetadataResolver` + immutable `SkinMetadata` catalog (13P); O(1), zero runtime network I/O.
-- `app/services/scanner_orchestrator.py` — dependency-injected read-only one-shot opportunity scanner (13P/13P-4); bounded goods-id universe, per-goods acquisition isolation, run-wide enriched-input pool, existing valuation/EV/risk composition, no scheduler.
-- `app/services/scanner_recipe_composition.py` — Phase 13P-4 current-rule output-eligibility and Protected Core compatibility seam; candidate-owned filtering, homogeneous StatTrak buckets, canonical non-Souvenir outputs, exact input rehydration, no name mutation.
+- `app/services/scanner_orchestrator.py` — dependency-injected read-only one-shot opportunity scanner (13P/13P-4; Phase 13T-3A bounded enumeration integration); bounded goods-id universe, per-goods acquisition isolation, run-wide enriched-input pool, existing valuation/EV/risk composition, no scheduler, accepts `enumeration_config: RecipeEnumerationConfig | None = None` (default `2 / 256`).
+- `app/services/scanner_recipe_composition.py` — Phase 13P-4 current-rule output-eligibility and Protected Core compatibility seam (Phase 13T-2 additive `enumerate_scanner_recipe_selections` API); candidate-owned filtering, homogeneous StatTrak buckets, canonical non-Souvenir outputs, exact input rehydration for every returned candidate, per-bucket fair-share aggregate budgeting, no name mutation.
+- `tests/test_multi_recipe_scanner_scale_validation.py` — Phase 13T-4A offline bounded multi-recipe scale validation (deep-pool primary, exact/one-below cap atomicity, two-bucket aggregate, 1/1 legacy compatibility, determinism).
+- `app/services/recipe_solver.py` — deterministic greedy recipe construction; additive bounded enumeration API (Phase 13T-1): `RecipeEnumerationConfig`, `RecipeEnumerationDiagnostics`, `RecipeEnumerationResult`, `enumerate_recipe_selections`. Legacy `construct_recipe_selections`, `construct_recipes`, `solve_recipes` retained unchanged.
 - `app/services/trade_up_input_candidate.py` — `TradeUpInputCandidate` DTO (13I-2 intrinsic flags `stattrak`/`souvenir`; widened to `bool | None = None` in 13O).
 - `app/services/trade_up_input_enrichment.py` — `TradeUpInputMetadata`, `TradeUpInputMetadataResolver`, `TradeUpInputEnricher`, `enrich_candidates`, rejection model (13I-3, offline only).
 - `app/clients/buff_client.py` — legacy `BuffHttpClient` (unimplemented), `MockBuffClient`, `DryRunBuffClient`, legacy `BuffSellOrder`/`BuffGoodsInfo`.
 - `app/services/buff_listing.py` + parser/facts/eligibility/qualification/solver_adapter — Phase 12 offline contract chain.
 - `app/services/market_scan_service.py` — `CandidateListing`, legacy synchronous scanner (`scan_goods`/`scan_watchlist`).
-- `app/services/recipe_solver.py` — deterministic greedy recipe construction; source-blind.
+- `app/services/recipe_solver.py` — deterministic greedy recipe construction; additive bounded enumeration API (Phase 13T-1): `RecipeEnumerationConfig`, `RecipeEnumerationDiagnostics`, `RecipeEnumerationResult`, `enumerate_recipe_selections`. Legacy `construct_recipe_selections`, `construct_recipes`, `solve_recipes` retained unchanged.
 - `app/services/tradeup_engine.py` — `InputItem`/`OutputCandidate`/`TradeupResult`, trade-up math.
 - `app/services/ev_service.py` — fee application, EV/ROI metrics.
 - `app/services/risk_filter.py` — `RiskDecision`, ROI/profit/probability/liquidity gates.
@@ -186,14 +218,17 @@ BuffListing → TradeUpInputCandidate → TradeUpInputEnrichment → (future tra
 - `app/services/metadata_*` — skin metadata normalization (name-based; no BUFF goods ID).
 - `app/services/pipeline_service.py` + `app/jobs/scheduler.py` — legacy mock BUFF pipeline (fixture-backed).
 
-## Protected Core (do not modify without migration plan + approval)
+## Protected Core (modification requires explicit migration authorization)
+
+The protected-core files below may be modified only under an explicit reviewed migration plan. Phase 13T deliberately migrated two protected modules under explicit authorization while preserving their existing observable contracts:
 
 - `app/services/tradeup_engine.py`
 - `app/services/valuation_service.py`
 - `app/services/live_recipe_valuation.py`
 - `app/services/ev_service.py`
 - `app/services/risk_filter.py`
-- `app/services/recipe_solver.py`
+- `app/services/recipe_solver.py` — Phase 13T-1 added the additive bounded enumeration API (`RecipeEnumerationConfig`, `RecipeEnumerationDiagnostics`, `RecipeEnumerationResult`, `enumerate_recipe_selections`). Legacy `construct_recipe_selections`, `construct_recipes`, and `solve_recipes` remain unchanged and continue to expose their pre-13T zero-or-one contract verbatim.
+- `app/services/scanner_orchestrator.py` — Phase 13T-3A integrated `enumerate_scanner_recipe_selections` and added `enumeration_config: RecipeEnumerationConfig | None = None` (default `2 / 256`). Cumulative valuation budget, atomic fail-closed behavior, sequential valuation, and ordering guarantees are preserved.
 - `app/services/market_scan_service.py` (`CandidateListing`)
 - Phase 12 BUFF domain: `buff_listing.py`, `buff_listing_parser.py`, `buff_listing_facts.py`, `buff_listing_eligibility.py`, `buff_listing_qualification.py`, `buff_listing_solver_adapter.py`
 - `app/clients/buff_client.py` (legacy skeleton)
@@ -206,13 +241,13 @@ BuffListing → TradeUpInputCandidate → TradeUpInputEnrichment → (future tra
 - **Assumed (project decision):** SteamDT sell/bid interpreted as CNY/RMB; BUFF `price_cny` project-facing naming.
 - **Unknown:** official currency/fees, canonical `market_hash_name` mapping, goods/product/search endpoint, quantity/freshness/removal, pagination/page size, rate limits, classification facts, purchase handoff.
 
-## Current Blockers (pre-13N-3C, retained for historical context)
+## Current Blockers
 
-- No verified `market_hash_name ↔ BUFF goods_id` source. *(superseded by 13N-3A / 13N-3B / 13N-3C; the source is provisional under D-IDENTITY-006 and the binding layer is implemented.)*
-- BUFF goods/product/search endpoint undocumented/unauthorized. *(still valid; the binding layer uses the community snapshot, not this endpoint.)*
-- Anonymous sell-order has no verified market name. *(still valid at the parser layer; the binding layer rebinds `market_hash_name` after the parser.)*
-- No production candidate adapter from `BuffListing` (or any live source) to `TradeUpInputCandidate`. *(the adapter exists at 13K-1; production wiring still pending.)*
-- No live metadata resolver backend; `TradeUpInputEnrichment` is offline/synthetic only. *(unchanged.)*
+- No new blocker for the completed Phase 13T bounded multi-recipe migration. The previously listed blockers are closed:
+  - Identity binding is wired into the runtime (`D-IDENTITY-007`).
+  - The orchestrator consumes `enumerate_scanner_recipe_selections` (Phase 13T-3A).
+  - Bounded enumeration has been validated offline (Phase 13T-4A) and live (Phase 13T-4B).
+- Known deferred optimization (separately authorized future phase; not a current blocker): run-level SteamDT output-price cache / cross-recipe valuation reuse. Do not promote this to a current feature.
 
 ## Completed Capabilities (cumulative)
 
@@ -236,6 +271,7 @@ BuffListing → TradeUpInputCandidate → TradeUpInputEnrichment → (future tra
 - Live read-only opportunity MVP (13P): `app/services/scanner_orchestrator.py::LiveScannerOrchestrator.run_once(goods_ids)` + `scripts/run_live_scan_once.py`. Manual one-shot, bounded allowlist (hard max 10), sequential acquisition, per-goods failure isolation, pinned local metadata resolver (`data/metadata/skin_metadata_v1.json`, ByMykel MIT pin), existing recipe solver + SteamDT valuation + EV/ROI + `RiskDecision.passed` opportunity acceptance. No scheduler, daemon, Discord requirement, cache subsystem, or marketplace writes.
 - Bounded market universe + multi-goods live scan (13R): `app/services/market_universe_builder.py` is a pure offline planner that joins the exact pinned identity and metadata catalogs by `market_hash_name`, applies the existing `is_current_standard_trade_up_output_eligible` rule with one explicit input rarity (`RarityOrder.ORDER[:5]`), one homogeneous StatTrak mode, optional Souvenir inclusion policy, optional exact collection allowlist, and a hard bound `1..10`. Selection is deterministic collection-round-robin sorted by `(collection_name, stattrak, souvenir, len, name)`. Returns `MarketUniverseResult.goods_ids`; diagnostics report truthful disjoint counters (`excluded_no_identity`, `excluded_no_metadata`, `excluded_invalid_rarity`, `excluded_no_collection`, `excluded_no_valid_output`, `excluded_intrinsic_policy`, `excluded_by_allowlist`). `BuffCommunityIdentityResolver` gains an additive public `identities` property (`((market_hash_name, goods_id), ...)` ordered by `(len, name)`) used by the builder; no other resolver/protocol changes. CLI `--auto-universe` composes the bounded sequence into the unchanged `LiveScannerOrchestrator.run_once` flow; `--universe-preview` exits before any `LiveScanSettings()`/HTTP client construction. Manual `--goods-id` path preserved byte-identically. Protected Core unchanged. Live verification on 2026-08-25: one bounded `--auto-universe --rarity Restricted --stattrak-mode normal --souvenir include --max-goods-ids 10 --max-valuation-requests 20` run requested 10 goods IDs (round-robin across 10 collections), succeeded 10, fetched 71 listings, built 1 recipe (`Dual Berettas | Twin Turbo` × `SG 553 | Integrale` all 5 wear values), attempted 10 SteamDT `PRICE_SINGLE` lookups, resolved 10/10, and produced `RiskDecision.passed=False` under unchanged thresholds. Zero opportunities passed (expected for current market); the complete live path is verified.
 - Structural coverage allocation (13S): the Phase 13R planner now has an explicit pure two-stage flow, `exact catalog eligibility -> allocation strategy -> bounded goods IDs`. `BREADTH` remains the default and preserves the collection round-robin sequence. Opt-in `COHORT_DEPTH` uses collection-local allocation cohorts `(collection_name, rarity, stattrak)`, ranks by descending eligible catalog capacity then lexical key, selects at most the configured target (default 3), allocates capacity-aware fair rounds (`10/3 -> 4/3/3`), and interleaves normal/Souvenir exact identities. This cohort is intentionally stricter than legal recipe compatibility `(rarity, stattrak)`; collections may mix and Souvenir is not a compatibility split under the May-2026 seam. Diagnostics expose eligible/selected cohort counts, catalog capacity, intrinsic counts, canonical output count, slots, and identities. Capacity is not liquidity, listing availability, or a financial signal. Planner imports no live-price/EV/risk/network dependency. Live verification on 2026-08-25: 10 IDs across 3 cohorts, 10/10 pages, 94 listings/InputItems, 1 recipe evaluated and fully valued, 10/10 valuation requests, 0 opportunities. Hard goods cap, scanner/orchestrator/composition/metadata/Protected Core, valuation/risk, and no-write/no-scheduler behavior remain unchanged.
+- Bounded multi-recipe solver migration (Phase 13T Design freeze + committed/pushed 13T-1 through 13T-4A + live-only 13T-4B at `9288794`). Phase 13T-1 (committed `4a6b85c`) adds the additive bounded enumeration API in `app/services/recipe_solver.py` while preserving the legacy `construct_recipe_selections` zero-or-one contract; canonical offer identity `(source, goods_id, listing_id)`; duplicate canonical key fails closed before sort/cap/search; default `2 / 256`; hard bounds `1..6` candidates, `1..1024` states with `states >= candidates`; baseline first then deterministic radius-one substitutions ordered by `(r-d, r, d, RecipeSelectionKey)`. Phase 13T-2 (committed `74332e7`) adds `enumerate_scanner_recipe_selections`, `ScannerRecipeCompositionDiagnostics`, and `ScannerRecipeBucketDiagnostics`; per-bucket fair-share aggregate candidate/state budgets; no redistribution; exact candidate-owned `InputItem` rehydration after temporary `souvenir=False` solver projection. Phase 13T-3A (committed `ac26e9b`) wires `enumerate_scanner_recipe_selections` into `LiveScannerOrchestrator.run_once` and adds `enumeration_config: RecipeEnumerationConfig | None = None` (default `2 / 256`). Phase 13T-3B (committed `33675ee`) exposes `--max-recipe-candidates-returned` and `--max-candidate-states-explored` on the production CLI; domain validation authority remains `RecipeEnumerationConfig`. Phase 13T-4A (committed `9288794`) adds `tests/test_multi_recipe_scanner_scale_validation.py` covering the deep-pool primary fixture (10 goods / 100 InputItems / 901 theoretical states / 2 returned / 2 explored), exact-cap=20 → 2 fully valued, one-below=19 → 1 fully valued + 1 atomically blocked, two-bucket aggregate allocation `1 / 1` candidates and `128 / 128` states, 1/1 legacy compatibility, and determinism. Phase 13T-4B (no commit, no repository artifact; `LIVE_VALIDATION_PASSED_NO_COMPLETE_VALUATION`) ran one bounded live `--auto-universe --allocation cohort-depth --target-cohorts 3` scan against `9288794`: 10/10 BUFF pages succeeded, 95 listings became 95 InputItems, real bounded composition returned 2 recipes requiring 10 + 20 unique output names, both atomically blocked under effective `max_valuation_requests_per_run=5` before any SteamDT HTTP/provider request; 0 fully valued, 0 risk evaluated, 0 opportunities; all frozen contracts held. No run-level SteamDT output-price cache is implemented (Phase 13T intentionally excluded it).
 
 ## Current Blockers
 
@@ -246,6 +282,7 @@ BuffListing → TradeUpInputCandidate → TradeUpInputEnrichment → (future tra
 ## Technical Debt
 
 - **13H-0 / 13K-1 intrinsic flag compatibility debt** — `trade_up_pipeline.py::candidates_to_input_items` (13H-0) and `buff_listing_candidate_adapter.py::convert_buff_listing_to_candidate` (13K-1) both default `stattrak=False, souvenir=False` because the upstream `BuffListing` DTO does not yet expose those fields. Historical behavior; preserved for compatibility; validated offline by synthetic scale validation (13J-1) and the adapter's own test suite. Forbidden as production behavior. References: `D-MIGRATION-001`, `D-MIGRATION-002`.
+- **Run-level SteamDT output-price cache (deferred)** — Phase 13T deliberately did not implement a run-scoped exact-name price cache. The same exact output `market_hash_name` in separate recipe valuation calls is a separate logical request today. Cross-recipe deduplication, freshness semantics, cache failure handling, and request-budget accounting are open design questions. Treat as a separately authorized future phase that must not silently modify Protected Core (`valuation_service.py`, `live_recipe_valuation.py`).
 
 ## Standing Engineering Constraints
 
