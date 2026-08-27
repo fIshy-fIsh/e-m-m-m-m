@@ -84,6 +84,16 @@ Live repository HEAD / branch / working tree:
     git rev-list --left-right --count HEAD...@{u}
     git status --short
 ```
+
+## Repository Governance
+
+- **R0-A — Public Documentation Synchronization:** **COMPLETE**.
+- **R0-B — Minimum CI:** **COMPLETE**. Implementation checkpoint `7a6349e` (`add minimum GitHub Actions CI`). `.github/workflows/ci.yml` runs on `push` and `pull_request` with `contents: read`, `ubuntu-latest`, Python 3.12, `python -m pip install -e ".[dev]"`, `ruff check .`, `mypy app`, and `pytest`.
+- **Remote validation:** GitHub Actions workflow `CI`, job `quality`, run `33098999757` completed successfully for checkpoint `7a6349e`. Local validation also passed: ruff, mypy, and pytest (`3336 passed, 23 skipped, 1 warning`).
+- **Safety:** default CI is offline-safe and requires no real secrets. Live / integration paths remain opt-in and environment-gated; default CI performs no live BUFF, SteamDT, Redis, or Discord operation.
+- **R0-C — Main History Consolidation:** **NOT STARTED**. `origin/main` remains a separate initial history; no merge has been performed.
+- **R0-D — Branch / Repository Cleanup:** **NOT STARTED**. No branch cleanup has been performed.
+
 - **Phase:** `PHASE_13T_COMPLETE`. Phase 13T-1 through 13T-4A are committed and pushed (latest commit `9288794`); Phase 13T-4B is a live-only validation performed against that commit and intentionally produced no commit and no repository artifact.
 - **Latest completed phases:**
   - **Phase 13T-4B** — `LIVE_VALIDATION_PASSED_NO_COMPLETE_VALUATION` (live-only validation; no commit, no repository artifact; performed against `9288794`). One bounded live `--auto-universe --allocation cohort-depth --target-cohorts 3` run selected 10 goods IDs across three cohorts; 10/10 BUFF pages succeeded; 95 listings → 95 enriched InputItems; real bounded composition returned 2 real recipe candidates; under effective `max_valuation_requests_per_run=5` the two recipes required 10 + 20 unique output names and were atomically blocked before any SteamDT HTTP/provider request; 0 fully valued, 0 risk evaluated, 0 opportunities. SteamDT live mode configured: YES. SteamDT HTTP/provider requests issued during Phase 13T-4B: 0. Frozen contracts held.

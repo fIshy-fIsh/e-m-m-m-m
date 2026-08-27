@@ -71,6 +71,7 @@
 - Post-Phase-13T handoff baseline：`bb09068`（`sync AI context after Phase 13T`）。
 - 当前 Git HEAD 必须通过仓库实时验证（`git rev-parse HEAD` / `git status --short`），不在此处硬编码。
 - 当前 bounded multi-recipe 校验：`tests/test_multi_recipe_scanner_scale_validation.py`。
+- Minimum CI 已建立并远端验证：`.github/workflows/ci.yml`（Python 3.12；`ruff check .`；`mypy app`；`pytest`）。
 - 权威交接文档：`docs/ai-context/DEVELOPMENT_HANDOFF.md`。
 
 ## 禁止事项

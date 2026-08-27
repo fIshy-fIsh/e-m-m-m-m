@@ -340,27 +340,31 @@ feature/buff-tradeup-scanner:
 
 Consolidation status:
 
-```text
-R0-A — Public Documentation Synchronization
+### R0-A — Public Documentation Synchronization
 
 ```text
-scope:
-  README / roadmap / architecture / spec / mission / metadata
-  synchronization
+status:   COMPLETE
+scope:    README / roadmap / architecture / spec / mission / metadata
+          synchronization
 
-status authority:
+authority:
   Git history / repository checkpoint
-
-status:
-  documentation synchronization workstream
-  (transient staged / committed / pushed state is recorded in the
-   checkpoint report, not in this durable roadmap)
 ```
 
-R0-B Minimum CI                     NOT STARTED
-                                    Python 3.12 / ruff / mypy / pytest on push and PR
-                                    against main (no CI workflow files exist yet)
+### R0-B — Minimum CI
 
+```text
+status:       COMPLETE
+workflow:     .github/workflows/ci.yml
+triggers:     push / pull_request
+runner:       ubuntu-latest / Python 3.12
+permissions:  contents: read
+gates:        ruff check . / mypy app / pytest
+validation:   remote quality job completed successfully
+safety:       default suite offline-safe; no real secrets or live smokes
+```
+
+```text
 R0-C Main History Consolidation     NOT STARTED
                                     merge feature/steamdt-cache-rate-limit into main
                                     via a manual reconciliation commit (fast-forward

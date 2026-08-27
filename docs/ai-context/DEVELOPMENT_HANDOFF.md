@@ -503,6 +503,18 @@ The components remain in the tree as paused, offline-tested optional infrastruct
 - SteamDT HTTP/provider requests issued during Phase 13T-4B: 0. The cumulative-budget boundary blocked both recipes before any provider lookup; the 5 available request slots were not partially consumed.
 - Phase 13T-4B did not exercise SteamDT HTTP and did not complete a live SteamDT valuation. Run-level SteamDT output-price cache remains NOT IMPLEMENTED.
 
+### R0-A — Public Documentation Synchronization (committed/pushed `1dbc6f1`)
+
+- **Status:** **COMPLETE**. Public README, roadmap, mission, architecture, specification, project description, CLAUDE pointer, and PROJECT_CONTEXT were synchronized after Phase 13T.
+- Durable baselines distinguish Phase 13T production/test checkpoint `9288794`, post-Phase-13T handoff baseline `bb09068`, and live Git state, which must be verified from Git.
+
+### R0-B — Minimum CI (committed/pushed `7a6349e`)
+
+- **Status:** **COMPLETE**. `.github/workflows/ci.yml` runs on `push` and `pull_request` with `contents: read`, `ubuntu-latest`, Python 3.12, `python -m pip install -e ".[dev]"`, `ruff check .`, `mypy app`, and `pytest`.
+- Local validation: ruff PASS; mypy PASS; pytest 3336 passed / 23 skipped / 1 warning.
+- Remote validation: GitHub Actions workflow `CI`, job `quality`, run `33098999757`, event `push`, head SHA `7a6349e777ab267ef5db92381783dac80f22a226`; all steps completed successfully.
+- Default CI is offline-safe and requires no real secrets. Live / integration paths remain opt-in and environment-gated; no live BUFF, SteamDT, Redis, or Discord operation is performed.
+
 ## Current Status
 
 - Bounded multi-recipe scanner: **IMPLEMENTED / PRODUCTION** (Phase 13T-1, 13T-2, 13T-3A, 13T-3B). `LiveScannerOrchestrator.run_once` consumes `enumerate_scanner_recipe_selections`; CLI exposes `--max-recipe-candidates-returned` / `--max-candidate-states-explored`; defaults `2 / 256`.
@@ -514,12 +526,18 @@ The components remain in the tree as paused, offline-tested optional infrastruct
 - Trade-up input normalization and current Souvenir output semantics: **implemented** (Phase 13O through 13P-4).
 - Run-level SteamDT output-price cache: **NOT IMPLEMENTED** (`D-CACHE-001`); known deferred optimization only.
 - Scheduler/continuous scanning: **not implemented**.
+- R0-A Public Documentation Synchronization: **COMPLETE** (`1dbc6f1`).
+- R0-B Minimum CI: **COMPLETE / REMOTE GREEN** (`7a6349e`; GitHub Actions `CI` / `quality` success).
+- R0-C Main History Consolidation: **NOT STARTED**. `origin/main` remains a separate initial history; no merge has been performed.
+- R0-D Branch / Repository Cleanup: **NOT STARTED**. No branch cleanup has been performed.
 
 ## Next Action (ordered)
 
-- **No new development phase is currently authorized.**
-- The completed Phase 13T closed the additive bounded multi-recipe migration end-to-end (`PHASE_13T_COMPLETE` at commit `9288794`).
-- Known deferred optimization (separately authorized future phase; not a current blocker; not a current feature): run-level SteamDT output-price cache / cross-recipe valuation reuse. This optimization is NOT implemented and must be designed as a separate future phase before Protected Core modification (`valuation_service.py`, `live_recipe_valuation.py`). See `D-CACHE-001`.
+- **No new product-development phase is currently authorized.**
+- **R0-C Main History Consolidation is the next repository-maintenance milestone and remains NOT STARTED until explicitly authorized.**
+- R0-D Branch / Repository Cleanup remains NOT STARTED.
+- Scanner Valuation Integration is **PROPOSED / NOT AUTHORIZED**: integrate the existing Phase 12D cache stack into live scanner valuation, add run-level exact-price reuse and cache-hit / cache-miss / provider-demand accounting, and preserve strict complete-price, bounded-ordering, and atomic valuation-budget semantics.
+- Valuation Budget Calibration is **PROPOSED / NOT AUTHORIZED**: measure unique-output cardinality offline before proposing any numeric cap.
 - Any future development phase must be explicitly authorized and must not silently relax `D-ENUM-001`–`D-ENUM-004`, `D-CACHE-001`, `D-SCANNER-001`, `D-VALIDATION-001`, `D-MEMORY-001`, `D-ADAPTER-003`, or `D-ADAPTER-004`.
 
 ## Current Blockers

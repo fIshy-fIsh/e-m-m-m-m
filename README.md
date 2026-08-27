@@ -189,7 +189,7 @@ mypy app
 pytest
 ```
 
-These three gates are the project's quality baseline. `pytest` is offline by default; live smoke tests under `scripts/` require explicit opt-in env flags and are **not** part of `pytest`.
+These three gates are the project's quality baseline. GitHub Actions enforces them on every push and pull request using Python 3.12 (`.github/workflows/ci.yml`). The default `pytest` suite is offline-safe; live and integration paths under `scripts/` remain explicitly opt-in and are not exercised by minimum CI.
 
 ## Project status at a glance
 
@@ -233,7 +233,7 @@ What are the safety boundaries?
 Where is the project in its roadmap?
   Phase 13T is complete. Active development line is the
   feature/steamdt-cache-rate-limit branch. Repository consolidation
-  (branch / CI / main history) is pending because the current `main`
+  (main history and branch cleanup) is pending because the current `main`
   branch is on a separate initial history from the active development
   line. See specs/roadmap.md for the current roadmap structure.
 
