@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
+from app.services.recipe_solver import RecipeEnumerationConfig
 from scripts.run_live_scan_once import (
     LiveScanSettings,
     LiveValuationConfigurationError,
@@ -24,6 +27,95 @@ def _settings(
         steamdt_dry_run=dry_run,
         steamdt_api_key=api_key,
     )
+
+
+def _capture_orchestrator_kwargs(
+    monkeypatch: pytest.MonkeyPatch,
+    argv: list[str],
+) -> dict[str, Any]:
+    from scripts import run_live_scan_once
+
+    class FakeHttpClient:
+        async def aclose(self) -> None:
+            return None
+
+    captured: dict[str, Any] = {}
+
+    class CapturingOrchestrator:
+        def __init__(self, **kwargs: Any) -> None:
+            captured.update(kwargs)
+
+        async def run_once(self, goods_ids: list[str]) -> object:
+            captured["goods_ids"] = tuple(goods_ids)
+            return object()
+
+    settings = _settings(dry_run=False, api_key="present")
+    monkeypatch.setattr(run_live_scan_once, "LiveScanSettings", lambda: settings)
+    identity_resolver = Mock(name="identity_resolver")
+    metadata_resolver = Mock(name="metadata_resolver")
+    monkeypatch.setattr(
+        run_live_scan_once.BuffCommunityIdentityResolver,
+        "from_snapshot_path",
+        lambda _path: identity_resolver,
+    )
+    monkeypatch.setattr(
+        run_live_scan_once.PinnedSkinMetadataResolver,
+        "from_snapshot_path",
+        lambda _path: metadata_resolver,
+    )
+    monkeypatch.setattr(
+        run_live_scan_once.httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: FakeHttpClient(),
+    )
+    monkeypatch.setattr(
+        run_live_scan_once,
+        "build_steamdt_http_client",
+        lambda _settings: FakeHttpClient(),
+    )
+    monkeypatch.setattr(
+        run_live_scan_once,
+        "BuffAnonymousListingHttpClient",
+        lambda _http: object(),
+    )
+    monkeypatch.setattr(
+        run_live_scan_once,
+        "BuffListingProvider",
+        lambda _client: object(),
+    )
+    monkeypatch.setattr(
+        run_live_scan_once,
+        "SteamDTHttpClient",
+        lambda _config, _http: object(),
+    )
+    monkeypatch.setattr(
+        run_live_scan_once,
+        "SteamDTBuffPriceProvider",
+        lambda _client: object(),
+    )
+    monkeypatch.setattr(
+        run_live_scan_once,
+        "ValuationService",
+        lambda _provider, _config: object(),
+    )
+    monkeypatch.setattr(
+        run_live_scan_once,
+        "LiveScannerOrchestrator",
+        CapturingOrchestrator,
+    )
+    monkeypatch.setattr(
+        run_live_scan_once,
+        "print_effective_config",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        run_live_scan_once,
+        "print_human",
+        lambda _result: None,
+    )
+
+    assert run_live_scan_once.main(argv) == 0
+    return captured
 
 
 def test_live_gate_refuses_dry_run_true() -> None:
@@ -81,6 +173,168 @@ def test_steamdt_borrowed_http_client_has_configured_base_url() -> None:
 def test_parser_defaults_to_conservative_valuation_cap() -> None:
     args = build_parser().parse_args(["--goods-id", "34279"])
     assert args.max_valuation_requests == 5
+
+
+def test_parser_defaults_recipe_enumeration_bounds() -> None:
+    args = build_parser().parse_args(["--goods-id", "34279"])
+    assert args.max_recipe_candidates_returned == 2
+    assert args.max_candidate_states_explored == 256
+
+
+def test_default_recipe_enumeration_config_reaches_orchestrator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = _capture_orchestrator_kwargs(
+        monkeypatch,
+        ["--goods-id", "34279"],
+    )
+    config = captured["enumeration_config"]
+    assert isinstance(config, RecipeEnumerationConfig)
+    assert config.max_recipe_candidates_returned == 2
+    assert config.max_candidate_states_explored == 256
+
+
+@pytest.mark.parametrize(
+    ("candidates", "states"),
+    [(4, 512), (1, 1), (6, 1024), (4, 4)],
+)
+def test_explicit_recipe_enumeration_config_reaches_orchestrator(
+    monkeypatch: pytest.MonkeyPatch,
+    candidates: int,
+    states: int,
+) -> None:
+    captured = _capture_orchestrator_kwargs(
+        monkeypatch,
+        [
+            "--goods-id",
+            "34279",
+            "--max-recipe-candidates-returned",
+            str(candidates),
+            "--max-candidate-states-explored",
+            str(states),
+        ],
+    )
+    config = captured["enumeration_config"]
+    assert isinstance(config, RecipeEnumerationConfig)
+    assert config.max_recipe_candidates_returned == candidates
+    assert config.max_candidate_states_explored == states
+
+
+@pytest.mark.parametrize(
+    ("flag", "value", "message"),
+    [
+        (
+            "--max-recipe-candidates-returned",
+            "0",
+            "max_recipe_candidates_returned must be an integer in [1, 6]",
+        ),
+        (
+            "--max-recipe-candidates-returned",
+            "7",
+            "max_recipe_candidates_returned must be an integer in [1, 6]",
+        ),
+        (
+            "--max-candidate-states-explored",
+            "0",
+            "max_candidate_states_explored must be an integer in [1, 1024]",
+        ),
+        (
+            "--max-candidate-states-explored",
+            "1025",
+            "max_candidate_states_explored must be an integer in [1, 1024]",
+        ),
+    ],
+)
+def test_invalid_recipe_enumeration_domain_config_fails_before_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    flag: str,
+    value: str,
+    message: str,
+) -> None:
+    from scripts import run_live_scan_once
+
+    def fail_settings(*args: object, **kwargs: object) -> None:
+        raise AssertionError("LiveScanSettings must not be constructed")
+
+    monkeypatch.setattr(run_live_scan_once, "LiveScanSettings", fail_settings)
+    assert run_live_scan_once.main(["--goods-id", "34279", flag, value]) == 2
+    output = capsys.readouterr().out
+    assert "RECIPE_ENUMERATION_BLOCKED_BY_CONFIGURATION" in output
+    assert message in output
+
+
+def test_recipe_state_budget_below_candidate_budget_fails_before_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts import run_live_scan_once
+
+    def fail_settings(*args: object, **kwargs: object) -> None:
+        raise AssertionError("LiveScanSettings must not be constructed")
+
+    monkeypatch.setattr(run_live_scan_once, "LiveScanSettings", fail_settings)
+    assert (
+        run_live_scan_once.main(
+            [
+                "--goods-id",
+                "34279",
+                "--max-recipe-candidates-returned",
+                "4",
+                "--max-candidate-states-explored",
+                "3",
+            ]
+        )
+        == 2
+    )
+    output = capsys.readouterr().out
+    assert "RECIPE_ENUMERATION_BLOCKED_BY_CONFIGURATION" in output
+    assert (
+        "max_candidate_states_explored must be greater than or equal to "
+        "max_recipe_candidates_returned"
+    ) in output
+
+
+@pytest.mark.parametrize(
+    "flag",
+    [
+        "--max-recipe-candidates-returned",
+        "--max-candidate-states-explored",
+    ],
+)
+def test_recipe_enumeration_non_integer_fails_parser(
+    flag: str,
+) -> None:
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["--goods-id", "34279", flag, "not-an-int"])
+
+
+def test_recipe_enumeration_flags_leave_other_config_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    baseline = _capture_orchestrator_kwargs(
+        monkeypatch,
+        ["--goods-id", "34279"],
+    )
+    explicit = _capture_orchestrator_kwargs(
+        monkeypatch,
+        [
+            "--goods-id",
+            "34279",
+            "--max-recipe-candidates-returned",
+            "4",
+            "--max-candidate-states-explored",
+            "512",
+        ],
+    )
+    assert explicit["solver_config"] == baseline["solver_config"]
+    assert explicit["risk_config"] == baseline["risk_config"]
+    assert (
+        explicit["max_valuation_requests_per_run"]
+        == baseline["max_valuation_requests_per_run"]
+        == 5
+    )
+    assert explicit["goods_ids"] == baseline["goods_ids"] == ("34279",)
 
 
 def test_parser_preserves_repeatable_goods_ids() -> None:

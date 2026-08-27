@@ -39,7 +39,12 @@ from app.services.market_universe_builder import (
     UniverseAllocationStrategy,
     build_universe_goods_ids,
 )
-from app.services.recipe_solver import RecipeSolverConfig
+from app.services.recipe_solver import (
+    DEFAULT_MAX_CANDIDATE_STATES_EXPLORED,
+    DEFAULT_MAX_RECIPE_CANDIDATES_RETURNED,
+    RecipeEnumerationConfig,
+    RecipeSolverConfig,
+)
 from app.services.risk_filter import RiskFilterConfig
 from app.services.scanner_orchestrator import LiveScannerOrchestrator, ScannerRunResult
 from app.services.skin_metadata_resolver import PinnedSkinMetadataResolver
@@ -185,6 +190,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Hard cap for unique SteamDT output-price requests (1..60)",
     )
     parser.add_argument(
+        "--max-recipe-candidates-returned",
+        type=int,
+        default=DEFAULT_MAX_RECIPE_CANDIDATES_RETURNED,
+        help="Bound on structural recipe candidates returned by scanner enumeration",
+    )
+    parser.add_argument(
+        "--max-candidate-states-explored",
+        type=int,
+        default=DEFAULT_MAX_CANDIDATE_STATES_EXPLORED,
+        help="Bound on candidate search states explored by scanner enumeration",
+    )
+    parser.add_argument(
         "--json",
         action="store_true",
         help="Emit machine-readable JSON instead of the human summary",
@@ -223,7 +240,11 @@ def build_steamdt_http_client(
     )
 
 
-async def run_live_scan_once(args: argparse.Namespace) -> ScannerRunResult:
+async def run_live_scan_once(
+    args: argparse.Namespace,
+    *,
+    enumeration_config: RecipeEnumerationConfig,
+) -> ScannerRunResult:
     """Construct live dependencies, run ONE scan, close clients, return result."""
     settings = LiveScanSettings()
     validate_live_valuation_config(
@@ -268,6 +289,7 @@ async def run_live_scan_once(args: argparse.Namespace) -> ScannerRunResult:
             metadata_resolver=metadata_resolver,
             valuation_service=valuation_service,
             max_valuation_requests_per_run=args.max_valuation_requests,
+            enumeration_config=enumeration_config,
             solver_config=RecipeSolverConfig(
                 input_rarity=args.rarity,
                 input_count=10,
@@ -644,6 +666,17 @@ def run_universe_preview(args: argparse.Namespace) -> int:
 
 async def _main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    try:
+        enumeration_config = RecipeEnumerationConfig(
+            max_recipe_candidates_returned=(
+                args.max_recipe_candidates_returned
+            ),
+            max_candidate_states_explored=args.max_candidate_states_explored,
+        )
+    except ValueError as exc:
+        print("RECIPE_ENUMERATION_BLOCKED_BY_CONFIGURATION")
+        print(str(exc))
+        return 2
     if not args.auto_universe and (
         args.allocation is not None or args.target_cohorts is not None
     ):
@@ -703,7 +736,10 @@ async def _main(argv: Sequence[str] | None = None) -> int:
             settings,
             max_valuation_requests=args.max_valuation_requests,
         )
-    result = await run_live_scan_once(args)
+    result = await run_live_scan_once(
+        args,
+        enumeration_config=enumeration_config,
+    )
     if args.json:
         print(json.dumps(_to_jsonable(result), ensure_ascii=False, sort_keys=True))
     else:
