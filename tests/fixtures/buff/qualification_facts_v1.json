@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "source": "buff",
+  "records": [
+    {
+      "listing_id": "qualification-synthetic-001",
+      "market_hash_name": "Synthetic Qualification Eligible Item",
+      "is_stattrak": false,
+      "is_souvenir": false,
+      "has_special_seed": false
+    },
+    {
+      "listing_id": "qualification-synthetic-002",
+      "market_hash_name": "Synthetic Qualification Explicit Classification",
+      "is_stattrak": true,
+      "is_souvenir": false,
+      "has_special_seed": false
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+
+  [eric_zhu]
+    'AK-47 | Redline (Field-Tested)': 33960
+    '★ Karambit | Doppler (Factory New)': 42998
+    'AWP | Dragon Lore (Factory New)': 44060
+    'StatTrak™ AK-47 | Redline (Field-Tested)': 38220
+    'Souvenir AWP | Dragon Lore (Factory New)': 45462
+    'Sticker | Howling Dawn': 40335
+    'AK-47 | The Empress (Field-Tested)': 33970
+    'Glock-18 | Fade (Factory New)': 35020
+    '★ M9 Bayonet | Fade (Factory New)': 33812
+    'Chroma Case': 33813
+    'Chroma 2 Case': 34369
+    'Operation Bravo Case': 35879
+
+  [modest_serhat]
+    'AK-47 | Redline (Field-Tested)': 33960
+    '★ Karambit | Doppler (Factory New)': 42998
+    'AWP | Dragon Lore (Factory New)': 44060
+    'StatTrak™ AK-47 | Redline (Field-Tested)': 38220
+    'Souvenir AWP | Dragon Lore (Factory New)': 45462
+    'Sticker | Howling Dawn': 40335
+    'AK-47 | The Empress (Field-Tested)': 33970
+    'Glock-18 | Fade (Factory New)': 35020
+    '★ M9 Bayonet | Fade (Factory New)': 33812
+    'Chroma Case': 33813
+    'Chroma 2 Case': 34369
+    'Operation Bravo Case': 35879
+
+  [timofey_ivanenko]
+    'AK-47 | Redline (Field-Tested)': 33960
+    '★ Karambit | Doppler (Factory New)': 42998
+    'AWP | Dragon Lore (Factory New)': 44060
+    'StatTrak™ AK-47 | Redline (Field-Tested)': 38220
+    'Souvenir AWP | Dragon Lore (Factory New)': 45462
+    'Sticker | Howling Dawn': 40335
+    'AK-47 | The Empress (Field-Tested)': 33970
+    'Glock-18 | Fade (Factory New)': 35020
+    '★ M9 Bayonet | Fade (Factory New)': 33812
+    'Chroma Case': 33813
+    'Chroma 2 Case': 34369
+    'Operation Bravo Case': 35879

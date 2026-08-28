@@ -1,0 +1,112 @@
+[
+  {
+    "listing_id": "listing-0",
+    "goods_id": "goods-1",
+    "market_hash_name": "Input Skin 0",
+    "price_cny": "10.00",
+    "float_value": 0.10,
+    "paint_seed": 100,
+    "inspect_link": "steam://inspect/0",
+    "seller_id": "seller-0",
+    "raw": {"fixture": true, "listing_id": "listing-0"}
+  },
+  {
+    "listing_id": "listing-1",
+    "goods_id": "goods-1",
+    "market_hash_name": "Input Skin 1",
+    "price_cny": "11.00",
+    "float_value": 0.11,
+    "paint_seed": 101,
+    "inspect_link": "steam://inspect/1",
+    "seller_id": "seller-1",
+    "raw": {"fixture": true, "listing_id": "listing-1"}
+  },
+  {
+    "listing_id": "listing-2",
+    "goods_id": "goods-1",
+    "market_hash_name": "Input Skin 2",
+    "price_cny": "12.00",
+    "float_value": 0.12,
+    "paint_seed": 102,
+    "inspect_link": "steam://inspect/2",
+    "seller_id": "seller-2",
+    "raw": {"fixture": true, "listing_id": "listing-2"}
+  },
+  {
+    "listing_id": "listing-3",
+    "goods_id": "goods-1",
+    "market_hash_name": "Input Skin 3",
+    "price_cny": "13.00",
+    "float_value": 0.13,
+    "paint_seed": 103,
+    "inspect_link": "steam://inspect/3",
+    "seller_id": "seller-3",
+    "raw": {"fixture": true, "listing_id": "listing-3"}
+  },
+  {
+    "listing_id": "listing-4",
+    "goods_id": "goods-1",
+    "market_hash_name": "Input Skin 4",
+    "price_cny": "14.00",
+    "float_value": 0.14,
+    "paint_seed": 104,
+    "inspect_link": "steam://inspect/4",
+    "seller_id": "seller-4",
+    "raw": {"fixture": true, "listing_id": "listing-4"}
+  },
+  {
+    "listing_id": "listing-5",
+    "goods_id": "goods-1",
+    "market_hash_name": "Input Skin 5",
+    "price_cny": "15.00",
+    "float_value": 0.15,
+    "paint_seed": 105,
+    "inspect_link": "steam://inspect/5",
+    "seller_id": "seller-5",
+    "raw": {"fixture": true, "listing_id": "listing-5"}
+  },
+  {
+    "listing_id": "listing-6",
+    "goods_id": "goods-1",
+    "market_hash_name": "Input Skin 6",
+    "price_cny": "16.00",
+    "float_value": 0.16,
+    "paint_seed": 106,
+    "inspect_link": "steam://inspect/6",
+    "seller_id": "seller-6",
+    "raw": {"fixture": true, "listing_id": "listing-6"}
+  },
+  {
+    "listing_id": "listing-7",
+    "goods_id": "goods-1",
+    "market_hash_name": "Input Skin 7",
+    "price_cny": "17.00",
+    "float_value": 0.17,
+    "paint_seed": 107,
+    "inspect_link": "steam://inspect/7",
+    "seller_id": "seller-7",
+    "raw": {"fixture": true, "listing_id": "listing-7"}
+  },
+  {
+    "listing_id": "listing-8",
+    "goods_id": "goods-1",
+    "market_hash_name": "Input Skin 8",
+    "price_cny": "18.00",
+    "float_value": 0.18,
+    "paint_seed": 108,
+    "inspect_link": "steam://inspect/8",
+    "seller_id": "seller-8",
+    "raw": {"fixture": true, "listing_id": "listing-8"}
+  },
+  {
+    "listing_id": "listing-9",
+    "goods_id": "goods-1",
+    "market_hash_name": "Input Skin 9",
+    "price_cny": "19.00",
+    "float_value": 0.19,
+    "paint_seed": 109,
+    "inspect_link": "steam://inspect/9",
+    "seller_id": "seller-9",
+    "raw": {"fixture": true, "listing_id": "listing-9"}
+  }
+]

@@ -1,0 +1,27 @@
+{
+  "code": "OK",
+  "data": {
+    "items": [
+      {
+        "id": "synthetic-sell-order-001",
+        "price": "123.4500",
+        "asset_info": {
+          "assetid": "synthetic-asset-001",
+          "paintwear": "0.031250",
+          "paintseed": 321,
+          "market_hash_name": "Unverified Synthetic Name"
+        },
+        "quantity": 99
+      },
+      {
+        "id": "synthetic-sell-order-002",
+        "price": "45.6700",
+        "asset_info": {
+          "assetid": "synthetic-asset-002",
+          "paintwear": "0.456700"
+        },
+        "market_hash_name": "Another Unverified Synthetic Name"
+      }
+    ]
+  }
+}

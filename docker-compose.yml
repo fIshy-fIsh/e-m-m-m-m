@@ -1,0 +1,54 @@
+services:
+  scheduler:
+    build: .
+    command: python -m app.jobs.scheduler
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DRY_RUN: "true"
+    depends_on:
+      - postgres
+      - redis
+
+  api:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DRY_RUN: "true"
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: cs2bot
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: cs2tradeup
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
