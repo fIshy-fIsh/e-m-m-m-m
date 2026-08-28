@@ -528,14 +528,14 @@ The components remain in the tree as paused, offline-tested optional infrastruct
 - Scheduler/continuous scanning: **not implemented**.
 - R0-A Public Documentation Synchronization: **COMPLETE** (`1dbc6f1`).
 - R0-B Minimum CI: **COMPLETE / REMOTE GREEN** (`7a6349e`; GitHub Actions `CI` / `quality` success).
-- R0-C Main History Consolidation: **NOT STARTED**. `origin/main` remains a separate initial history; no merge has been performed.
+- R0-C Main History Consolidation: **COMPLETE**. PR #1 (`Reconcile main history with current project lineage`) merged using `Create a merge commit`. Final canonical `main` tip is `9cfaf36db028661075a495587ac32e51256fffe8` with parents `{24ece8582d1b3cb1b72322afc15de94b652a8bcc, 3aa44e9364268308d0fbb4c0532f4a910f4f85e8}`. Consolidation commit `3aa44e93…` is topology-only and its tree `7a39d28f2654cdf3b4eb98c8123227de64db5e34` equals the DEV tree `4c2f1ef6cd850985e71f041601ae58489abe947b`. CI workflow blob `02d0ce81d3704d9bc9c513df9b474855ffeae703` is preserved. Final-main push CI: workflow `CI`, run `33173529766`, event `push`, branch `main`, head SHA `9cfaf36…`, conclusion `success`. The merge was performed manually through the GitHub web UI after automated fine-grained-PAT merge attempts were blocked by GitHub token authorization.
 - R0-D Branch / Repository Cleanup: **NOT STARTED**. No branch cleanup has been performed.
 
 ## Next Action (ordered)
 
 - **No new product-development phase is currently authorized.**
-- **R0-C Main History Consolidation is the next repository-maintenance milestone and remains NOT STARTED until explicitly authorized.**
-- R0-D Branch / Repository Cleanup remains NOT STARTED.
+- **R0-C Main History Consolidation is COMPLETE.** Canonical `main` tip is `9cfaf36db028661075a495587ac32e51256fffe8`; topology / ancestry / tree / CI workflow blob all verified; final-main push CI green.
+- R0-D Branch / Repository Cleanup is the next repository-maintenance milestone and remains **NOT STARTED** until explicitly authorized.
 - Scanner Valuation Integration is **PROPOSED / NOT AUTHORIZED**: integrate the existing Phase 12D cache stack into live scanner valuation, add run-level exact-price reuse and cache-hit / cache-miss / provider-demand accounting, and preserve strict complete-price, bounded-ordering, and atomic valuation-budget semantics.
 - Valuation Budget Calibration is **PROPOSED / NOT AUTHORIZED**: measure unique-output cardinality offline before proposing any numeric cap.
 - Any future development phase must be explicitly authorized and must not silently relax `D-ENUM-001`–`D-ENUM-004`, `D-CACHE-001`, `D-SCANNER-001`, `D-VALIDATION-001`, `D-MEMORY-001`, `D-ADAPTER-003`, or `D-ADAPTER-004`.

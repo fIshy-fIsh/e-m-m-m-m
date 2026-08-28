@@ -75,6 +75,18 @@ baseline:                                    bb09068
                                             sync AI context after Phase 13T
                                             (full SHA bb090686407032b915172eaed2424bf2dd41a9a3)
 
+Post-R0-C canonical main:                   9cfaf36
+                                            sync docs after R0-C repository consolidation
+                                            (full SHA 9cfaf36db028661075a495587ac32e51256fffe8)
+                                            parents:
+                                              24ece8582d1b3cb1b72322afc15de94b652a8bcc (old main)
+                                              3aa44e9364268308d0fbb4c0532f4a910f4f85e8 (consolidation)
+                                            tree:   7a39d28f2654cdf3b4eb98c8123227de64db5e34
+                                            DEV tip (4c2f1ef) is an ancestor of main
+
+Historical DEV tip (pre-R0-C development line): 4c2f1ef6cd850985e71f041601ae58489abe947b
+                                            sync docs after minimum CI validation
+
 Live repository HEAD / branch / working tree:
   MUST be verified from Git at task entry.
   Do not infer current HEAD from this document.
@@ -91,7 +103,7 @@ Live repository HEAD / branch / working tree:
 - **R0-B — Minimum CI:** **COMPLETE**. Implementation checkpoint `7a6349e` (`add minimum GitHub Actions CI`). `.github/workflows/ci.yml` runs on `push` and `pull_request` with `contents: read`, `ubuntu-latest`, Python 3.12, `python -m pip install -e ".[dev]"`, `ruff check .`, `mypy app`, and `pytest`.
 - **Remote validation:** GitHub Actions workflow `CI`, job `quality`, run `33098999757` completed successfully for checkpoint `7a6349e`. Local validation also passed: ruff, mypy, and pytest (`3336 passed, 23 skipped, 1 warning`).
 - **Safety:** default CI is offline-safe and requires no real secrets. Live / integration paths remain opt-in and environment-gated; default CI performs no live BUFF, SteamDT, Redis, or Discord operation.
-- **R0-C — Main History Consolidation:** **NOT STARTED**. `origin/main` remains a separate initial history; no merge has been performed.
+- **R0-C — Main History Consolidation:** **COMPLETE**. PR #1 (`Reconcile main history with current project lineage`) merged using `Create a merge commit`. Final canonical `main` tip is `9cfaf36db028661075a495587ac32e51256fffe8` with parents `{24ece8582d1b3cb1b72322afc15de94b652a8bcc, 3aa44e9364268308d0fbb4c0532f4a910f4f85e8}`; tree `7a39d28f2654cdf3b4eb98c8123227de64db5e34`; CI workflow blob `02d0ce81d3704d9bc9c513df9b474855ffeae703`. DEV tip `4c2f1ef6cd850985e71f041601ae58489abe947b` is an ancestor. Final-main push CI: workflow `CI`, run `33173529766`, conclusion `success`.
 - **R0-D — Branch / Repository Cleanup:** **NOT STARTED**. No branch cleanup has been performed.
 
 - **Phase:** `PHASE_13T_COMPLETE`. Phase 13T-1 through 13T-4A are committed and pushed (latest commit `9288794`); Phase 13T-4B is a live-only validation performed against that commit and intentionally produced no commit and no repository artifact.

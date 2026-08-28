@@ -69,10 +69,13 @@
 - 阶段：`PHASE_13T_COMPLETE`。
 - Phase 13T production / test checkpoint：`9288794`（`add bounded multi-recipe scale validation`）。
 - Post-Phase-13T handoff baseline：`bb09068`（`sync AI context after Phase 13T`）。
+- Pre-R0-C DEV tip (historical)：`4c2f1ef`（`sync docs after minimum CI validation`）。
+- Post-R0-C canonical main：`9cfaf36`（`sync docs after R0-C repository consolidation`），parents `{24ece858, 3aa44e93}`，tree `7a39d28`。
 - 当前 Git HEAD 必须通过仓库实时验证（`git rev-parse HEAD` / `git status --short`），不在此处硬编码。
 - 当前 bounded multi-recipe 校验：`tests/test_multi_recipe_scanner_scale_validation.py`。
 - Minimum CI 已建立并远端验证：`.github/workflows/ci.yml`（Python 3.12；`ruff check .`；`mypy app`；`pytest`）。
 - 权威交接文档：`docs/ai-context/DEVELOPMENT_HANDOFF.md`。
+- R0-A / R0-B / R0-C：COMPLETE。R0-D：NOT STARTED（branch cleanup 需单独授权）。
 
 ## 禁止事项
 - 自动购买
