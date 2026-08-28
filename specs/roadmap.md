@@ -365,22 +365,28 @@ safety:       default suite offline-safe; no real secrets or live smokes
 ```
 
 ```text
-R0-C Main History Consolidation     NOT STARTED
-                                    merge feature/steamdt-cache-rate-limit into main
-                                    via a manual reconciliation commit (fast-forward
-                                    is not possible because origin/main has no shared
-                                    commit with the active branch)
+R0-A Public Documentation Synchronization COMPLETE
+                                  public docs / roadmap / mission / metadata / spec
+                                  synchronization checkpoint 1dbc6f1
 
-R0-D Branch / Repository Cleanup    NOT STARTED
-                                    delete origin/feature/steamdt-data-source AFTER
-                                    the active branch is merged into main;
-                                    consider local-only feature/buff-tradeup-scanner
-                                    (tag anchor v1-dry-run-baseline is independent);
-                                    prune stale worktree-agent-* references;
-                                    apply branch protection to main;
-                                    refresh repository description / topics;
-                                    establish tag discipline (PHASE_13T_COMPLETE on main);
-                                    prune worktree-agent-* references
+R0-B Minimum CI                 COMPLETE
+                                  workflow .github/workflows/ci.yml
+                                  push / pull_request, contents: read,
+                                  ubuntu-latest, Python 3.12,
+                                  ruff check . / mypy app / pytest
+                                  remote validation run 33098999757 success
+                                  checkpoint 7a6349e
+
+R0-C Main History Consolidation COMPLETE
+                                  PR #1 merged with merge-commit semantics
+                                  canonical main P = 9cfaf36...
+                                  parents: {24ece858..., 3aa44e93...}
+                                  tree == DEV tree == 7a39d28...
+                                  CI workflow blob 02d0ce81... preserved
+                                  exact-P push CI run 33173529766 success
+
+R0-D Branch / Repository Cleanup NOT STARTED
+                                  requires separate authorization
 ```
 
 ## Next Proposed Functional Work

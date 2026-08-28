@@ -16,6 +16,7 @@ Production scanner:                   bounded multi-recipe one-shot scanner
 Default enumeration:                  2 candidates / 256 states
 
 Active development line:              feature/steamdt-cache-rate-limit
+                                      (now an ancestor of canonical main)
 
 Latest production / test checkpoint:  9288794
                                       (add bounded multi-recipe scale validation)
@@ -23,6 +24,14 @@ Latest production / test checkpoint:  9288794
 Post-Phase-13T documentation /
 handoff baseline:                     bb09068
                                       (sync AI context after Phase 13T)
+
+Pre-R0-C DEV tip:                     4c2f1ef
+                                      (sync docs after minimum CI validation)
+
+Canonical main after R0-C:            9cfaf36
+                                      (sync docs after R0-C repository consolidation)
+                                      parents: {24ece858..., 3aa44e93...}
+                                      tree: 7a39d28...
 
 Repository HEAD / branch / tree:      MUST be verified from Git at task entry;
                                       do not infer current HEAD from this file
@@ -231,11 +240,15 @@ What are the safety boundaries?
   valuation, no probability renormalization.
 
 Where is the project in its roadmap?
-  Phase 13T is complete. Active development line is the
-  feature/steamdt-cache-rate-limit branch. Repository consolidation
-  (main history and branch cleanup) is pending because the current `main`
-  branch is on a separate initial history from the active development
-  line. See specs/roadmap.md for the current roadmap structure.
+  Phase 13T is complete. R0-A (public documentation
+  synchronization), R0-B (minimum CI), and R0-C (main history
+  consolidation) are complete; canonical main now reflects the
+  full current project lineage. The historical
+  feature/steamdt-cache-rate-limit branch remains present but is
+  no longer the canonical reference. R0-D (branch / repository
+  cleanup) is the next repository-maintenance milestone and has
+  NOT STARTED. See specs/roadmap.md for the current roadmap
+  structure.
 
 What should happen next?
   No new functional phase is currently authorized. The natural next

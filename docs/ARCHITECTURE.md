@@ -6,8 +6,22 @@ This repository contains a backend-first, **read-only** CS2 BUFF trade-up opport
 
 ## Current Production Data Flow
 
+The production scanner is invoked through `LiveScannerOrchestrator.run_once(goods_ids)`. The goods IDs are decided **before** any BUFF listing fetch — `MarketUniverseBuilder` is a CLI-side planner, not a runtime post-fetch step. The full execution therefore has two clearly separated layers.
+
+### CLI auto-universe planning
+
 ```text
-BUFF anonymous sell-order listings
+MarketUniverseBuilder
+  -> goods_ids                                 (CLI planner; BREADTH default,
+                                                COHORT_DEPTH opt-in;
+                                                cap 10; offline preview mode)
+  -> LiveScannerOrchestrator.run_once(goods_ids)
+```
+
+### Scanner data path
+
+```text
+BUFF anonymous sell-order listings (for each goods_id)
   -> identity binding                       BuffCommunityIdentityResolver (pinned offline
                                             community catalog, exact fail-closed)
   -> intrinsic flag binding                 CanonicalNameIntrinsicFlagResolver
@@ -16,13 +30,14 @@ BUFF anonymous sell-order listings
   -> TradeUpInputCandidate pool
   -> enrichment                             TradeUpInputEnrichment
                                             (pinned metadata + Decimal -> float)
-  -> bounded automatic universe             BREADTH (default) or COHORT_DEPTH (opt-in)
-  -> enumerate_scanner_recipe_selections    Phase 13T-2 composition adapter
-                                            (per-bucket fair-share aggregate allocation,
-                                             exact InputItem rehydration after temporary
+  -> InputItem pool
+  -> bounded scanner composition            enumerate_scanner_recipe_selections
+                                            (Phase 13T-2; per-bucket fair-share
+                                             aggregate allocation, exact InputItem
+                                             rehydration after temporary
                                              souvenir=False solver projection)
-  -> enumerate_recipe_selections            Phase 13T-1 bounded solver enumerator
-                                            (default 2 / 256)
+  -> bounded protected multi-recipe solver  enumerate_recipe_selections
+                                            (Phase 13T-1; default 2 / 256)
   -> calculate_tradeup_results              existing trade-up engine
   -> ValuationService.value_tradeup_results
   -> SteamDTBuffPriceProvider               strict exact case-sensitive BUFF aggregate
@@ -33,7 +48,7 @@ BUFF anonymous sell-order listings
   -> ScannerRunResult
 ```
 
-The production `run_once()` path is the chain above. The legacy `construct_scanner_recipe_selections` / `construct_recipe_selections` APIs remain available for compatibility but are **not** the production run path.
+The production `run_once(goods_ids)` path is the chain above. The legacy `construct_scanner_recipe_selections` / `construct_recipe_selections` APIs remain available for compatibility but are **not** the production run path.
 
 ## Bounded Multi-Recipe Enumeration
 
