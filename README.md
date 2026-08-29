@@ -15,8 +15,9 @@ Production scanner:                   bounded multi-recipe one-shot scanner
 
 Default enumeration:                  2 candidates / 256 states
 
-Active development line:              feature/steamdt-cache-rate-limit
-                                      (now an ancestor of canonical main)
+Active development line:              canonical main
+                                      (historical feature/steamdt-cache-rate-limit
+                                      is an ancestor; deleted in R0-D cleanup)
 
 Latest production / test checkpoint:  9288794
                                       (add bounded multi-recipe scale validation)
@@ -28,10 +29,17 @@ handoff baseline:                     bb09068
 Pre-R0-C DEV tip:                     4c2f1ef
                                       (sync docs after minimum CI validation)
 
-Canonical main after R0-C:            9cfaf36
+Post-R0-C main (historical ancestor): 9cfaf36
                                       (sync docs after R0-C repository consolidation)
                                       parents: {24ece858..., 3aa44e93...}
                                       tree: 7a39d28...
+
+Post-R0-C docs checkpoint:            b13201b
+                                      (sync docs after R0-C docs checkpoint, PR #2)
+
+Canonical main after R0-D cleanup:    P2 = 328269112f229faf3fce4cf0be4b9c7875582b65
+                                      parents: {9cfaf36..., b13201b...}
+                                      tree:   b7648ad185aaf9ae4f4ca1057294e4b84010ab8d
 
 Repository HEAD / branch / tree:      MUST be verified from Git at task entry;
                                       do not infer current HEAD from this file
@@ -241,14 +249,14 @@ What are the safety boundaries?
 
 Where is the project in its roadmap?
   Phase 13T is complete. R0-A (public documentation
-  synchronization), R0-B (minimum CI), and R0-C (main history
-  consolidation) are complete; canonical main now reflects the
-  full current project lineage. The historical
-  feature/steamdt-cache-rate-limit branch remains present but is
-  no longer the canonical reference. R0-D (branch / repository
-  cleanup) is the next repository-maintenance milestone and has
-  NOT STARTED. See specs/roadmap.md for the current roadmap
-  structure.
+  synchronization), R0-B (minimum CI), R0-C (main history
+  consolidation), and the post-R0-C docs checkpoint are
+  complete; canonical main now reflects the full current
+  project lineage. R0-D (branch / repository cleanup)
+  execution is complete and the completion docs checkpoint
+  PR is open; R0-D will be marked fully complete after that
+  PR is merged and post-merge verified. See specs/roadmap.md
+  for the current roadmap structure.
 
 What should happen next?
   No new functional phase is currently authorized. The natural next
@@ -257,6 +265,8 @@ What should happen next?
   valuation path and adding run-level cross-recipe exact-price reuse)
   and Valuation Budget Calibration (measuring unique output-name
   cardinality under cohort-depth allocation). Both are proposed only.
+  The immediate next repository-maintenance step is to merge the
+  R0-D completion docs checkpoint PR and verify post-merge.
 ```
 
 ## Where to look next
@@ -286,4 +296,4 @@ pyproject.toml               project metadata and tooling configuration
 - Confirm the real Discord Webhook URL is a private channel and that alerts are an allowlisted summary only.
 - Set `DRY_RUN=false` only after explicit review.
 - Never commit `.env`.
-- Run `ruff check .`, `mypy app`, and `pytest` against the current `feature/steamdt-cache-rate-limit` branch before promoting to a new integration milestone.
+- Run `ruff check .`, `mypy app`, and `pytest` against the current `main` branch before promoting to a new integration milestone.

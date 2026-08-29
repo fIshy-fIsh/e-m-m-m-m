@@ -7,7 +7,9 @@ Current phase:                            PHASE_13T_COMPLETE
 
 Current capability:                       read-only bounded multi-recipe one-shot scanner
 
-Active development line:                  feature/steamdt-cache-rate-limit
+Active development line:                  canonical main
+                                          (historical feature/steamdt-cache-rate-limit is an
+                                           ancestor; removed during R0-D cleanup)
 
 Latest production / test checkpoint:      9288794
                                         add bounded multi-recipe scale validation
@@ -20,8 +22,20 @@ handoff baseline:                         bb09068
 
 Default recipe enumeration:               2 candidates / 256 states
 
-Repository normalization:                  NOT YET COMPLETE (origin/main is on a separate
-                                        initial history; merge requires manual reconciliation)
+Repository normalization:                  COMPLETE
+                                        canonical main = P2 =
+                                          328269112f229faf3fce4cf0be4b9c7875582b65
+                                        parents: {9cfaf36..., b13201b...}
+                                        tree:   b7648ad185aaf9ae4f4ca1057294e4b84010ab8d
+                                        CI workflow blob 02d0ce81... preserved
+                                        (R0-A / R0-B / R0-C / R0-C docs checkpoint all complete)
+
+Branch / repository cleanup (R0-D):       IN PROGRESS — CLEANUP COMPLETE /
+                                          COMPLETION DOCS PR OPEN
+                                        (R0-D1 audit, R0-D2 / R0-D2-BIS / R0-D2-TER
+                                         cleanup all complete; canonical main unchanged
+                                         by cleanup; this documentation checkpoint PR is
+                                         the final step before R0-D can be marked COMPLETE)
 
 Live repository HEAD / branch / tree:     MUST be verified from Git at task entry;
                                         do not infer current HEAD from this document
@@ -37,7 +51,7 @@ Concise chronological milestone grouping. Detailed commit-level evidence, decisi
 
 ### V1 Dry-run Foundation
 
-Anchored by `feature/buff-tradeup-scanner` (local-only branch) and tag `v1-dry-run-baseline -> 32ab47c5`. Branch and tag are independent refs; the tag independently preserves the baseline commit regardless of any future branch cleanup.
+Historically anchored by `feature/buff-tradeup-scanner` (local-only branch; removed during R0-D cleanup) and tag `v1-dry-run-baseline -> 32ab47c5`. The tag independently preserves the baseline commit. Branch and tag were separate refs; the branch was safely deletable in R0-D because its tip exactly equaled the retained tag target and it had 0 unique commits vs canonical main.
 
 ```text
 trade-up domain model
@@ -270,7 +284,11 @@ Original skeleton / planning baseline
   -> Phase 13S cohort depth
   -> Phase 13T bounded multi-recipe migration
   -> bb09068 AI-context synchronization
-  -> R0 public-document synchronization
+  -> R0-A public-document synchronization
+  -> R0-B minimum CI
+  -> R0-C main history consolidation
+  -> b13201b post-R0-C docs checkpoint
+  -> R0-D branch / repository cleanup (execution complete; docs checkpoint PR open)
   -> proposed scanner valuation integration (next, not authorized)
 ```
 
@@ -311,32 +329,71 @@ Two structural invariants preserved across all phases: (1) `candidate-owned stat
 
 ## Repository Consolidation
 
-Immediate current maintenance track. No branch operation is authorized.
+R0-A / R0-B / R0-C / R0-C docs checkpoint are all complete. R0-D cleanup execution is complete; the completion documentation checkpoint PR is open.
 
-Current branch facts:
+Current branch state (after R0-D cleanup):
 
 ```text
-origin/main:
-  separate unrelated initial history (no shared commit with the
-  active branch); cannot fast-forward from the active branch
+canonical main (local + remote):   ONLY branch
+  remote SHA: 328269112f229faf3fce4cf0be4b9c7875582b65 (P2)
+  local SHA:   328269112f229faf3fce4cf0be4b9c7875582b65 (tracks origin/main at 0 0)
+  parents:     {9cfaf36..., b13201b...}
+  tree:        b7648ad185aaf9ae4f4ca1057294e4b84010ab8d
 
-feature/steamdt-cache-rate-limit:
-  active development line;
-  production / test checkpoint = 9288794;
-  documentation / handoff baseline = bb09068;
-  live HEAD / branch / tree state must be verified from Git
-
-feature/steamdt-data-source:
-  strict ancestor / superseded (all of its commits are also on
-  feature/steamdt-cache-rate-limit);
-  safe to delete after the active branch is merged into main
-
-feature/buff-tradeup-scanner:
-  historical local ancestor
-  (independently preserved by tag v1-dry-run-baseline -> 32ab47c5;
-   branch and tag are separate refs; branch cleanup may be
-   considered after repository consolidation)
+linked worktrees:                  ONLY D:/CS root
 ```
+
+Historical branches removed during R0-D cleanup (all retained as historical
+references; their commits remain reachable through canonical main and/or the
+preserved `v1-dry-run-baseline` tag):
+
+```text
+docs/r0c-completion-checkpoint    (removed; was b13201b;
+                                   commits remain reachable as ancestor of P2)
+repo/main-consolidation           (removed; was 3aa44e9;
+                                   commits remain reachable as ancestor of P2)
+feature/steamdt-cache-rate-limit  (removed; was 4c2f1ef (historical DEV tip);
+                                   commits remain reachable as ancestor of P2)
+feature/steamdt-data-source       (removed; was 912fec5;
+                                   strict ancestor of feature/steamdt-cache-rate-limit
+                                   and therefore of main)
+feature/buff-tradeup-scanner      (removed; was 32ab47c5;
+                                   historical local anchor preserved independently
+                                   by retained tag v1-dry-run-baseline -> 32ab47c5;
+                                   tag and branch were exact-tip duplicates;
+                                   0 unique commits lost)
+worktree-agent-a*                 (removed; 305 generated local branches at OLD_MAIN
+                                   24ece858; all were ancestors of P2 with 0 unique
+                                   commits; their linked Claude agent worktrees under
+                                   D:/CS/.claude/worktrees/agent-* were removed first)
+```
+
+Mandatory preserved local-only tag:
+
+```text
+v1-dry-run-baseline -> 32ab47c5b66a0f331457e69f1515e5e9bb2a37e1
+  status:        local-only (was never pushed)
+  retains:       the V1 dry-run foundation commit
+  relation:      branch feature/buff-tradeup-scanner (now removed) pointed
+                 at the same commit before R0-D cleanup
+```
+
+Cleanup method:
+
+```text
+`git worktree remove <path>` (no --force)  for 305 linked agent worktrees
+`git branch -d <name>`          (no -D)   for 305 worktree-agent local branches
+`git branch -d <name>`          (no -D)   for 5 named local branches
+`git push origin --delete <b>`            for 4 named remote branches
+0 force pushes; 0 -D deletions; 0 history rewrites; 0 tracked file changes;
+ 0 commits; 0 main pushes; 0 `git fetch --prune` / `git remote prune` /
+ `git worktree prune`; 0 settings changes.
+session-local `.claude/settings.local.json` (305, one per agent worktree)
+  was deleted before worktree removal as a separately authorized file
+  removal; no other files were touched inside any worktree.
+```
+
+Unique unpreserved history lost: **NO**.
 
 Consolidation status:
 
@@ -379,15 +436,35 @@ R0-B Minimum CI                 COMPLETE
 
 R0-C Main History Consolidation COMPLETE
                                   PR #1 merged with merge-commit semantics
-                                  canonical main P = 9cfaf36...
+                                  post-R0-C main = 9cfaf36...
                                   parents: {24ece858..., 3aa44e93...}
                                   tree == DEV tree == 7a39d28...
                                   CI workflow blob 02d0ce81... preserved
                                   exact-P push CI run 33173529766 success
 
-R0-D Branch / Repository Cleanup NOT STARTED
-                                  requires separate authorization
+R0-C docs checkpoint             MERGED / VERIFIED
+                                  PR #2 merged with merge-commit semantics
+                                  canonical main P2 = 328269112...
+                                  parents: {9cfaf36..., b13201b...}
+                                  tree:   b7648ad185aaf9ae4f4ca1057294e4b84010ab8d
+                                  CI workflow blob 02d0ce81... preserved
+                                  final-main push CI run 33175931060 success
+
+R0-D Branch / Repository Cleanup IN PROGRESS — CLEANUP COMPLETE /
+                                  COMPLETION DOCS PR OPEN
+                                  R0-D1 audit, R0-D2, R0-D2-BIS, R0-D2-TER complete
+                                  305 agent worktrees + 305 generated local branches
+                                  + 5 named local branches + 4 named remote branches
+                                  removed
+                                  canonical main unchanged at P2 (328269112...)
+                                  `v1-dry-run-baseline` preserved locally
+                                  no unique history lost
+                                  R0-D will be marked COMPLETE after the
+                                  completion docs checkpoint PR is merged
+                                  and post-merge verified on main
 ```
+
+R0-D completion condition: this checkpoint merged and verified on `main`.
 
 ## Next Proposed Functional Work
 
@@ -487,7 +564,9 @@ specs/tech-stack.md        Python 3.12, FastAPI, Redis, PostgreSQL,
 docs/ARCHITECTURE.md       current production architecture
 docs/SPEC.md               current functional requirements and non-goals
 specs/                     per-phase plan / requirements / validation documents
-git log feature/buff-tradeup-scanner
-git log origin/feature/steamdt-data-source
-git log origin/feature/steamdt-cache-rate-limit
+git log main               (canonical main; historical branches
+                           feature/buff-tradeup-scanner / feature/steamdt-data-source /
+                           feature/steamdt-cache-rate-limit / repo/main-consolidation /
+                           docs/r0c-completion-checkpoint were removed in R0-D
+                           and are reachable as ancestors of main)
 ```
