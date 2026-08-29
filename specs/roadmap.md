@@ -3,21 +3,18 @@
 ## Current Position
 
 ```text
-Current phase:                            PHASE_14A_COMPLETE
-                                          (Phase 14A — Scanner Valuation Integration
-                                           Design Freeze; docs only; no production
-                                           code; branch feature/scanner-valuation-integration)
+Current phase:                            PHASE_14B_COMPLETE
 
 Current capability:                       read-only bounded multi-recipe one-shot scanner
+                                          with run-scoped exact-name valuation reuse
 
 Active development line:                  feature/scanner-valuation-integration
-                                          (Phase 14A design freeze; canonical main P3
-                                           is unchanged and tracked at 0 0)
+                                          (canonical main P3 unchanged)
 
-Latest production / test checkpoint:      9288794
-                                        add bounded multi-recipe scale validation
-                                        (full SHA 92887947e0e1808f1bc23258cf53adb10a0036ee)
-                                        (Phase 14A did not modify production code)
+Latest production / test checkpoint:      Phase 14B branch commit
+                                          add run-scoped scanner valuation reuse
+                                          (verify exact SHA from Git)
+                                          3382 passed / 23 skipped / 1 warning
 
 Post-Phase-13T documentation /
 handoff baseline:                         bb09068
@@ -45,39 +42,29 @@ Branch / repository cleanup (R0-D):       COMPLETE
                                          final-main push CI green at run 33240760167
                                          SUCCESS)
 
-Phase 14A — Scanner Valuation
-Integration Design Freeze:               IN PROGRESS — DESIGN FREEZE (no code)
+Phase 14A / R1 design authority:          COMPLETE
+                                        e98cd97 / bb056e5
                                         specs/2026-08-29-scanner-valuation-integration-design-freeze/
-                                          requirements.md
-                                          plan.md
-                                          validation.md
-                                        six new decision IDs:
-                                          D-CACHE-002 (run-scoped exact-name reuse)
-                                          D-CACHE-003 (FRESH_ONLY initial policy)
-                                          D-BUDGET-001 (atomic live-demand preflight)
-                                          D-CACHE-004 (failure reuse within run)
-                                          D-ACCOUNTING-001 (additive counter migration)
-                                          D-PHASE14A-COMPLETE (design freeze closed)
-                                        D-CACHE-001 remains Active (runtime cache
-                                         not implemented); Phase 14A only freezes
-                                         the design. Phase 14B / 14C / 14D
-                                         (run-scoped reuse / cache integration /
-                                         CLI + scale-live validation) are
-                                         PROPOSED / NOT AUTHORIZED UNTIL R1 REVIEW.
-                                        Phase 14A-R1 (D-PHASE14A-R1-COHERENCE)
-                                         corrected nine internal design
-                                         contradictions before any 14B
-                                         implementation: strict BUFF adapter
-                                         at session level (not resolver
-                                         default); two-stage prepare/execute;
-                                         backend/codec errors are not live
-                                         candidates; PriceLookupResult
-                                         conversion semantics preserved;
-                                         Option A counters finalized; 14B
-                                         reuse test corrected (Recipe2 memo
-                                         hits = 9); TTL numeric default NOT
-                                         frozen; initial 14C is READ-only;
-                                         D-CACHE-001 remains Active.
+
+Phase 14B — Run-scoped exact-name
+valuation reuse:                          COMPLETE
+                                        fresh session per run_once
+                                        async memo-only prepare (zero provider calls)
+                                        atomic NEW-LIVE exact-name admission
+                                        execute NEW exact names only
+                                        success + terminal-failure reuse
+                                        no same-name retry / no cross-run reuse
+                                        existing ValuationService formula reused
+                                        legacy logical counters preserved
+                                        additive run_reuse/live/cache counters
+                                        deep-pool: 20 logical / 10 provider /
+                                          10 reuse; cap 10 pass; cap 9 zero-provider block
+                                        no Phase12D cache import or modification
+
+Phase 14C — Phase12D FRESH_ONLY
+cache READ integration:                  NEXT / NOT STARTED / NOT AUTHORIZED
+                                        strict-BUFF cached selector required
+                                        scanner write-after-live out of scope
 
 Live repository HEAD / branch / tree:     MUST be verified from Git at task entry;
                                         do not infer current HEAD from this document
@@ -166,8 +153,10 @@ Current caveat:
 
 ```text
 Phase 12D persistent / cache infrastructure:  IMPLEMENTED + UNIT TESTED
-Live scanner cache integration:                NOT IMPLEMENTED
-Run-level cross-recipe exact-price reuse:      NOT IMPLEMENTED
+Live scanner persistent-cache integration:     NOT IMPLEMENTED
+Run-level cross-recipe exact-name reuse:        IMPLEMENTED (PHASE 14B)
+FRESH_ONLY scanner cache reads:                  NOT IMPLEMENTED
+Scanner write-after-live:                        NOT IMPLEMENTED / OUT OF INITIAL 14C
 ```
 
 ### Phase 12E — BUFF Listing / Adapter Foundation
@@ -345,8 +334,10 @@ Phase 12A typed errors and retry classification       COMPLETE
 Phase 12B endpoint-specific in-memory limiter         COMPLETE
 Phase 12C Redis shared limiter                        COMPLETE
 Phase 12D price-cache infrastructure                  COMPLETE
-Live scanner cache integration                        NOT IMPLEMENTED
-Run-level cross-recipe exact-price reuse              NOT IMPLEMENTED
+Live scanner persistent-cache integration             NOT IMPLEMENTED
+Run-level cross-recipe exact-name valuation reuse      COMPLETE (PHASE 14B)
+FRESH_ONLY scanner cache reads                         NOT IMPLEMENTED
+Scanner write-after-live                               NOT IMPLEMENTED / OUT OF INITIAL 14C
 BUFF anonymous listing ingestion                      COMPLETE
 Live BUFF product / search / identity API             NOT INTEGRATED
 Pinned offline identity catalog                       COMPLETE
@@ -492,92 +483,76 @@ R0-C docs checkpoint             MERGED / VERIFIED
                                   CI workflow blob 02d0ce81... preserved
                                   final-main push CI run 33175931060 success
 
-R0-D Branch / Repository Cleanup IN PROGRESS — CLEANUP COMPLETE /
-                                  COMPLETION DOCS PR OPEN
+R0-D Branch / Repository Cleanup COMPLETE
                                   R0-D1 audit, R0-D2, R0-D2-BIS, R0-D2-TER complete
                                   305 agent worktrees + 305 generated local branches
                                   + 5 named local branches + 4 named remote branches
                                   removed
-                                  canonical main unchanged at P2 (328269112...)
+                                  completion docs PR #3 merged / verified
+                                  canonical main P3 = 24c95c029...
                                   `v1-dry-run-baseline` preserved locally
                                   no unique history lost
-                                  R0-D will be marked COMPLETE after the
-                                  completion docs checkpoint PR is merged
-                                  and post-merge verified on main
 ```
 
 R0-D completion condition: this checkpoint merged and verified on `main`. CONDITION SATISFIED — PR #3 merged on `main` at P3 = `24c95c029f583d5cc0b0a67986e48c06d0ef7957`; final-main push CI green (run 33240760167 SUCCESS). R0-D = COMPLETE.
 
-## Next Proposed Functional Work
+## Next Functional Work
 
-**Phase 14A is IN PROGRESS — DESIGN FREEZE (docs only; no production code).**
-**No new functional phase is currently in progress beyond Phase 14A.**
-**Phase 14B / 14C / 14D and Valuation Budget Calibration are PROPOSED / NOT AUTHORIZED.**
+**Phase 14A / 14A-R1 / 14B are COMPLETE.**
+**Phase 14C is NEXT / NOT STARTED / NOT AUTHORIZED.**
+**Phase 14D and Valuation Budget Calibration remain NOT STARTED / NOT AUTHORIZED.**
 
-### In progress — Phase 14A Scanner Valuation Integration Design Freeze
+### Completed — Phase 14B Run-scoped exact-name valuation reuse
 
 ```text
-scope (already completed at design-freeze time):
-  spec trilogy:
-    specs/2026-08-29-scanner-valuation-integration-design-freeze/
-      requirements.md  (current gap + non-goals + acceptance criteria)
-      plan.md          (RunScopedValuationSession seam + budget algorithm +
-                        counter migration contract + 14B/14C/14D sequence)
-      validation.md    (gate matrix + future test matrix A..N)
-  decision IDs appended to docs/ai-context/DECISION_LOG.md:
-    D-CACHE-002  run-scoped exact-name reuse is the only Phase 14 seam
-    D-CACHE-003  initial scanner cache policy is FRESH_ONLY
-    D-BUDGET-001  atomic live-demand preflight (max_valuation_requests_per_run
-                  now means NEW LIVE SteamDT provider demand, not structural
-                  recipe demand)
-    D-CACHE-004  failure reuse within a run; no automatic same-name retry
-    D-ACCOUNTING-001  additive counter migration preserves legacy semantics
-                      (Option A preferred; Option B fallback)
-    D-PHASE14A-COMPLETE  design freeze closed
+implemented:
+  app/services/scanner_valuation_session.py
+  reviewed scanner_orchestrator.py migration
+  fresh session per run_once
+  async prepare: memo-only, zero provider calls
+  atomic NEW-LIVE exact-name cap admission
+  execute: only NEW exact names
+  exact success + terminal-failure reuse
+  no same-name retry / no cross-run reuse
+  existing ValuationService formula authority retained
+  legacy logical counters preserved
+  additive run_reuse/live/cache counters
+  cache counters zero in 14B
 
-closure status:
-  D-CACHE-001 remains Active (runtime cache is not implemented);
-  Phase 14A only freezes the design.
-  No production code touched. main unchanged by Phase 14A.
-  Branch: feature/scanner-valuation-integration (not main).
+validated:
+  deep-pool two same-output recipes:
+    20 logical valuation requests
+    10 provider exact-name demand
+    10 run-reuse hits
+    cap 10 -> both fully valued
+    cap 9 -> both atomically blocked; zero provider calls
+  full offline suite: 3382 passed / 23 skipped / 1 warning
+
+not implemented:
+  persistent Phase12D scanner cache
+  FRESH_ONLY scanner cache reads
+  scanner write-after-live
 ```
 
-### Primary — Scanner Valuation Integration
+### Next — Phase 14C Phase12D FRESH_ONLY cache READ integration
 
 ```text
 scope:
-  integrate the EXISTING Phase 12D cache stack
-    (InMemoryPriceCache / RedisPriceCache / SteamDTCachedPriceResolver /
-     refresh service / planner / executor)
-    into the live scanner valuation path
-  add run-level exact-price reuse keyed by output market_hash_name
-  add cache-hit / cache-miss / provider-demand accounting
-  preserve exact-price / fail-closed semantics
-  preserve bounded multi-recipe ordering
-  preserve atomic fail-closed valuation budget behavior
+  run memo first
+  FRESH_ONLY persistent cache reads next
+  strict-BUFF cached selection adapter
+  miss / expired / policy-blocked -> NEW LIVE candidate
+  cache backend / codec / contract errors propagate fail-closed
+  InMemory default path; Redis optional
+  no stale valuation
+  no scanner write-after-live in initial 14C
+  no scheduler / background work
 
-sub-phase sequence (frozen by Phase 14A):
-  14B  Run-scoped exact-name reuse (no persistent cache yet)
-  14C  Phase 12D cache integration under FRESH_ONLY
-  14D  CLI + scale / live validation
-
-constraints:
-  no invented endpoints, signatures, or field mappings
-  no fallback valuation
-  no probability renormalization
-  no scheduler or background work introduced by this phase
-  no real BUFF / SteamDT request behavior change
-  the scanner-owned RunScopedValuationSession boundary lives
-    OUTSIDE app/services/valuation_service.py and
-    app/services/live_recipe_valuation.py (both Protected Core)
-
-closure of D-CACHE-001:
-  run-level cross-recipe exact-price reuse lives here, NOT in Deferred.
-  D-CACHE-001 is reclassified from Active to Implemented only after
-  Phase 14B / 14C land and are verified.
+status:
+  NOT STARTED / NOT AUTHORIZED
 ```
 
-### Secondary — Valuation Budget Calibration
+### Later — Valuation Budget Calibration
 
 ```text
 scope:

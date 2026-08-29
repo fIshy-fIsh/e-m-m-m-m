@@ -97,7 +97,7 @@ utils/ shared helper utilities
 
 ## Existing Cache / Refresh Infrastructure
 
-The Phase 12D cache and refresh stack is **implemented and unit-tested**. It is **not** currently wired into the live scanner valuation path. The two concepts are kept separate.
+The Phase 12D cache and refresh stack is **implemented and unit-tested**. It remains **unwired** from the live scanner valuation path. Phase 14B adds a separate scanner-owned run memo; it is not a persistent cache and imports no Phase 12D module.
 
 ### Persistent / cache snapshot infrastructure
 
@@ -124,17 +124,32 @@ steamdt_refresh_integration      manual end-to-end refresh integration command
 
 Status: implemented, unit-tested, opt-in via `STEAMDT_PRICE_CACHE_BACKEND`. Existing SteamDT client retry, typed errors, endpoint limiter, and server cooldown semantics are preserved unchanged.
 
-### Live scanner cache integration
+### Live scanner persistent-cache integration
 
-The live scanner valuation path (`scripts/run_live_scan_once.py` -> `LiveScannerOrchestrator` -> `ValuationService` -> `SteamDTBuffPriceProvider`) currently calls `SteamDTBuffPriceProvider.get_price()` / `get_prices()` directly. None of the four files import any Phase 12D cache module.
+The Phase 14B production path is:
 
-Status: **NOT IMPLEMENTED**.
+```text
+LiveScannerOrchestrator.run_once
+  -> fresh RunScopedValuationSession (one run only)
+  -> async prepare_output_prices (memo only; zero provider calls)
+  -> atomic NEW-LIVE exact-name admission
+  -> resolve_prepared (NEW exact names only)
+  -> full logical PriceLookupResult (memo + live)
+  -> existing ValuationService field application
+  -> existing metrics / risk / opportunity path
+```
 
-### Run-level cross-recipe exact-price reuse
+`app/services/scanner_valuation_session.py` and `app/services/scanner_orchestrator.py` import no Phase 12D cache module. FRESH_ONLY persistent-cache reads remain Phase 14C work.
 
-The same exact output market name in separate recipe valuation calls is currently a separate logical request. A per-run "already valued" memoization keyed by output market hash name does not exist.
+Status: **NOT IMPLEMENTED** (persistent Phase 12D scanner-cache integration).
 
-Status: **NOT IMPLEMENTED** (D-CACHE-001). Future implementation requires separate authorization and must preserve exact-price / fail-closed semantics, the atomic valuation budget, and bounded multi-recipe ordering.
+### Run-level cross-recipe exact-name valuation reuse
+
+A fresh scanner-owned session is constructed inside every `run_once()` call. The exact key is `output_market_hash_name`; no normalization, case folding, aliasing, `goods_id`, or `platformItemId` substitution is used. Successes and terminal failures are reused across later recipes in the same run; blocked NEW names are not memoized; nothing survives across runs.
+
+`max_valuation_requests_per_run` now counts NEW LIVE exact-name demand. The orchestrator prepares demand before any provider call and atomically blocks the whole recipe if demand exceeds the remaining cap. Legacy logical valuation counters remain recipe-facing; additive run-reuse/live-demand counters expose provider work. Cache counters exist but remain zero in Phase 14B.
+
+Status: **IMPLEMENTED** (Phase 14B). `D-CACHE-001` remains Active as the broader migration record until Phase 14C persistent-cache READ integration is implemented and verified. Scanner write-after-live remains out of scope for initial 14C.
 
 ## SteamDT Endpoint Inventory
 

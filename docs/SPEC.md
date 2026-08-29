@@ -214,7 +214,10 @@ Identity:
 Atomic valuation budget:
 
 - per-run hard cap `max_valuation_requests_per_run ∈ [1, 60]`, default 5
-- required logical requests strictly greater than the remaining cap block the whole recipe before any SteamDT HTTP / provider request is sent
+- budget counts NEW LIVE exact output names not present in the run memo
+- Stage A preparation performs zero provider calls
+- NEW LIVE demand strictly greater than the remaining cap blocks the whole recipe before Stage B / provider work; exact boundary is allowed
+- blocked NEW names are not memoized; no partial provider execution
 
 ## 8. SteamDT Valuation Boundary (current production)
 
@@ -224,7 +227,7 @@ Atomic valuation budget:
 - `biddingPrice` and `biddingCount` are not read and do not substitute for a missing or unusable sell price.
 - The selected aggregate sell price is not an executable listing price or a guaranteed realized proceeds.
 
-## 9. Phase 12D Cache / Refresh Infrastructure (implemented, not wired into the live scanner)
+## 9. Phase 12D Cache / Refresh Infrastructure (implemented; scanner integration pending)
 
 Persistent cache snapshot infrastructure that is unit-tested and opt-in behind `STEAMDT_PRICE_CACHE_BACKEND`:
 
@@ -238,7 +241,7 @@ Persistent cache snapshot infrastructure that is unit-tested and opt-in behind `
 - `SteamDTRefreshPlanner` (dedup + chunk)
 - `SteamDTRefreshExecutor` (sequential chunks; `max_concurrency` is only a work bound, not a rate limit)
 
-The live scanner valuation path does **not** import any Phase 12D cache module. Run-level cross-recipe exact-price reuse (D-CACHE-001) is **not** implemented.
+The live scanner valuation path does **not** import any Phase 12D cache module. Phase 14B implements scanner-owned run-scoped exact-name success/failure reuse with a fresh session inside every `run_once()` call. The session is not persistent and nothing is reused across runs. `D-CACHE-001` remains Active as the broader migration record because persistent FRESH_ONLY scanner cache reads are **not implemented**; scanner write-after-live is also not implemented and remains out of scope for initial Phase 14C.
 
 ## 10. Data Model (current production, in-memory)
 

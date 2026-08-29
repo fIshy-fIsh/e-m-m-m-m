@@ -224,9 +224,9 @@ Recipe1 demands `X, Y`. Recipe2 demands `X, Y, Z`. Expected:
 - Recipe2: `X` is memo SUCCESS (no live call); `Y` is memo TERMINAL FAILURE (no live retry); `Z` triggers one new live attempt.
 - Recipe2 is incomplete because `Y` failed; no metrics, no risk, no opportunity.
 - Counter invariants:
-  - `live_demand == 2` (one for `Y` in Recipe1; one for `Z` in Recipe2).
-  - `live_attempted == 2` (both entered Stage B).
-  - `live_succeeded == 1` (for `X`); `live_failed == 1` (for `Y`).
+  - `live_demand == 3` (`X` and `Y` are NEW LIVE in Recipe1; `Z` is NEW LIVE in Recipe2).
+  - `live_attempted == 3` (all three NEW LIVE names entered Stage B exactly once).
+  - `live_succeeded == 2` (`X`, `Z`); `live_failed == 1` (`Y`).
   - `run_reuse_hits == 2` (`X` SUCCESS, `Y` TERMINAL FAILURE for Recipe2).
   - `run_reuse_successes == 1`; `run_reuse_failures == 1`.
 

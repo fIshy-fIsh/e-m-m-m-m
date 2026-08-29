@@ -228,7 +228,8 @@ The protected-core files below may be modified only under an explicit reviewed m
 - `app/services/ev_service.py`
 - `app/services/risk_filter.py`
 - `app/services/recipe_solver.py` — Phase 13T-1 added the additive bounded enumeration API (`RecipeEnumerationConfig`, `RecipeEnumerationDiagnostics`, `RecipeEnumerationResult`, `enumerate_recipe_selections`). Legacy `construct_recipe_selections`, `construct_recipes`, and `solve_recipes` remain unchanged and continue to expose their pre-13T zero-or-one contract verbatim.
-- `app/services/scanner_orchestrator.py` — Phase 13T-3A integrated `enumerate_scanner_recipe_selections` and added `enumeration_config: RecipeEnumerationConfig | None = None` (default `2 / 256`). Cumulative valuation budget, atomic fail-closed behavior, sequential valuation, and ordering guarantees are preserved.
+- `app/services/scanner_orchestrator.py` — Phase 13T-3A integrated bounded recipe enumeration. Phase 14B adds the reviewed scanner-side migration: fresh run-scoped valuation session per `run_once()`, atomic NEW-LIVE exact-name demand admission, additive run-reuse/live/cache counters, and reuse of session-prepared valuation results in the existing metrics/risk path. No valuation/EV/risk formula changed.
+- `app/services/scanner_valuation_session.py` — Phase 14B scanner-owned boundary. Immutable session-bound prepared plans; async memo-only Stage A; provider-only-for-NEW-names Stage B; exact-key success/terminal-failure memo; bounded fail-closed generic-provider normalization; session-local fixed provider reuses existing `ValuationService` field application. No Phase 12D cache import; no cross-run state; no background tasks.
 - `app/services/market_scan_service.py` (`CandidateListing`)
 - Phase 12 BUFF domain: `buff_listing.py`, `buff_listing_parser.py`, `buff_listing_facts.py`, `buff_listing_eligibility.py`, `buff_listing_qualification.py`, `buff_listing_solver_adapter.py`
 - `app/clients/buff_client.py` (legacy skeleton)
@@ -236,7 +237,15 @@ The protected-core files below may be modified only under an explicit reviewed m
 - `app/services/buff_listing_provider.py` and `app/clients/buff_anonymous_listing_client.py` (recently hardened; change only with explicit new spec).
 - Phase 12D cache modules (`app/services/price_cache.py`, `app/services/price_cache_codec.py`, `app/services/redis_price_cache.py`, `app/services/price_cache_factory.py`, `app/services/steamdt_price_cache_adapter.py`, `app/services/steamdt_cached_price_resolver.py`, `app/services/steamdt_price_snapshot_source.py`, `app/services/steamdt_price_refresh_service.py`, `app/services/steamdt_refresh_planner.py`, `app/services/steamdt_refresh_executor.py`) — implemented and unit-tested standalone; not yet wired into the live scanner valuation path. Any future scanner-side wiring must be performed under explicit reviewed migration authorization (per `D-CACHE-001`).
 
-### Phase 14A seam freeze (no code in 14A or 14A-R1)
+### Phase 14B implemented seam
+
+Phase 14B implements the scanner-owned `RunScopedValuationSession` frozen by Phase 14A/R1. The session is created fresh inside every `LiveScannerOrchestrator.run_once()`. Stage A (`prepare_output_prices`) is async and memo-only in 14B; it performs zero provider calls and exposes ordered NEW-LIVE names. The orchestrator atomically admits that demand. Stage B (`resolve_prepared`) requests only NEW exact names, validates provider results fail-closed, memoizes exact success or terminal failure, and invokes the existing `ValuationService` through a session-local fixed provider. Session plans are immutable, tied to the creating session by opaque token and canonical plan identity, revision-checked, and one-shot. Blocked plans do not memoize NEW names. Nothing survives across runs.
+
+`max_valuation_requests_per_run` now means NEW LIVE exact-name demand. Legacy logical valuation counters retain their recipe-facing semantics. Additive `run_reuse_*` and `live_*` counters are active; `cache_*` placeholders remain zero in 14B. Completed-run invariants are: `run_reuse_hits = run_reuse_successes + run_reuse_failures`, `live_demand = live_attempted + live_atomically_blocked`, and `live_attempted = live_succeeded + live_failed`.
+
+No Phase 12D cache module is imported or modified. Persistent FRESH_ONLY scanner reads are Phase 14C work; scanner write-after-live remains out of scope for initial 14C. `D-CACHE-001` remains Active as this broader migration record.
+
+### Phase 14A design authority retained
 
 Phase 14A (`specs/2026-08-29-scanner-valuation-integration-design-freeze/`) and Phase 14A-R1 (`D-PHASE14A-R1-COHERENCE`) freeze the design for any future Phase 14 implementation that integrates the existing Phase 12D cache stack into the live scanner valuation path and closes `D-CACHE-001` (run-scoped cross-recipe exact-price reuse). The single sanctioned seam is a **scanner-owned `RunScopedValuationSession` boundary that lives OUTSIDE `app/services/valuation_service.py` and `app/services/live_recipe_valuation.py`** (both Protected Core). The boundary does NOT resolve BUFF listing identity, does NOT alter recipe enumeration, and does NOT cache-cross-reference `BuffCommunityIdentityResolver`. The session exposes a **two-stage contract**: Stage A `prepare_output_prices(names)` issues ZERO live SteamDT calls (consults run memo; in 14C, also performs FRESH_ONLY cache reads); Stage B `resolve_prepared(plan)` is only called after the orchestrator's atomic-cap admission succeeds. Initial scanner cache policy is `PriceCacheReadPolicy.FRESH_ONLY`. Initial Phase 14C is scanner cache READ-only (no scanner writeback). `max_valuation_requests_per_run` is redefined as NEW LIVE SteamDT provider demand / attempts within a run, exclusive of run-reuse hits and `FRESH + SELECTED` cache hits.
 
@@ -254,7 +263,7 @@ The strict-BUFF cache-selection adapter is composed at the session level via reu
   - Identity binding is wired into the runtime (`D-IDENTITY-007`).
   - The orchestrator consumes `enumerate_scanner_recipe_selections` (Phase 13T-3A).
   - Bounded enumeration has been validated offline (Phase 13T-4A) and live (Phase 13T-4B).
-- Known deferred optimization (separately authorized future phase; not a current blocker): run-level SteamDT output-price cache / cross-recipe valuation reuse. Do not promote this to a current feature.
+- Phase 14B run-scoped exact-name reuse is complete. Remaining scanner valuation integration work is persistent Phase 12D FRESH_ONLY cache READ integration (Phase 14C), not a current blocker. Phase 14C is not started or authorized.
 
 ## Completed Capabilities (cumulative)
 
@@ -284,12 +293,12 @@ The strict-BUFF cache-selection adapter is composed at the session level via reu
 
 - BUFF identity bridge is **provisional** under `D-IDENTITY-006` (community catalog snapshot, runtime implemented in 13N-3B, file `data/identity/buff_identity_v1.json`). Identity binding between `BuffListingProvider` and `BuffListingCandidateAdapter` is implemented (13N-3C) but not yet wired into the orchestration runtime.
 - Intrinsic flag source incomplete: `stattrak` / `souvenir` are owned by the candidate layer, but the current `BuffListing` DTO does not expose them. Production adapter wiring is blocked until these values can be preserved (see `D-MIGRATION-002`).
-- No production orchestration runtime implementation: `ScannerOrchestrator` skeleton, periodic scheduler adapter, and per-cache modules are design-only as of 13M-0; the production orchestration path is not yet implemented.
+- Phase 14B run-scoped exact-name valuation reuse is complete; see `D-PHASE14B-COMPLETE`. Persistent Phase 12D scanner cache integration remains open for Phase 14C.
 
 ## Technical Debt
 
 - **13H-0 / 13K-1 intrinsic flag compatibility debt** — `trade_up_pipeline.py::candidates_to_input_items` (13H-0) and `buff_listing_candidate_adapter.py::convert_buff_listing_to_candidate` (13K-1) both default `stattrak=False, souvenir=False` because the upstream `BuffListing` DTO does not yet expose those fields. Historical behavior; preserved for compatibility; validated offline by synthetic scale validation (13J-1) and the adapter's own test suite. Forbidden as production behavior. References: `D-MIGRATION-001`, `D-MIGRATION-002`.
-- **Run-level SteamDT output-price cache (deferred)** — Phase 13T deliberately did not implement a run-scoped exact-name price cache. The same exact output `market_hash_name` in separate recipe valuation calls is a separate logical request today. Cross-recipe deduplication, freshness semantics, cache failure handling, and request-budget accounting are open design questions. Treat as a separately authorized future phase that must not silently modify Protected Core (`valuation_service.py`, `live_recipe_valuation.py`).
+- **Run-level exact-name valuation reuse (Phase 14B)** — implemented in scanner-owned `scanner_valuation_session.py`; success/failure memo is one-run only. The broader persistent-cache work is not implemented: no Phase 12D imports, no FRESH_ONLY scanner reads, no scanner writeback. `D-CACHE-001` remains Active until Phase 14C is implemented and verified.
 
 ## Standing Engineering Constraints
 

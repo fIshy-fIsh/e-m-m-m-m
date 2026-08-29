@@ -71,6 +71,10 @@ from app.services.scanner_recipe_composition import (
     ScannerRecipeCompositionDiagnostics,
     enumerate_scanner_recipe_selections,
 )
+from app.services.scanner_valuation_session import (
+    RunScopedValuationSession,
+    SessionValuationResult,
+)
 from app.services.trade_up_input_candidate import TradeUpInputCandidate
 from app.services.trade_up_input_enrichment import (
     InMemoryTradeUpInputEnricher,
@@ -191,10 +195,29 @@ class ScannerRunStageCounters:
     recipes_valuation_failed: int = 0
     recipes_rejected: int = 0
     opportunities_found: int = 0
+    # Legacy valuation-request counters (Phase 13T semantics; preserved).
+    # In Phase 14B, `attempted` and `blocked` keep their ADMITTED/BLOCKED
+    # interpretation; only `attempted` is now the count of requested_names
+    # for ADMITTED recipes, not the count of provider calls.
     valuation_requests_attempted: int = 0
     valuation_requests_succeeded: int = 0
     valuation_requests_failed: int = 0
     valuation_requests_blocked: int = 0
+    # Phase 14B additive discriminators. cache_* are zero in 14B (no
+    # persistent cache integration yet); reserved for 14C.
+    run_reuse_hits: int = 0
+    run_reuse_successes: int = 0
+    run_reuse_failures: int = 0
+    cache_hits_fresh_selected: int = 0
+    cache_misses: int = 0
+    cache_policy_blocked: int = 0
+    cache_expired: int = 0
+    cache_selection_failures: int = 0
+    live_demand: int = 0
+    live_attempted: int = 0
+    live_succeeded: int = 0
+    live_failed: int = 0
+    live_atomically_blocked: int = 0
 
 
 @dataclass(frozen=True, kw_only=True, repr=False)
@@ -299,6 +322,10 @@ class LiveScannerOrchestrator:
         self._risk_config = risk_config
         self._valuation_service = valuation_service
         self._max_valuation_requests_per_run = max_valuation_requests_per_run
+        # Monotonic per-orchestrator session id counter. The session
+        # itself lives for exactly one ``run_once`` call and is rebuilt
+        # on each invocation. Cross-run reuse is impossible by construction.
+        self._next_session_id = 0
 
     async def run_once(
         self,
@@ -320,9 +347,22 @@ class LiveScannerOrchestrator:
         recipe_rejections: Counter[str] = Counter()
         recipe_evaluations: list[LiveRecipeEvaluation] = []
         opportunities: list[LiveOpportunity] = []
-        valuation_requests_used = 0
+        valuation_live_used = 0
         run_enriched_inputs: list[TradeUpEnrichedInput] = []
         listing_index: dict[str, BuffListingIntrinsicFlags] = {}
+
+        # Construct a fresh scanner-owned run-scoped session for THIS
+        # ``run_once`` call. The session owns the underlying live
+        # price provider extracted from the injected ValuationService.
+        # It is NOT a global singleton; it does NOT survive this call.
+        session: RunScopedValuationSession | None = None
+        if self._valuation_service is not None:
+            session = RunScopedValuationSession(
+                price_provider=self._valuation_service.price_provider,
+                valuation_config=self._valuation_service.config,
+                session_id=self._next_session_id,
+            )
+            self._next_session_id += 1
 
         for goods_id in universe:
             try:
@@ -414,46 +454,111 @@ class LiveScannerOrchestrator:
             )
             requested_names = _unique_output_names(selection)
             requested_count = len(requested_names)
-            if (
-                valuation_requests_used + requested_count
-                > self._max_valuation_requests_per_run
-            ):
+
+            # Phase 14B: when the session is alive, use the two-stage
+            # prepare/execute contract; otherwise fall through to the
+            # legacy "no valuation service" path (no provider exists,
+            # so no live request can occur).
+            if session is not None:
+                plan = await session.prepare_output_prices(requested_names)
+                live_demand_this_recipe = len(plan.new_live_names)
+                if (
+                    valuation_live_used + live_demand_this_recipe
+                    > self._max_valuation_requests_per_run
+                ):
+                    session.record_atomically_blocked(plan)
+                    counters = replace(
+                        counters,
+                        recipes_valuation_failed=(
+                            counters.recipes_valuation_failed + 1
+                        ),
+                        recipes_rejected=counters.recipes_rejected + 1,
+                        valuation_requests_blocked=(
+                            counters.valuation_requests_blocked + requested_count
+                        ),
+                        live_demand=counters.live_demand + live_demand_this_recipe,
+                        live_atomically_blocked=(
+                            counters.live_atomically_blocked
+                            + live_demand_this_recipe
+                        ),
+                        run_reuse_hits=(
+                            counters.run_reuse_hits
+                            + len(plan.memo_successes)
+                            + len(plan.memo_terminal_failures)
+                        ),
+                        run_reuse_successes=(
+                            counters.run_reuse_successes
+                            + len(plan.memo_successes)
+                        ),
+                        run_reuse_failures=(
+                            counters.run_reuse_failures
+                            + len(plan.memo_terminal_failures)
+                        ),
+                    )
+                    recipe_rejections["VALUATION_REQUEST_CAP_EXCEEDED"] += 1
+                    recipe_evaluations.append(
+                        _build_blocked_evaluation(
+                            selection,
+                            requested_names,
+                            listing_index,
+                        )
+                    )
+                    continue
+
+                valuation_live_used += live_demand_this_recipe
                 counters = replace(
                     counters,
-                    recipes_valuation_failed=counters.recipes_valuation_failed + 1,
-                    recipes_rejected=counters.recipes_rejected + 1,
-                    valuation_requests_blocked=(
-                        counters.valuation_requests_blocked + requested_count
+                    valuation_requests_attempted=(
+                        counters.valuation_requests_attempted + requested_count
+                    ),
+                    live_demand=counters.live_demand + live_demand_this_recipe,
+                    run_reuse_hits=(
+                        counters.run_reuse_hits
+                        + len(plan.memo_successes)
+                        + len(plan.memo_terminal_failures)
+                    ),
+                    run_reuse_successes=(
+                        counters.run_reuse_successes + len(plan.memo_successes)
+                    ),
+                    run_reuse_failures=(
+                        counters.run_reuse_failures
+                        + len(plan.memo_terminal_failures)
                     ),
                 )
-                recipe_rejections["VALUATION_REQUEST_CAP_EXCEEDED"] += 1
-                recipe_evaluations.append(
-                    _build_blocked_evaluation(
-                        selection,
-                        requested_names,
-                        listing_index,
-                    )
+                session_result = await session.resolve_prepared(
+                    plan,
+                    list(selection.recipe.tradeup_results),
                 )
-                continue
-
-            valuation_requests_used += requested_count
-            counters = replace(
-                counters,
-                valuation_requests_attempted=(
-                    counters.valuation_requests_attempted + requested_count
-                ),
-            )
-            evaluation = await self._evaluate_selection(
-                selection,
-                listing_index,
-                requested_names,
-            )
+                evaluation = await self._evaluate_selection(
+                    selection,
+                    listing_index,
+                    requested_names,
+                    session_result,
+                )
+            else:
+                # Legacy no-valuation-service branch: no provider exists, so
+                # no live budget or Phase 14 live/cache counter is touched.
+                # Preserve legacy logical accounting as closely as possible:
+                # the recipe is admitted to the evaluation boundary and its
+                # full requested_count is attempted/failed logically.
+                session_result = None
+                counters = replace(
+                    counters,
+                    valuation_requests_attempted=(
+                        counters.valuation_requests_attempted + requested_count
+                    ),
+                )
+                evaluation = await self._evaluate_selection(
+                    selection,
+                    listing_index,
+                    requested_names,
+                    None,
+                )
 
             recipe_evaluations.append(evaluation)
             resolved_count = evaluation.valuation_prices_resolved
             failed_count = max(0, requested_count - resolved_count)
-            counters = replace(
-                counters,
+            base_updates = dict(
                 valuation_requests_succeeded=(
                     counters.valuation_requests_succeeded + resolved_count
                 ),
@@ -461,6 +566,22 @@ class LiveScannerOrchestrator:
                     counters.valuation_requests_failed + failed_count
                 ),
             )
+            if session_result is not None:
+                base_updates.update(
+                    live_attempted=(
+                        counters.live_attempted
+                        + session_result.live_attempted_delta
+                    ),
+                    live_succeeded=(
+                        counters.live_succeeded
+                        + session_result.live_succeeded_delta
+                    ),
+                    live_failed=(
+                        counters.live_failed
+                        + session_result.live_failed_delta
+                    ),
+                )
+            counters = replace(counters, **base_updates)
             if not evaluation.valuation_completed:
                 counters = replace(
                     counters,
@@ -521,12 +642,23 @@ class LiveScannerOrchestrator:
         selection: ConstructedRecipeSelection,
         listing_index: dict[str, BuffListingIntrinsicFlags],
         requested_names: tuple[str, ...],
+        session_result: SessionValuationResult | None,
     ) -> LiveRecipeEvaluation:
-        """Value and risk-filter one existing solver selection."""
+        """Build the LiveRecipeEvaluation for one solver selection.
+
+        When ``session_result`` is provided, the valuation field
+        application has already happened inside the session via the
+        existing ``ValuationService`` (``_FixedProvider``); this
+        method only does metrics + risk + completion check.
+
+        When ``session_result`` is ``None``, the legacy
+        ``VALUATION_SERVICE_NOT_CONFIGURED`` branch is taken and no
+        provider work is performed.
+        """
         recipe = selection.recipe
         selected_listings = _selected_listings(selection, listing_index)
 
-        if self._valuation_service is None:
+        if session_result is None or self._valuation_service is None:
             return LiveRecipeEvaluation(
                 recipe=selection,
                 output_market_hash_names_requested=requested_names,
@@ -541,9 +673,7 @@ class LiveScannerOrchestrator:
                 listings=selected_listings,
             )
 
-        valuation = await self._valuation_service.value_tradeup_results(
-            list(recipe.tradeup_results)
-        )
+        valuation = session_result.valuation_result
         valued_results = tuple(valuation.tradeup_results)
         missing = tuple(valuation.missing_market_hash_names)
         errors = tuple(valuation.price_lookup_result.errors)

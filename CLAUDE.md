@@ -66,8 +66,8 @@
 6. 检查是否把未确认的 BUFF API 细节错误写死进代码。
 
 ## 当前阶段指针
-- 阶段：`PHASE_14A_COMPLETE`（Phase 14A 设计冻结，docs only；无 production code 改动；分支 `feature/scanner-valuation-integration`）。
-- Phase 13T production / test checkpoint：`9288794`（`add bounded multi-recipe scale validation`）。Phase 14A 不修改 production code；该指针保持不变。
+- 阶段：`PHASE_14B_COMPLETE`（run-scoped exact-name valuation reuse 已实现；persistent Phase12D scanner cache 尚未集成；分支 `feature/scanner-valuation-integration`）。
+- Phase 14B production / test checkpoint：本分支 commit `add run-scoped scanner valuation reuse`（完成后通过 `git rev-parse HEAD` 实时确认）；新增 `app/services/scanner_valuation_session.py` 与 45 个 offline regression tests；全套验证 `3382 passed, 23 skipped, 1 warning`。
 - Post-Phase-13T handoff baseline：`bb09068`（`sync AI context after Phase 13T`）。
 - Pre-R0-C DEV tip (historical)：`4c2f1ef`（`sync docs after minimum CI validation`）。
 - Post-R0-C canonical main：`9cfaf36`（`sync docs after R0-C repository consolidation`），parents `{24ece858, 3aa44e93}`，tree `7a39d28`。作为祖先节点保留；当前 canonical main 已迁移到下方 P3。
@@ -78,8 +78,10 @@
 - Minimum CI 已建立并远端验证：`.github/workflows/ci.yml`（Python 3.12；`ruff check .`；`mypy app`；`pytest`）；CI workflow blob 自 R0-A 起保持 `02d0ce81...`。
 - 权威交接文档：`docs/ai-context/DEVELOPMENT_HANDOFF.md`。
 - R0-A / R0-B / R0-C / R0-C docs checkpoint / R0-D：COMPLETE。R0-D 由 PR #3 完成 docs checkpoint 合并与 CI green（run 33240760167）验证。
-- Phase 14A：COMPLETE — design freeze。`specs/2026-08-29-scanner-valuation-integration-design-freeze/{requirements,plan,validation}.md`；分支 `feature/scanner-valuation-integration`；六个新决策 ID `D-CACHE-002..004`、`D-BUDGET-001`、`D-ACCOUNTING-001`、`D-PHASE14A-COMPLETE`。`D-CACHE-001` 仍为 Active（runtime cache 未实现）；Phase 14A 仅冻结设计。Phase 14B / 14C / 14D：PROPOSED / NOT AUTHORIZED。
-- Phase 14A-R1：设计 coherence correction（docs only；无 production code）。`D-PHASE14A-R1-COHERENCE` 记录九项子修正（strict BUFF cache selection via session-level adapter；two-stage prepare/execute；cache backend/codec/adapter 错误非 live candidates；live provider 失败语义保持 `PriceLookupResult` 转换；counter contract Option A finalized；14B reuse test 修正；TTL numeric default 不冻结；initial 14C write-after-live OUT OF SCOPE；`D-CACHE-001` 仍为 Active）。Phase 14B 仍为 PROPOSED / NOT AUTHORIZED UNTIL R1 REVIEW。
+- Phase 14A：COMPLETE — design freeze。`specs/2026-08-29-scanner-valuation-integration-design-freeze/{requirements,plan,validation}.md`；commit `e98cd97`。Phase 14A-R1 coherence correction：COMPLETE，commit `bb056e5`，decision `D-PHASE14A-R1-COHERENCE`。
+- Phase 14B：COMPLETE — run-scoped exact-name valuation reuse。每次 `LiveScannerOrchestrator.run_once()` 创建新的 scanner-owned session；async Stage A prepare 零 provider calls；atomic admission 后 Stage B 仅请求 NEW LIVE exact names；success 与 terminal failure 在同一 run 内复用；跨 run 不复用。`max_valuation_requests_per_run` runtime 含义迁移为 NEW LIVE exact-name demand；legacy logical counters 保持；new additive counters active；cache counters 在 14B 中保持零。`ValuationService` formula 未修改。
+- `D-CACHE-001` 仍为 Active broader migration record：其 run-scoped reuse 部分已由 14B 迁移；persistent Phase12D scanner-cache integration / FRESH_ONLY reads / scanner writeback 仍 NOT IMPLEMENTED。
+- Phase 14C：NEXT / NOT STARTED / NOT AUTHORIZED（Phase12D FRESH_ONLY cache READ integration；strict BUFF cached selector；initial write-after-live out of scope）。
 - `main` 未被 Phase 14A 推送修改；HEAD 当前在 `feature/scanner-valuation-integration`，需通过 `git rev-parse HEAD` 实时确认。
 
 ## 禁止事项
