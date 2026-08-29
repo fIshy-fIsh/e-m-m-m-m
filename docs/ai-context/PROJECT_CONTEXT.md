@@ -82,10 +82,52 @@ Post-R0-C canonical main:                   9cfaf36
                                               24ece8582d1b3cb1b72322afc15de94b652a8bcc (old main)
                                               3aa44e9364268308d0fbb4c0532f4a910f4f85e8 (consolidation)
                                             tree:   7a39d28f2654cdf3b4eb98c8123227de64db5e34
-                                            DEV tip (4c2f1ef) is an ancestor of main
+                                            (post-R0-C main; ancestor of current canonical main P2;
+                                             retained for historical reference)
+
+Post-R0-C docs checkpoint:                 b13201b
+                                            sync docs after R0-C docs checkpoint
+                                            (full SHA b13201bdff4f2323a82d4da3560add25365e5695)
+                                            (PR #2 `Sync documentation after R0-C consolidation`)
+
+Current canonical main (P2):               328269112f229faf3fce4cf0be4b9c7875582b65
+                                            parents: {9cfaf36..., b13201b...}
+                                            tree:   b7648ad185aaf9ae4f4ca1057294e4b84010ab8d
+                                            CI workflow blob 02d0ce81d3704d9bc9c513df9b474855ffeae703
+                                            preserved unchanged since R0-A
+                                            (R0-D cleanup left canonical main unchanged; main was
+                                             not pushed during cleanup)
 
 Historical DEV tip (pre-R0-C development line): 4c2f1ef6cd850985e71f041601ae58489abe947b
                                             sync docs after minimum CI validation
+
+R0-D cleanup deletion summary (executed in R0-D2-TER):
+  removed remote branches:
+    docs/r0c-completion-checkpoint
+    repo/main-consolidation
+    feature/steamdt-cache-rate-limit
+    feature/steamdt-data-source
+  removed named local branches:
+    docs/r0c-completion-checkpoint
+    repo/main-consolidation
+    feature/steamdt-cache-rate-limit
+    feature/steamdt-data-source
+    feature/buff-tradeup-scanner
+  removed generated local branches (305):
+    worktree-agent-a*  (all 305; ancestor of P2; 0 unique commits)
+  removed linked Claude agent worktrees (305):
+    D:/CS/.claude/worktrees/agent-*
+  deleted session-local dirt (305, before worktree removal):
+    .claude/settings.local.json  (one per agent worktree)
+  preserved local-only tag (target unchanged):
+    v1-dry-run-baseline -> 32ab47c5b66a0f331457e69f1515e5e9bb2a37e1
+  method: `git worktree remove` (no --force), `git branch -d` (no -D);
+    no commits, no tracked file changes, no main push, no force,
+    no `git fetch --prune` / `git remote prune` / `git worktree prune`,
+    no settings changes, no history rewrite, no unique history lost.
+  remaining linked worktrees after cleanup: D:/CS root only.
+  remaining local branches after cleanup: main only.
+  remaining remote branches after cleanup: main only.
 
 Live repository HEAD / branch / working tree:
   MUST be verified from Git at task entry.
@@ -104,7 +146,7 @@ Live repository HEAD / branch / working tree:
 - **Remote validation:** GitHub Actions workflow `CI`, job `quality`, run `33098999757` completed successfully for checkpoint `7a6349e`. Local validation also passed: ruff, mypy, and pytest (`3336 passed, 23 skipped, 1 warning`).
 - **Safety:** default CI is offline-safe and requires no real secrets. Live / integration paths remain opt-in and environment-gated; default CI performs no live BUFF, SteamDT, Redis, or Discord operation.
 - **R0-C — Main History Consolidation:** **COMPLETE**. PR #1 (`Reconcile main history with current project lineage`) merged using `Create a merge commit`. Final canonical `main` tip is `9cfaf36db028661075a495587ac32e51256fffe8` with parents `{24ece8582d1b3cb1b72322afc15de94b652a8bcc, 3aa44e9364268308d0fbb4c0532f4a910f4f85e8}`; tree `7a39d28f2654cdf3b4eb98c8123227de64db5e34`; CI workflow blob `02d0ce81d3704d9bc9c513df9b474855ffeae703`. DEV tip `4c2f1ef6cd850985e71f041601ae58489abe947b` is an ancestor. Final-main push CI: workflow `CI`, run `33173529766`, conclusion `success`.
-- **R0-D — Branch / Repository Cleanup:** **NOT STARTED**. No branch cleanup has been performed.
+- **R0-D — Branch / Repository Cleanup:** **IN PROGRESS — CLEANUP COMPLETE / COMPLETION DOCS PR OPEN**. R0-D execution is complete (R0-D1 audit, R0-D2 + R0-D2-BIS, R0-D2-TER). Cleanup execution summary is captured in the dedicated block above (canonical main unchanged at P2; 305 worktrees + 305 generated branches + 5 named local branches + 4 named remote branches removed; `v1-dry-run-baseline` preserved). R0-D will be marked COMPLETE only after the R0-D completion documentation checkpoint PR (this PR) is merged and post-merge verified on `main`.
 
 - **Phase:** `PHASE_13T_COMPLETE`. Phase 13T-1 through 13T-4A are committed and pushed (latest commit `9288794`); Phase 13T-4B is a live-only validation performed against that commit and intentionally produced no commit and no repository artifact.
 - **Latest completed phases:**

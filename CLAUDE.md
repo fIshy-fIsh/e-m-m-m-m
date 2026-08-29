@@ -70,12 +70,15 @@
 - Phase 13T production / test checkpoint：`9288794`（`add bounded multi-recipe scale validation`）。
 - Post-Phase-13T handoff baseline：`bb09068`（`sync AI context after Phase 13T`）。
 - Pre-R0-C DEV tip (historical)：`4c2f1ef`（`sync docs after minimum CI validation`）。
-- Post-R0-C canonical main：`9cfaf36`（`sync docs after R0-C repository consolidation`），parents `{24ece858, 3aa44e93}`，tree `7a39d28`。
+- Post-R0-C canonical main：`9cfaf36`（`sync docs after R0-C repository consolidation`），parents `{24ece858, 3aa44e93}`，tree `7a39d28`。作为祖先节点保留；当前 canonical main 已迁移到下方 P2。
+- Post-R0-C docs checkpoint：`b13201b`（`sync docs after R0-C repository consolidation` docs PR，PR #2），merge commit 在 P2。
+- 当前 canonical main：`P2 = 328269112f229faf3fce4cf0be4b9c7875582b65`，parents `{9cfaf36, b13201b}`，tree `b7648ad1...`。R0-D 清理完成后 canonical main 保持不变。
 - 当前 Git HEAD 必须通过仓库实时验证（`git rev-parse HEAD` / `git status --short`），不在此处硬编码。
 - 当前 bounded multi-recipe 校验：`tests/test_multi_recipe_scanner_scale_validation.py`。
-- Minimum CI 已建立并远端验证：`.github/workflows/ci.yml`（Python 3.12；`ruff check .`；`mypy app`；`pytest`）。
+- Minimum CI 已建立并远端验证：`.github/workflows/ci.yml`（Python 3.12；`ruff check .`；`mypy app`；`pytest`）；CI workflow blob 自 R0-A 起保持 `02d0ce81...`。
 - 权威交接文档：`docs/ai-context/DEVELOPMENT_HANDOFF.md`。
-- R0-A / R0-B / R0-C：COMPLETE。R0-D：NOT STARTED（branch cleanup 需单独授权）。
+- R0-A / R0-B / R0-C：COMPLETE。post-R0-C docs checkpoint：MERGED / VERIFIED。
+- R0-D：IN PROGRESS — CLEANUP COMPLETE / COMPLETION DOCS PR OPEN。305 Claude agent 链接 worktree 与对应 `worktree-agent-a*` 本地分支已移除；5 个命名本地分支 + 4 个远端分支已移除；`v1-dry-run-baseline` 标签保留（local-only，`32ab47c5...`）；无唯一历史丢失。当前等待本次 R0-D 完成 docs checkpoint PR 合并与合并后验证。
 
 ## 禁止事项
 - 自动购买

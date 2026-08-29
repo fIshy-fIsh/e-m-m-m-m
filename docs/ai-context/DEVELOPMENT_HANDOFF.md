@@ -2,15 +2,23 @@
 
 ## Current Git State (verify live)
 
-- **Branch:** `feature/steamdt-cache-rate-limit`
-- **HEAD:** `92887947e0e1808f1bc23258cf53adb10a0036ee`
-- **HEAD message:** `add bounded multi-recipe scale validation`
-- **Phase:** `PHASE_13T_COMPLETE`
+- **Branch:** `main` (canonical; tracking `origin/main`; created via R0-D2-TER step 13).
+- **HEAD:** `328269112f229faf3fce4cf0be4b9c7875582b65` (= P2, the post-R0-C-docs-checkpoint main).
+- **HEAD message:** `Merge pull request #2 from fIshy-fIsh/docs/r0c-completion-checkpoint` (merge-commit semantics).
+- **Phase:** `PHASE_13T_COMPLETE`.
+- **R0-A / R0-B / R0-C / post-R0-C docs checkpoint:** COMPLETE.
+- **R0-D cleanup execution:** COMPLETE (R0-D1 audit, R0-D2 / R0-D2-BIS / R0-D2-TER cleanup). Cleanup summary recorded in `PROJECT_CONTEXT.md` and `specs/roadmap.md`. Canonical main remained unchanged during cleanup.
 - **Uncommitted implementation work:** none. The two intentionally excluded research JSON files (`research/identity_revalidation/data/modest_serhat.json`, `research/identity_revalidation/data/timofey_ivanenko.json`) remain local/untracked; they are not product work.
 
-Recent push history (oldest → newest) includes:
+Recent push history (oldest → newest) on canonical main includes:
 
 ```
+b13201b sync docs after R0-C repository consolidation
+9cfaf36 Merge pull request #1 from fIshy-fIsh/repo/main-consolidation
+3aa44e9 reconcile main history (topology only)
+4c2f1ef sync docs after minimum CI validation
+7a6349e add minimum GitHub Actions CI
+1dbc6f1 sync public docs and roadmap after Phase 13T
 9288794 add bounded multi-recipe scale validation
 33675ee wire bounded recipe enumeration CLI
 ac26e9b integrate bounded multi-recipe scanner orchestration
@@ -21,7 +29,9 @@ d161ec4 add structural cohort-depth universe allocation
 c543a01 add bounded automatic market universe
 ```
 
-`git status` remains `0 0` against `origin/feature/steamdt-cache-rate-limit`. Phase 13T-4B intentionally produced no commit (live observation only).
+`git status` remains `0 0` against `origin/main`. Phase 13T-4B intentionally produced no commit (live observation only).
+
+Historical reference: prior pre-R0-D active development line was `feature/steamdt-cache-rate-limit`; that branch was removed during R0-D cleanup. Its tip `4c2f1ef` is preserved as a historical DEV ancestor of `main`.
 
 ## Completed Milestones
 
@@ -528,14 +538,17 @@ The components remain in the tree as paused, offline-tested optional infrastruct
 - Scheduler/continuous scanning: **not implemented**.
 - R0-A Public Documentation Synchronization: **COMPLETE** (`1dbc6f1`).
 - R0-B Minimum CI: **COMPLETE / REMOTE GREEN** (`7a6349e`; GitHub Actions `CI` / `quality` success).
-- R0-C Main History Consolidation: **COMPLETE**. PR #1 (`Reconcile main history with current project lineage`) merged using `Create a merge commit`. Final canonical `main` tip is `9cfaf36db028661075a495587ac32e51256fffe8` with parents `{24ece8582d1b3cb1b72322afc15de94b652a8bcc, 3aa44e9364268308d0fbb4c0532f4a910f4f85e8}`. Consolidation commit `3aa44e93…` is topology-only and its tree `7a39d28f2654cdf3b4eb98c8123227de64db5e34` equals the DEV tree `4c2f1ef6cd850985e71f041601ae58489abe947b`. CI workflow blob `02d0ce81d3704d9bc9c513df9b474855ffeae703` is preserved. Final-main push CI: workflow `CI`, run `33173529766`, event `push`, branch `main`, head SHA `9cfaf36…`, conclusion `success`. The merge was performed manually through the GitHub web UI after automated fine-grained-PAT merge attempts were blocked by GitHub token authorization.
-- R0-D Branch / Repository Cleanup: **NOT STARTED**. No branch cleanup has been performed.
+- R0-C Main History Consolidation: **COMPLETE**. PR #1 (`Reconcile main history with current project lineage`) merged using `Create a merge commit`. Post-R0-C main tip `9cfaf36db028661075a495587ac32e51256fffe8` with parents `{24ece8582d1b3cb1b72322afc15de94b652a8bcc, 3aa44e9364268308d0fbb4c0532f4a910f4f85e8}`. Consolidation commit `3aa44e93…` is topology-only and its tree `7a39d28f2654cdf3b4eb98c8123227de64db5e34` equals the DEV tree `4c2f1ef6cd850985e71f041601ae58489abe947b`. CI workflow blob `02d0ce81d3704d9bc9c513df9b474855ffeae703` is preserved. Post-R0-C main push CI: workflow `CI`, run `33173529766`, event `push`, branch `main`, head SHA `9cfaf36…`, conclusion `success`. The merge was performed manually through the GitHub web UI after automated fine-grained-PAT merge attempts were blocked by GitHub token authorization.
+- R0-C docs checkpoint: **MERGED / VERIFIED**. PR #2 (`Sync documentation after R0-C consolidation`) merged using `Create a merge commit` (manual web-UI merge after automated PAT-scope limits). Final canonical `main` tip after the docs checkpoint is `328269112f229faf3fce4cf0be4b9c7875582b65` (P2) with parents `{9cfaf36…, b13201b…}` and tree `b7648ad185aaf9ae4f4ca1057294e4b84010ab8d`. CI workflow blob `02d0ce81…` preserved. Final-main push CI: workflow `CI`, run `33175931060`, event `push`, branch `main`, head SHA `328269112f…`, conclusion `success`.
+- R0-D Branch / Repository Cleanup: **IN PROGRESS — CLEANUP COMPLETE / COMPLETION DOCS PR OPEN**. R0-D1 audit, R0-D2 / R0-D2-BIS / R0-D2-TER cleanup execution are complete. Canonical `main` (P2) was unchanged by cleanup; CI workflow blob preserved. Cleanup summary: 305 Claude agent linked worktrees under `D:/CS/.claude/worktrees/agent-*` and their 305 `worktree-agent-a*` local branches removed; 5 named local branches (`docs/r0c-completion-checkpoint`, `repo/main-consolidation`, `feature/steamdt-cache-rate-limit`, `feature/steamdt-data-source`, `feature/buff-tradeup-scanner`) removed; 4 named remote branches removed. `git worktree remove` and `git branch -d` only (no `--force`, no `-D`). `v1-dry-run-baseline` retained locally at exact target `32ab47c5b66a0f331457e69f1515e5e9bb2a37e1` (was always local-only). No unique history lost. R0-D will be marked COMPLETE only after this docs checkpoint PR is merged and post-merge verified on `main`.
 
 ## Next Action (ordered)
 
 - **No new product-development phase is currently authorized.**
-- **R0-C Main History Consolidation is COMPLETE.** Canonical `main` tip is `9cfaf36db028661075a495587ac32e51256fffe8`; topology / ancestry / tree / CI workflow blob all verified; final-main push CI green.
-- R0-D Branch / Repository Cleanup is the next repository-maintenance milestone and remains **NOT STARTED** until explicitly authorized.
+- **R0-C Main History Consolidation is COMPLETE.** Post-R0-C main tip is `9cfaf36db028661075a495587ac32e51256fffe8` (now an ancestor of P2).
+- **R0-C docs checkpoint is MERGED / VERIFIED.** Canonical `main` tip is `328269112f229faf3fce4cf0be4b9c7875582b65` (P2); topology / ancestry / tree / CI workflow blob all verified; final-main push CI green.
+- **R0-D cleanup execution is COMPLETE** (R0-D1 audit, R0-D2 / R0-D2-BIS / R0-D2-TER). Canonical `main` (P2) remained unchanged by cleanup. Cleanup summary is captured in `PROJECT_CONTEXT.md` and `specs/roadmap.md`. R0-D will be marked fully COMPLETE only after the R0-D completion documentation checkpoint PR is merged and post-merge verified.
+- The R0-D completion documentation checkpoint PR is currently open and CI green; manual merge authorization is required next.
 - Scanner Valuation Integration is **PROPOSED / NOT AUTHORIZED**: integrate the existing Phase 12D cache stack into live scanner valuation, add run-level exact-price reuse and cache-hit / cache-miss / provider-demand accounting, and preserve strict complete-price, bounded-ordering, and atomic valuation-budget semantics.
 - Valuation Budget Calibration is **PROPOSED / NOT AUTHORIZED**: measure unique-output cardinality offline before proposing any numeric cap.
 - Any future development phase must be explicitly authorized and must not silently relax `D-ENUM-001`–`D-ENUM-004`, `D-CACHE-001`, `D-SCANNER-001`, `D-VALIDATION-001`, `D-MEMORY-001`, `D-ADAPTER-003`, or `D-ADAPTER-004`.
