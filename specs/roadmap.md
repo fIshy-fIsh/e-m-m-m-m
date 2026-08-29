@@ -63,7 +63,21 @@ Integration Design Freeze:               IN PROGRESS — DESIGN FREEZE (no code)
                                          the design. Phase 14B / 14C / 14D
                                          (run-scoped reuse / cache integration /
                                          CLI + scale-live validation) are
-                                         PROPOSED / NOT AUTHORIZED.
+                                         PROPOSED / NOT AUTHORIZED UNTIL R1 REVIEW.
+                                        Phase 14A-R1 (D-PHASE14A-R1-COHERENCE)
+                                         corrected nine internal design
+                                         contradictions before any 14B
+                                         implementation: strict BUFF adapter
+                                         at session level (not resolver
+                                         default); two-stage prepare/execute;
+                                         backend/codec errors are not live
+                                         candidates; PriceLookupResult
+                                         conversion semantics preserved;
+                                         Option A counters finalized; 14B
+                                         reuse test corrected (Recipe2 memo
+                                         hits = 9); TTL numeric default NOT
+                                         frozen; initial 14C is READ-only;
+                                         D-CACHE-001 remains Active.
 
 Live repository HEAD / branch / tree:     MUST be verified from Git at task entry;
                                         do not infer current HEAD from this document

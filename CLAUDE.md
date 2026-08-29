@@ -79,6 +79,7 @@
 - 权威交接文档：`docs/ai-context/DEVELOPMENT_HANDOFF.md`。
 - R0-A / R0-B / R0-C / R0-C docs checkpoint / R0-D：COMPLETE。R0-D 由 PR #3 完成 docs checkpoint 合并与 CI green（run 33240760167）验证。
 - Phase 14A：COMPLETE — design freeze。`specs/2026-08-29-scanner-valuation-integration-design-freeze/{requirements,plan,validation}.md`；分支 `feature/scanner-valuation-integration`；六个新决策 ID `D-CACHE-002..004`、`D-BUDGET-001`、`D-ACCOUNTING-001`、`D-PHASE14A-COMPLETE`。`D-CACHE-001` 仍为 Active（runtime cache 未实现）；Phase 14A 仅冻结设计。Phase 14B / 14C / 14D：PROPOSED / NOT AUTHORIZED。
+- Phase 14A-R1：设计 coherence correction（docs only；无 production code）。`D-PHASE14A-R1-COHERENCE` 记录九项子修正（strict BUFF cache selection via session-level adapter；two-stage prepare/execute；cache backend/codec/adapter 错误非 live candidates；live provider 失败语义保持 `PriceLookupResult` 转换；counter contract Option A finalized；14B reuse test 修正；TTL numeric default 不冻结；initial 14C write-after-live OUT OF SCOPE；`D-CACHE-001` 仍为 Active）。Phase 14B 仍为 PROPOSED / NOT AUTHORIZED UNTIL R1 REVIEW。
 - `main` 未被 Phase 14A 推送修改；HEAD 当前在 `feature/scanner-valuation-integration`，需通过 `git rev-parse HEAD` 实时确认。
 
 ## 禁止事项
