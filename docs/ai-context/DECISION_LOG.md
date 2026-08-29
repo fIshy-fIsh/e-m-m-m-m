@@ -633,3 +633,93 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 - **What is NOT implemented:** run-level SteamDT output-price cache (`D-CACHE-001`); any new development phase.
 - **Reason:** every completed phase was committed, pushed, and frozen; subsequent reuse must be a separately reviewed phase.
 - **Future revisit:** only when a new explicit development phase is authorized. Do not reopen completed phases without new evidence.
+
+## D-CACHE-002 — Run-scoped exact-name reuse is the only Phase 14 seam
+
+- **Date:** 2026-08-29 (Phase 14A design freeze)
+- **Status:** Active. Design frozen at `specs/2026-08-29-scanner-valuation-integration-design-freeze/`. No runtime change in Phase 14A.
+- **Decision:** the **only** sanctioned seam for any future Phase 14 implementation that performs run-scoped exact-name reuse is a scanner-owned `RunScopedValuationSession` boundary, living **outside** `app/services/valuation_service.py` and `app/services/live_recipe_valuation.py` (both Protected Core). The boundary does NOT resolve BUFF listing identity, does NOT alter recipe enumeration, and does NOT cache-cross-reference `BuffCommunityIdentityResolver`.
+- **Run-scoped memo contract:** within one `LiveScannerOrchestrator.run_once()` call, exact `output_market_hash_name` strings are deduplicated against an in-memory memo; successes and terminal failures are both reused; the memo dies at end of `run_once`; nothing is persisted across runs.
+- **Reuse key:** exact byte-canonical `output_market_hash_name` — no fuzzy matching, no case folding, no aliases, no `goods_id` substitution, no `platformItemId` substitution, no hidden normalization layer. The current canonicalization is the existing Steam community market canonical name used throughout the engine path.
+- **Supersession of D-CACHE-001:** `D-CACHE-001` remains `Active` (the cache is not implemented at runtime). `D-CACHE-002` only freezes the design that any future implementation must satisfy. `D-CACHE-001` is preserved as the historical Phase 13T rule that prohibited silent introduction of cross-recipe cache behavior; Phase 14A explicitly does not promote it to "superseded". `D-CACHE-001` will be reclassified only after Phase 14B lands and is verified, and only with an explicit amendment entry.
+- **Why a new scanner-owned boundary and not a generic ValuationService cache manager:** the trade-up engine, EV service, and risk filter must remain unaware of cache mechanics. A generic global cache manager would entangle them with Phase 12D and would silently redefine the atomic preflight.
+- **Future revisit:** Phase 14B / 14C / 14D may extend or amend this decision under explicit reviewed migration authorization.
+
+## D-CACHE-003 — Initial scanner cache policy is FRESH_ONLY
+
+- **Date:** 2026-08-29 (Phase 14A design freeze)
+- **Status:** Active. Design frozen. No runtime change in Phase 14A.
+- **Decision:** initial Phase 14C scanner integration uses `PriceCacheReadPolicy.FRESH_ONLY` exclusively. `ALLOW_STALE`, `ALLOW_STALE_GRACE`, and any future policy that consumes stale data are NOT enabled in Phase 14B or 14C.
+- **Cache hit semantics under FRESH_ONLY:**
+  - `FRESH + SELECTED` → usable cache hit; zero live-provider budget consumed; valuation may complete for that name subject to the existing strict BUFF selector rerun.
+  - `FRESH + SELECTION_FAILURE` → terminal same-run failure; reused within the run; no immediate live retry; no second-platform fallback; no bid substitution; no metadata-zero reuse. Phase 14A explicitly forbids adding a "live fallback on FRESH + SELECTION_FAILURE" path because the selector is the strict BUFF selector and the cached candidates are already the full provider response.
+  - `MISS / EXPIRED / STALE / STALE_GRACE / POLICY_BLOCKED` → live refresh candidate if budget allows; not usable as a quote without a successful live attempt.
+- **Cache backend / codec exception contract:** `PriceCacheBackendError`, `PriceCacheCodecError`, `SteamDTPriceCacheAdapterError`, and any future typed backend/codec error are propagated by identity from the session to the orchestrator. They are NOT silently reinterpreted as `MISS`. Doing so would erase the operational signal that a Redis failure or codec corruption is sending.
+- **Cache write after live success:** OFF by default in Phase 14C. An opt-in `STEAMDT_PRICE_CACHE_WRITE_AFTER_LIVE` setting may be added in a future separately authorized phase; Phase 14A does not decide this.
+- **Selector rerun:** every cache hit (including `FRESH + SELECTED`) MUST rerun the caller-supplied strict BUFF selector against the stored candidates. The selector is `select_steamdt_price_quote` and the `SteamDTPriceSelectionConfig` is the project-default one.
+- **No platform filter at write time:** the cache stores the full ordered list of normalized SteamDT platform candidates per item, in provider response order. BUFF-vs-other selection happens at READ time via the existing strict selector.
+- **Why FRESH_ONLY:** Phase 13T deliberately excluded any cross-recipe cache and explicitly required that freshness semantics be defined before any implementation. `FRESH_ONLY` is the most conservative policy that still meaningfully reduces NEW LIVE demand when an item was recently refreshed (e.g. by the existing manual `scripts/steamdt_refresh_integration.py` path).
+- **Future revisit:** `ALLOW_STALE` / `ALLOW_STALE_GRACE` policies may be added in a future separately authorized phase; today they are NOT enabled.
+
+## D-BUDGET-001 — Atomic live-demand preflight (max_valuation_requests_per_run)
+
+- **Date:** 2026-08-29 (Phase 14A design freeze; supersedes the structural-demand interpretation in `D-ENUM-004` for the scanner runtime ONLY when Phase 14B lands; `D-ENUM-004` remains Active for any code path that has not yet migrated to the new interpretation)
+- **Status:** Active. Design frozen. No runtime change in Phase 14A.
+- **Decision:** `max_valuation_requests_per_run` is redefined as the count of **NEW LIVE SteamDT provider demand / attempts** within one `run_once()`, exclusive of run-reuse hits and `FRESH + SELECTED` cache hits.
+- **Atomic preflight algorithm (single-threaded inside one `run_once`):**
+  1. Derive current recipe unique output names in first-seen order.
+  2. Consult the run memo; memoed-success / memoed-failure names consume ZERO live-provider budget.
+  3. For still-unresolved names, perform `FRESH_ONLY` cache preflight; `FRESH + SELECTED` consumes ZERO; `FRESH + SELECTION_FAILURE` is memoed as terminal failure and consumes ZERO; `MISS / EXPIRED / STALE / STALE_GRACE / POLICY_BLOCKED / BACKEND_ERROR / CODEC_ERROR` are live-refresh candidates. Backend / codec exceptions propagate by identity and are NOT silently reinterpreted as `MISS`.
+  4. Compute `live_demand = count(live_refresh_candidate_names)`.
+  5. **Before any live call**, atomically compare `valuation_live_used + live_demand > max_valuation_requests_per_run`; if exceeded, build a blocked evaluation; `live_atomically_blocked += live_demand`; issue ZERO live SteamDT calls for that recipe.
+  6. Else `valuation_live_used += live_demand`; perform live resolution in first-seen order; each `refresh_one` call charges the budget the moment the live call is actually attempted, even if it later fails.
+- **At-most-one invariant:** at most one SteamDT live attempt per exact name per run. Phase 14A explicitly forbids adding persistent negative caching unless a future separately authorized Phase 14E does so.
+- **No partial valuation:** any incomplete recipe yields `valuation_completed=False`, no metrics, no risk, no opportunity. Never drop outputs, renormalize probabilities, substitute a previous recipe's metrics, zero-fill, or stale-fill.
+- **Migration of legacy semantics:** the legacy `valuation_requests_attempted / succeeded / failed / blocked` counters continue to record structural Phase13T demand (recipe unique output name count); the new discriminators `run_reuse_hits`, `cache_hits_fresh_selected`, `cache_misses`, `cache_policy_blocked`, `cache_expired`, `cache_selection_failures`, `live_demand`, `live_attempted`, `live_succeeded`, `live_failed`, `live_atomically_blocked` are added additively. Option A (additive) is preferred; Option B (explicit semantics migration) is the fallback if Option A surfaces ambiguity.
+- **Future revisit:** any change to the atomic preflight algorithm or the at-most-one invariant requires an explicit reviewed decision.
+
+## D-CACHE-004 — Failure reuse within a run; no automatic same-name retry
+
+- **Date:** 2026-08-29 (Phase 14A design freeze)
+- **Status:** Active. Design frozen. No runtime change in Phase 14A.
+- **Decision:** within one `LiveScannerOrchestrator.run_once()` call, the run memo records both successes and terminal failures keyed by exact `output_market_hash_name`. A terminal failure is reused for the rest of the run. There is no automatic same-name retry, no second-platform fallback, no bid substitution, no metadata-zero reuse, and no "best-effort" cache-writeback reinterpretation.
+- **Terminal failure categories:**
+  - Live lookup / selection failure (transport / API / BUFF selector rejection).
+  - Fresh-cache selection failure.
+  - Backend / codec exception (propagated by identity; not silently re-classified).
+- **Non-terminal categories:**
+  - Cache miss / expired / stale / stale-grace / policy-blocked under FRESH_ONLY → live refresh candidate if budget allows.
+- **No persistent negative caching** in Phase 14B or 14C; a negative outcome is reused only within the run in which it occurred.
+- **Why:** re-running a live SteamDT lookup for the same exact name in the same run after a terminal failure would either re-discover the same failure or silently swallow it; both outcomes violate the existing fail-closed valuation contract.
+- **Future revisit:** future backoff / persistent negative caching is separate work, requires an explicit reviewed decision, and is NOT implemented in Phase 14B or 14C.
+
+## D-ACCOUNTING-001 — Additive counter migration preserves legacy semantics
+
+- **Date:** 2026-08-29 (Phase 14A design freeze)
+- **Status:** Active. Design frozen. No runtime change in Phase 14A.
+- **Decision:** Phase 14B introduces a discriminator set of new counters, **additively**, preserving the legacy `ScannerRunStageCounters.valuation_requests_attempted / succeeded / failed / blocked` semantics exactly. Option A (additive) is the preferred migration path. Option B (explicit semantics migration with full test/doc rename) is the fallback if Option A surfaces ambiguity.
+- **New discriminators (additive):** `run_reuse_hits`, `cache_hits_fresh_selected`, `cache_misses`, `cache_policy_blocked`, `cache_expired`, `cache_selection_failures`, `live_demand`, `live_attempted`, `live_succeeded`, `live_failed`, `live_atomically_blocked`.
+- **Invariants:**
+  - `valuation_requests_attempted == run_reuse_hits + cache_hits_fresh_selected + live_demand + live_atomically_blocked + cache_selection_failures` (within each recipe, after memo + cache preflight).
+  - `live_demand >= live_attempted` (only recipes that pass the atomic preflight actually issue live calls).
+  - `live_attempted == live_succeeded + live_failed`.
+  - `valuation_requests_blocked >= live_atomically_blocked` (a recipe can be blocked for other reasons, including missing inputs).
+- **Why additive and not a rename:** every pre-existing test that asserts on the legacy counters (notably `tests/test_multi_recipe_scanner_scale_validation.py`) must continue to pass unchanged, except for additive assertions on the new discriminators. A silent rename would force a multi-file migration and risk test/doc drift.
+- **Future revisit:** if Phase 14B implementation observes that the legacy counters create ambiguous semantics in production, escalate to Option B (explicit rename + full test/doc migration). The decision is made at the start of Phase 14B.
+
+## D-PHASE14A-COMPLETE — Phase 14A design freeze closed
+
+- **Date:** 2026-08-29 (Phase 14A design freeze)
+- **Status:** Active.
+- **Decision:** Phase 14A — the scanner valuation integration design freeze — is complete. The freeze covers:
+  - `specs/2026-08-29-scanner-valuation-integration-design-freeze/{requirements,plan,validation}.md`;
+  - `D-CACHE-002` (run-scoped exact-name reuse is the only Phase 14 seam);
+  - `D-CACHE-003` (initial scanner cache policy is `FRESH_ONLY`);
+  - `D-BUDGET-001` (atomic live-demand preflight);
+  - `D-CACHE-004` (failure reuse within a run; no automatic same-name retry);
+  - `D-ACCOUNTING-001` (additive counter migration; Option A preferred);
+  - the future 14B / 14C / 14D implementation sequence and the future test matrix A-N.
+- **Final authoritative state at Phase 14A closure:** branch `feature/scanner-valuation-integration`; `main` unchanged at P3 = `24c95c029f583d5cc0b0a67986e48c06d0ef7957`; the closure commit is the local HEAD of `feature/scanner-valuation-integration` (verify via `git rev-parse HEAD` at task entry); `ahead/behind = 0 0`; `PHASE_14A_COMPLETE`. CI workflow blob `02d0ce81...` preserved unchanged.
+- **What is NOT implemented:** Phase 14B / 14C / 14D; the `RunScopedValuationSession` boundary; Phase 12D cache wiring into the scanner path; `D-CACHE-001` remains `Active` (the runtime cache is still not implemented).
+- **Reason:** Phase 14A is a design freeze; no application code is touched. The design is the contract that any future implementation must satisfy.
+- **Future revisit:** any future Phase 14 implementation must be explicitly authorized and must not silently relax any frozen contract recorded in this decision log.

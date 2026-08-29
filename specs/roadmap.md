@@ -3,17 +3,21 @@
 ## Current Position
 
 ```text
-Current phase:                            PHASE_13T_COMPLETE
+Current phase:                            PHASE_14A_COMPLETE
+                                          (Phase 14A — Scanner Valuation Integration
+                                           Design Freeze; docs only; no production
+                                           code; branch feature/scanner-valuation-integration)
 
 Current capability:                       read-only bounded multi-recipe one-shot scanner
 
-Active development line:                  canonical main
-                                          (historical feature/steamdt-cache-rate-limit is an
-                                           ancestor; removed during R0-D cleanup)
+Active development line:                  feature/scanner-valuation-integration
+                                          (Phase 14A design freeze; canonical main P3
+                                           is unchanged and tracked at 0 0)
 
 Latest production / test checkpoint:      9288794
                                         add bounded multi-recipe scale validation
                                         (full SHA 92887947e0e1808f1bc23258cf53adb10a0036ee)
+                                        (Phase 14A did not modify production code)
 
 Post-Phase-13T documentation /
 handoff baseline:                         bb09068
@@ -23,19 +27,43 @@ handoff baseline:                         bb09068
 Default recipe enumeration:               2 candidates / 256 states
 
 Repository normalization:                  COMPLETE
-                                        canonical main = P2 =
-                                          328269112f229faf3fce4cf0be4b9c7875582b65
-                                        parents: {9cfaf36..., b13201b...}
-                                        tree:   b7648ad185aaf9ae4f4ca1057294e4b84010ab8d
+                                        canonical main = P3 =
+                                          24c95c029f583d5cc0b0a67986e48c06d0ef7957
+                                        parents: {328269112f229faf3fce4cf0be4b9c7875582b65,
+                                                   6964cc4ff25cd4ad72fe65f92f40a5ce70a4a268}
+                                        tree:   608d3e473072afb0d97aadf46ea0be8b1f55ca26
                                         CI workflow blob 02d0ce81... preserved
-                                        (R0-A / R0-B / R0-C / R0-C docs checkpoint all complete)
+                                        (R0-A / R0-B / R0-C / R0-C docs checkpoint /
+                                         R0-D all complete; canonical main advanced
+                                         to P3 by the R0-D completion documentation
+                                         checkpoint PR #3)
 
-Branch / repository cleanup (R0-D):       IN PROGRESS — CLEANUP COMPLETE /
-                                          COMPLETION DOCS PR OPEN
+Branch / repository cleanup (R0-D):       COMPLETE
                                         (R0-D1 audit, R0-D2 / R0-D2-BIS / R0-D2-TER
-                                         cleanup all complete; canonical main unchanged
-                                         by cleanup; this documentation checkpoint PR is
-                                         the final step before R0-D can be marked COMPLETE)
+                                         cleanup all complete; R0-D completion
+                                         documentation checkpoint PR #3 merged;
+                                         final-main push CI green at run 33240760167
+                                         SUCCESS)
+
+Phase 14A — Scanner Valuation
+Integration Design Freeze:               IN PROGRESS — DESIGN FREEZE (no code)
+                                        specs/2026-08-29-scanner-valuation-integration-design-freeze/
+                                          requirements.md
+                                          plan.md
+                                          validation.md
+                                        six new decision IDs:
+                                          D-CACHE-002 (run-scoped exact-name reuse)
+                                          D-CACHE-003 (FRESH_ONLY initial policy)
+                                          D-BUDGET-001 (atomic live-demand preflight)
+                                          D-CACHE-004 (failure reuse within run)
+                                          D-ACCOUNTING-001 (additive counter migration)
+                                          D-PHASE14A-COMPLETE (design freeze closed)
+                                        D-CACHE-001 remains Active (runtime cache
+                                         not implemented); Phase 14A only freezes
+                                         the design. Phase 14B / 14C / 14D
+                                         (run-scoped reuse / cache integration /
+                                         CLI + scale-live validation) are
+                                         PROPOSED / NOT AUTHORIZED.
 
 Live repository HEAD / branch / tree:     MUST be verified from Git at task entry;
                                         do not infer current HEAD from this document
@@ -329,7 +357,7 @@ Two structural invariants preserved across all phases: (1) `candidate-owned stat
 
 ## Repository Consolidation
 
-R0-A / R0-B / R0-C / R0-C docs checkpoint are all complete. R0-D cleanup execution is complete; the completion documentation checkpoint PR is open.
+R0-A / R0-B / R0-C / R0-C docs checkpoint / R0-D are all complete. Canonical `main` advanced to P3 (`24c95c0…`) by the R0-D completion documentation checkpoint PR #3.
 
 Current branch state (after R0-D cleanup):
 
@@ -464,11 +492,41 @@ R0-D Branch / Repository Cleanup IN PROGRESS — CLEANUP COMPLETE /
                                   and post-merge verified on main
 ```
 
-R0-D completion condition: this checkpoint merged and verified on `main`.
+R0-D completion condition: this checkpoint merged and verified on `main`. CONDITION SATISFIED — PR #3 merged on `main` at P3 = `24c95c029f583d5cc0b0a67986e48c06d0ef7957`; final-main push CI green (run 33240760167 SUCCESS). R0-D = COMPLETE.
 
 ## Next Proposed Functional Work
 
-**Proposed, not yet authorized.** No new functional phase is currently in progress.
+**Phase 14A is IN PROGRESS — DESIGN FREEZE (docs only; no production code).**
+**No new functional phase is currently in progress beyond Phase 14A.**
+**Phase 14B / 14C / 14D and Valuation Budget Calibration are PROPOSED / NOT AUTHORIZED.**
+
+### In progress — Phase 14A Scanner Valuation Integration Design Freeze
+
+```text
+scope (already completed at design-freeze time):
+  spec trilogy:
+    specs/2026-08-29-scanner-valuation-integration-design-freeze/
+      requirements.md  (current gap + non-goals + acceptance criteria)
+      plan.md          (RunScopedValuationSession seam + budget algorithm +
+                        counter migration contract + 14B/14C/14D sequence)
+      validation.md    (gate matrix + future test matrix A..N)
+  decision IDs appended to docs/ai-context/DECISION_LOG.md:
+    D-CACHE-002  run-scoped exact-name reuse is the only Phase 14 seam
+    D-CACHE-003  initial scanner cache policy is FRESH_ONLY
+    D-BUDGET-001  atomic live-demand preflight (max_valuation_requests_per_run
+                  now means NEW LIVE SteamDT provider demand, not structural
+                  recipe demand)
+    D-CACHE-004  failure reuse within a run; no automatic same-name retry
+    D-ACCOUNTING-001  additive counter migration preserves legacy semantics
+                      (Option A preferred; Option B fallback)
+    D-PHASE14A-COMPLETE  design freeze closed
+
+closure status:
+  D-CACHE-001 remains Active (runtime cache is not implemented);
+  Phase 14A only freezes the design.
+  No production code touched. main unchanged by Phase 14A.
+  Branch: feature/scanner-valuation-integration (not main).
+```
 
 ### Primary — Scanner Valuation Integration
 
@@ -484,15 +542,25 @@ scope:
   preserve bounded multi-recipe ordering
   preserve atomic fail-closed valuation budget behavior
 
+sub-phase sequence (frozen by Phase 14A):
+  14B  Run-scoped exact-name reuse (no persistent cache yet)
+  14C  Phase 12D cache integration under FRESH_ONLY
+  14D  CLI + scale / live validation
+
 constraints:
   no invented endpoints, signatures, or field mappings
   no fallback valuation
   no probability renormalization
   no scheduler or background work introduced by this phase
   no real BUFF / SteamDT request behavior change
+  the scanner-owned RunScopedValuationSession boundary lives
+    OUTSIDE app/services/valuation_service.py and
+    app/services/live_recipe_valuation.py (both Protected Core)
 
 closure of D-CACHE-001:
-  run-level cross-recipe exact-price reuse lives here, NOT in Deferred
+  run-level cross-recipe exact-price reuse lives here, NOT in Deferred.
+  D-CACHE-001 is reclassified from Active to Implemented only after
+  Phase 14B / 14C land and are verified.
 ```
 
 ### Secondary — Valuation Budget Calibration

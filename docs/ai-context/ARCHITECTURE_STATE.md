@@ -234,6 +234,11 @@ The protected-core files below may be modified only under an explicit reviewed m
 - `app/clients/buff_client.py` (legacy skeleton)
 - SteamDT client/core, SteamApis modules, metadata providers.
 - `app/services/buff_listing_provider.py` and `app/clients/buff_anonymous_listing_client.py` (recently hardened; change only with explicit new spec).
+- Phase 12D cache modules (`app/services/price_cache.py`, `app/services/price_cache_codec.py`, `app/services/redis_price_cache.py`, `app/services/price_cache_factory.py`, `app/services/steamdt_price_cache_adapter.py`, `app/services/steamdt_cached_price_resolver.py`, `app/services/steamdt_price_snapshot_source.py`, `app/services/steamdt_price_refresh_service.py`, `app/services/steamdt_refresh_planner.py`, `app/services/steamdt_refresh_executor.py`) — implemented and unit-tested standalone; not yet wired into the live scanner valuation path. Any future scanner-side wiring must be performed under explicit reviewed migration authorization (per `D-CACHE-001`).
+
+### Phase 14A seam freeze (no code in 14A)
+
+Phase 14A (`specs/2026-08-29-scanner-valuation-integration-design-freeze/`) freezes the design for any future Phase 14 implementation that integrates the existing Phase 12D cache stack into the live scanner valuation path and closes `D-CACHE-001` (run-scoped cross-recipe exact-price reuse). The single sanctioned seam is a **scanner-owned `RunScopedValuationSession` boundary that lives OUTSIDE `app/services/valuation_service.py` and `app/services/live_recipe_valuation.py`** (both Protected Core). The boundary does NOT resolve BUFF listing identity, does NOT alter recipe enumeration, and does NOT cache-cross-reference `BuffCommunityIdentityResolver`. Any future Phase 14 implementation that touches Protected Core must do so under an explicit reviewed migration plan that preserves every existing observable contract (`D-ENUM-001..004`, `D-CACHE-001..004`, `D-BUDGET-001`, `D-ACCOUNTING-001`, `D-SCANNER-001`, `D-VALIDATION-001`, `D-MEMORY-001`, `D-ADAPTER-003`, `D-ADAPTER-004`). Initial scanner cache policy is `PriceCacheReadPolicy.FRESH_ONLY`. `max_valuation_requests_per_run` is redefined as NEW LIVE SteamDT provider demand / attempts within a run, exclusive of run-reuse hits and `FRESH + SELECTED` cache hits. Phase 14A does NOT modify any production code.
 
 ## Verified vs Assumed vs Unknown
 
