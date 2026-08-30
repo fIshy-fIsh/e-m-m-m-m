@@ -811,3 +811,16 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 - **Runtime boundary:** default one-shot CLI composes the strict-BUFF FRESH_ONLY cache seam. Scanner write-after-live, scheduled background refresh, continuous scanning, and any scanner TTL environment/config setting remain unimplemented.
 - **D-CACHE-001:** superseded for the originally tracked run-level cache gap; deferred write/refresh concerns remain separate future-work items.
 - **Next:** Valuation Budget Calibration remains NOT STARTED / NOT AUTHORIZED.
+
+## D-PHASE14-MAIN-INTEGRATION-COMPLETE — Phase 14 canonically integrated on `main`
+
+- **Date:** 2026-08-30 (Phase 14-M2)
+- **Status:** Active. Phase 14A / 14A-R1 / 14B / 14C / 14D merged to `main` via PR #4 (`Integrate scanner valuation cache and run-level reuse`).
+- **Topology:** canonical main P4 = `26c69bae9e482452f56f380277d8b10fefa29d52`, parents `{24c95c029f583d5cc0b0a67986e48c06d0ef7957, 47227b33cd088a0961320254dd6c0de75e3564bb}`, tree `39a82914fa53fd414d141fbb87cbf197c1ff2c19`. The merged Phase 14 tip `47227b33...` is retained in `main` ancestry as a historical implementation checkpoint.
+- **CI:** main push run `33320657978` / job `quality` SUCCESS.
+- **Branch lifecycle:** `feature/scanner-valuation-integration` safely retired locally and on `origin`; no force push, no reset, no rebase, no prune.
+- **Implemented capability:** run-scoped exact-name reuse; NEW LIVE request-budget accounting; FRESH_ONLY Phase 12D scanner cache reads with strict-BUFF cached selection; default one-shot CLI cache composition with in-memory default and optional Redis; no scanner cache writeback; no refresh service; no scheduler/background work; no scanner TTL environment/config.
+- **Deferred (separate future work):** scanner write-after-live, scheduled/background refresh, continuous scanning, generalized write-policy on the scanner path, refresh-service integration, Redis batching/concurrency, dual session/orchestrator counter ownership redesign, transactional Stage A rollback, blocked-MISS dedup, broad AST blacklist redesign.
+- **Validation:** Phase 14D baseline preserved at `3428 passed, 23 skipped, 1 warning`; CI green on merge push. No live BUFF/SteamDT/Redis request was issued during Phase 14-M2 docs checkpoint.
+- **Protected state:** protected research JSONs remain untracked and untouched; local-only tag `v1-dry-run-baseline -> 32ab47c5b66a0f331457e69f1515e5e9bb2a37e1` preserved.
+- **Next:** Valuation Budget Calibration remains NOT STARTED / NOT AUTHORIZED.

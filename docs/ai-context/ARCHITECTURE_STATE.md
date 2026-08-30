@@ -266,7 +266,7 @@ The strict-BUFF cache-selection adapter is composed at the session level via reu
   - Identity binding is wired into the runtime (`D-IDENTITY-007`).
   - The orchestrator consumes `enumerate_scanner_recipe_selections` (Phase 13T-3A).
   - Bounded enumeration has been validated offline (Phase 13T-4A) and live (Phase 13T-4B).
-- Phase 14B run-scoped exact-name reuse, Phase 14C scanner service/session FRESH_ONLY cache READ support, and Phase 14D default one-shot CLI cache composition are complete. Default `scripts/run_live_scan_once.py` runtime is in-memory and Redis is optional. `D-CACHE-001` is superseded for the originally tracked run-reuse + CLI composition gap.
+- Phase 14 run-scoped exact-name reuse, NEW-LIVE atomic accounting, FRESH_ONLY Phase 12D scanner cache reads with strict-BUFF selection, and the default one-shot CLI cache composition are **canonically integrated on `main`** via PR #4. Canonical main P4 = `26c69bae9e482452f56f380277d8b10fefa29d52`, tree `39a82914...`. Feature branch `feature/scanner-valuation-integration` safely retired. `D-CACHE-001` is superseded for the originally tracked run-reuse + CLI composition gap.
 
 ## Completed Capabilities (cumulative)
 

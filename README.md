@@ -260,13 +260,15 @@ What are the safety boundaries?
   valuation, no probability renormalization.
 
 Where is the project in its roadmap?
-  Phase 14C is complete on `feature/scanner-valuation-integration`.
+  Phase 14 is canonically integrated on `main` via PR #4.
   Phase 14B implemented one-run exact-name success/failure reuse and
   NEW-LIVE accounting; Phase 14C added optional scanner service/session
   FRESH_ONLY reads with strict-BUFF cached selection and no writeback;
   Phase 14D wired the default one-shot CLI cache composition with
   in-memory default and optional Redis through the existing factory.
-  R0-A through R0-D are complete; canonical main remains P3 (`24c95c0...`).
+  Canonical main P4 = `26c69bae9e482452f56f380277d8b10fefa29d52`,
+  parents `{24c95c0..., 47227b3...}`, tree `39a82914...`.
+  R0-A through R0-D and Phase 14 are complete.
 
 What should happen next?
   Valuation Budget Calibration remains next and not authorized.
