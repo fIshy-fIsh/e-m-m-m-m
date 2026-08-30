@@ -18,6 +18,7 @@ import argparse
 import asyncio
 import json
 from collections.abc import Sequence
+from contextlib import AsyncExitStack
 from dataclasses import asdict
 from decimal import Decimal
 from pathlib import Path
@@ -39,6 +40,10 @@ from app.services.market_universe_builder import (
     UniverseAllocationStrategy,
     build_universe_goods_ids,
 )
+from app.services.price_cache_factory import (
+    SteamDTPriceCacheCompositionError,
+    create_steamdt_price_cache_runtime,
+)
 from app.services.recipe_solver import (
     DEFAULT_MAX_CANDIDATE_STATES_EXPLORED,
     DEFAULT_MAX_RECIPE_CANDIDATES_RETURNED,
@@ -46,9 +51,13 @@ from app.services.recipe_solver import (
     RecipeSolverConfig,
 )
 from app.services.risk_filter import RiskFilterConfig
+from app.services.scanner_cached_buff_price_resolver import (
+    ScannerCachedBuffPriceResolver,
+)
 from app.services.scanner_orchestrator import LiveScannerOrchestrator, ScannerRunResult
 from app.services.skin_metadata_resolver import PinnedSkinMetadataResolver
 from app.services.steamdt_buff_price_provider import SteamDTBuffPriceProvider
+from app.services.steamdt_cached_price_resolver import SteamDTPriceCacheReader
 from app.services.valuation_service import ValuationConfig, ValuationService
 
 DEFAULT_IDENTITY_SNAPSHOT = Path("data/identity/buff_identity_v1.json")
@@ -64,14 +73,18 @@ class LiveScanSettings(BaseSettings):
     """Narrow CLI settings loaded from the existing `.env` mechanism.
 
     `extra="ignore"` lets the CLI coexist with unrelated project
-    settings that it does not consume (database, Redis, legacy smoke
-    flags). This keeps credentials in `.env` while avoiding a global
-    Settings dependency for a one-shot script.
+    settings that it does not consume. This keeps credentials in `.env`
+    while avoiding a global Settings dependency for a one-shot script.
+    Redis settings are consumed only when the optional price-cache
+    backend is explicitly set to `redis`.
     """
 
     steamdt_base_url: str = "https://open.steamdt.com"
     steamdt_api_key: str = ""
     steamdt_dry_run: bool = True
+    steamdt_price_cache_backend: str = "inmemory"
+    steamdt_price_cache_redis_namespace: str = "steamdt-price-cache-v1"
+    redis_url: str = ""
     sell_fee_rate: float = 0.025
     min_roi: float = 0.05
     min_expected_profit_cny: float = 20.0
@@ -187,7 +200,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-valuation-requests",
         type=int,
         default=DEFAULT_MAX_VALUATION_REQUESTS,
-        help="Hard cap for unique SteamDT output-price requests (1..60)",
+        help="Hard cap for NEW LIVE SteamDT exact-name demand (1..60)",
     )
     parser.add_argument(
         "--max-recipe-candidates-returned",
@@ -243,25 +256,25 @@ def build_steamdt_http_client(
 async def run_live_scan_once(
     args: argparse.Namespace,
     *,
+    settings: LiveScanSettings,
+    price_cache: SteamDTPriceCacheReader,
     enumeration_config: RecipeEnumerationConfig,
 ) -> ScannerRunResult:
     """Construct live dependencies, run ONE scan, close clients, return result."""
-    settings = LiveScanSettings()
-    validate_live_valuation_config(
-        settings,
-        max_valuation_requests=args.max_valuation_requests,
-    )
-
     identity_resolver = BuffCommunityIdentityResolver.from_snapshot_path(
         args.identity_snapshot
     )
     metadata_resolver = PinnedSkinMetadataResolver.from_snapshot_path(
         args.metadata_snapshot
     )
+    cached_price_resolver = ScannerCachedBuffPriceResolver(price_cache)
 
-    buff_http = httpx.AsyncClient(timeout=10.0)
-    steamdt_http = build_steamdt_http_client(settings)
-    try:
+    async with AsyncExitStack() as stack:
+        buff_http = httpx.AsyncClient(timeout=10.0)
+        stack.push_async_callback(buff_http.aclose)
+        steamdt_http = build_steamdt_http_client(settings)
+        stack.push_async_callback(steamdt_http.aclose)
+
         buff_client = BuffAnonymousListingHttpClient(buff_http)
         listing_provider = BuffListingProvider(buff_client)
 
@@ -270,9 +283,7 @@ async def run_live_scan_once(
                 base_url=settings.steamdt_base_url,
                 api_key=settings.steamdt_api_key or None,
                 dry_run=settings.steamdt_dry_run,
-                rate_limit_policies=(
-                    SteamDTClientConfig().rate_limit_policies
-                ),
+                rate_limit_policies=(SteamDTClientConfig().rate_limit_policies),
             ),
             steamdt_http,
         )
@@ -288,6 +299,7 @@ async def run_live_scan_once(
             identity_resolver=identity_resolver,
             metadata_resolver=metadata_resolver,
             valuation_service=valuation_service,
+            cached_price_resolver=cached_price_resolver,
             max_valuation_requests_per_run=args.max_valuation_requests,
             enumeration_config=enumeration_config,
             solver_config=RecipeSolverConfig(
@@ -310,9 +322,6 @@ async def run_live_scan_once(
             ),
         )
         return await orchestrator.run_once(args.goods_id)
-    finally:
-        await buff_http.aclose()
-        await steamdt_http.aclose()
 
 
 def _to_jsonable(value: Any) -> Any:
@@ -357,10 +366,32 @@ def print_human(result: ScannerRunResult) -> None:
     print(f"recipes rejected:           {counters.recipes_rejected}")
     print(f"opportunities found:        {counters.opportunities_found}")
     print()
-    print(f"valuation requests attempted: {counters.valuation_requests_attempted}")
-    print(f"valuation requests succeeded: {counters.valuation_requests_succeeded}")
-    print(f"valuation requests failed:    {counters.valuation_requests_failed}")
-    print(f"valuation requests blocked:   {counters.valuation_requests_blocked}")
+    print(
+        f"logical valuation requests attempted: {counters.valuation_requests_attempted}"
+    )
+    print(
+        f"logical valuation requests succeeded: {counters.valuation_requests_succeeded}"
+    )
+    print(f"logical valuation requests failed:    {counters.valuation_requests_failed}")
+    print(
+        f"logical valuation requests blocked:   {counters.valuation_requests_blocked}"
+    )
+    print()
+    print(f"run reuse hits:              {counters.run_reuse_hits}")
+    print(f"run reuse successes:         {counters.run_reuse_successes}")
+    print(f"run reuse failures:          {counters.run_reuse_failures}")
+    print()
+    print(f"cache fresh hits:            {counters.cache_hits_fresh_selected}")
+    print(f"cache misses:                {counters.cache_misses}")
+    print(f"cache policy blocked:        {counters.cache_policy_blocked}")
+    print(f"cache expired:               {counters.cache_expired}")
+    print(f"cache selection failures:    {counters.cache_selection_failures}")
+    print()
+    print(f"live demand:                 {counters.live_demand}")
+    print(f"live attempted:              {counters.live_attempted}")
+    print(f"live succeeded:              {counters.live_succeeded}")
+    print(f"live failed:                 {counters.live_failed}")
+    print(f"live atomically blocked:     {counters.live_atomically_blocked}")
     print()
     for index, evaluation in enumerate(result.recipe_evaluations, start=1):
         print(f"Recipe {index}:")
@@ -419,7 +450,8 @@ def print_effective_config(
     print("LIVE VALUATION CONFIG")
     print(f"SteamDT dry_run:             {settings.steamdt_dry_run}")
     print(f"SteamDT API key present:    {bool(settings.steamdt_api_key)}")
-    print(f"max valuation requests:     {max_valuation_requests}")
+    print(f"NEW LIVE exact-name cap:     {max_valuation_requests}")
+    print(f"price-cache backend:         {settings.steamdt_price_cache_backend}")
     print(f"sell_fee_rate:              {settings.sell_fee_rate}")
     print(f"min_roi:                    {settings.min_roi}")
     print(f"min_expected_profit_cny:    {settings.min_expected_profit_cny}")
@@ -510,7 +542,7 @@ def print_universe_preview(
     )
     print(f"cap:                        {result.spec.cap}")
     print(f"selected goods_ids:         {len(result.goods_ids)}")
-    print(f"logical valuation cap:      {max_valuation_requests}")
+    print(f"NEW LIVE exact-name cap:     {max_valuation_requests}")
     print(f"max BUFF requests (upper):  {len(result.goods_ids)}")
     print()
     diagnostics = result.diagnostics
@@ -731,15 +763,25 @@ async def _main(argv: Sequence[str] | None = None) -> int:
         print("LIVE_VALUATION_BLOCKED_BY_CONFIGURATION")
         print(str(exc))
         return 2
-    if not args.json:
-        print_effective_config(
-            settings,
-            max_valuation_requests=args.max_valuation_requests,
+    try:
+        cache_runtime = await create_steamdt_price_cache_runtime(settings)
+    except SteamDTPriceCacheCompositionError as exc:
+        print("LIVE_PRICE_CACHE_BLOCKED_BY_CONFIGURATION")
+        print(str(exc))
+        return 2
+
+    async with cache_runtime:
+        if not args.json:
+            print_effective_config(
+                settings,
+                max_valuation_requests=args.max_valuation_requests,
+            )
+        result = await run_live_scan_once(
+            args,
+            settings=settings,
+            price_cache=cache_runtime.cache,
+            enumeration_config=enumeration_config,
         )
-    result = await run_live_scan_once(
-        args,
-        enumeration_config=enumeration_config,
-    )
     if args.json:
         print(json.dumps(_to_jsonable(result), ensure_ascii=False, sort_keys=True))
     else:

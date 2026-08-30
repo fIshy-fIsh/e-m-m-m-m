@@ -1,37 +1,108 @@
 from __future__ import annotations
 
+import asyncio
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
 
 import pytest
 
+from app.services.price_cache import (
+    CachedPriceSnapshot,
+    PriceCacheKey,
+    PriceCacheLookup,
+    PriceCacheReadPolicy,
+    PriceCacheWriteResult,
+)
 from app.services.recipe_solver import RecipeEnumerationConfig
+from app.services.scanner_cached_buff_price_resolver import (
+    ScannerCachedBuffPriceResolver,
+)
+from app.services.scanner_orchestrator import (
+    ScannerRunDiagnostics,
+    ScannerRunResult,
+    ScannerRunStageCounters,
+)
 from scripts.run_live_scan_once import (
     LiveScanSettings,
     LiveValuationConfigurationError,
     _build_market_universe_spec,
+    _to_jsonable,
     build_parser,
     build_steamdt_http_client,
+    print_human,
+    run_live_scan_once,
     validate_live_valuation_config,
 )
+
+
+def _empty_run_result(
+    *,
+    counters: ScannerRunStageCounters | None = None,
+) -> ScannerRunResult:
+    now = datetime(2026, 8, 30, tzinfo=UTC)
+    return ScannerRunResult(
+        started_at=now,
+        completed_at=now,
+        goods_ids=("34279",),
+        counters=counters or ScannerRunStageCounters(),
+        diagnostics=ScannerRunDiagnostics(),
+        recipe_evaluations=(),
+        opportunities=(),
+    )
+
+
+class ReadOnlyRecordingCache:
+    def __init__(self) -> None:
+        self.get_calls: list[tuple[PriceCacheKey, PriceCacheReadPolicy]] = []
+
+    async def get(
+        self,
+        key: PriceCacheKey,
+        *,
+        read_policy: PriceCacheReadPolicy = PriceCacheReadPolicy.FRESH_ONLY,
+    ) -> PriceCacheLookup:
+        self.get_calls.append((key, read_policy))
+        return PriceCacheLookup.missing(key)
+
+    async def put(self, snapshot: CachedPriceSnapshot) -> PriceCacheWriteResult:
+        raise AssertionError("scanner CLI must not write cache snapshots")
+
+    async def delete(self, key: PriceCacheKey) -> bool:
+        raise AssertionError("scanner CLI must not delete cache entries")
+
+    async def clear(self) -> None:
+        raise AssertionError("scanner CLI must not clear the cache")
+
+    async def purge_expired(self) -> int:
+        raise AssertionError("scanner CLI must not purge the cache")
+
 
 
 def _settings(
     *,
     dry_run: bool,
     api_key: str,
+    cache_backend: str = "inmemory",
+    redis_url: str = "",
+    cache_namespace: str = "steamdt-price-cache-v1",
 ) -> LiveScanSettings:
     return LiveScanSettings(
         _env_file=None,
         steamdt_dry_run=dry_run,
         steamdt_api_key=api_key,
+        steamdt_price_cache_backend=cache_backend,
+        steamdt_price_cache_redis_namespace=cache_namespace,
+        redis_url=redis_url,
     )
 
 
 def _capture_orchestrator_kwargs(
     monkeypatch: pytest.MonkeyPatch,
     argv: list[str],
+    *,
+    settings: LiveScanSettings | None = None,
 ) -> dict[str, Any]:
     from scripts import run_live_scan_once
 
@@ -39,17 +110,46 @@ def _capture_orchestrator_kwargs(
         async def aclose(self) -> None:
             return None
 
+    class FakeCacheRuntime:
+        def __init__(self) -> None:
+            self.cache = Mock(name="price_cache")
+            self.close_calls = 0
+
+        async def __aenter__(self) -> FakeCacheRuntime:
+            return self
+
+        async def __aexit__(
+            self,
+            exc_type: object,
+            exc: BaseException | None,
+            traceback: object,
+        ) -> None:
+            self.close_calls += 1
+
     captured: dict[str, Any] = {}
+    runtime = FakeCacheRuntime()
+
+    async def create_cache_runtime(_settings: LiveScanSettings) -> FakeCacheRuntime:
+        captured["cache_settings"] = _settings
+        captured["cache_runtime"] = runtime
+        return runtime
+
+    monkeypatch.setattr(
+        run_live_scan_once,
+        "create_steamdt_price_cache_runtime",
+        create_cache_runtime,
+    )
 
     class CapturingOrchestrator:
         def __init__(self, **kwargs: Any) -> None:
             captured.update(kwargs)
 
         async def run_once(self, goods_ids: list[str]) -> object:
+            captured["run_once_calls"] = captured.get("run_once_calls", 0) + 1
             captured["goods_ids"] = tuple(goods_ids)
             return object()
 
-    settings = _settings(dry_run=False, api_key="present")
+    settings = settings or _settings(dry_run=False, api_key="present")
     monkeypatch.setattr(run_live_scan_once, "LiveScanSettings", lambda: settings)
     identity_resolver = Mock(name="identity_resolver")
     metadata_resolver = Mock(name="metadata_resolver")
@@ -115,6 +215,8 @@ def _capture_orchestrator_kwargs(
     )
 
     assert run_live_scan_once.main(argv) == 0
+    assert runtime.close_calls == 1
+    captured["runtime_cache"] = runtime.cache
     return captured
 
 
@@ -168,6 +270,336 @@ def test_steamdt_borrowed_http_client_has_configured_base_url() -> None:
         assert str(client.base_url) == "https://open.steamdt.com"
     finally:
         asyncio.run(client.aclose())
+
+
+def test_default_cache_runtime_injects_strict_scanner_resolver(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = _capture_orchestrator_kwargs(
+        monkeypatch,
+        ["--goods-id", "34279"],
+    )
+    settings = captured["cache_settings"]
+    assert settings.steamdt_price_cache_backend == "inmemory"
+    resolver = captured["cached_price_resolver"]
+    assert type(resolver) is ScannerCachedBuffPriceResolver
+    assert resolver._resolver._cache is captured["runtime_cache"]
+    assert captured["run_once_calls"] == 1
+
+
+def test_redis_settings_reach_existing_cache_factory_seam(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _settings(
+        dry_run=False,
+        api_key="present",
+        cache_backend="redis",
+        redis_url="redis://user:secret@cache.test:6379/4",
+        cache_namespace="scanner-cache-v1",
+    )
+
+    captured = _capture_orchestrator_kwargs(
+        monkeypatch,
+        ["--goods-id", "34279"],
+        settings=settings,
+    )
+
+    assert captured["cache_settings"] is settings
+    assert settings.steamdt_price_cache_backend == "redis"
+    assert settings.steamdt_price_cache_redis_namespace == "scanner-cache-v1"
+    assert type(captured["cached_price_resolver"]) is ScannerCachedBuffPriceResolver
+
+
+def test_scanner_cache_wrapper_reads_fresh_only_without_write_methods() -> None:
+    cache = ReadOnlyRecordingCache()
+    resolver = ScannerCachedBuffPriceResolver(cache)
+
+    resolution = asyncio.run(resolver.resolve("Exact Name"))
+
+    assert resolution.lookup.hit is False
+    assert cache.get_calls == [
+        (PriceCacheKey(market_hash_name="Exact Name"), PriceCacheReadPolicy.FRESH_ONLY)
+    ]
+
+
+def test_human_output_includes_phase14_counter_groups(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    counters = ScannerRunStageCounters(
+        valuation_requests_attempted=1,
+        valuation_requests_succeeded=2,
+        valuation_requests_failed=3,
+        valuation_requests_blocked=4,
+        run_reuse_hits=5,
+        run_reuse_successes=6,
+        run_reuse_failures=7,
+        cache_hits_fresh_selected=8,
+        cache_misses=9,
+        cache_policy_blocked=10,
+        cache_expired=11,
+        cache_selection_failures=12,
+        live_demand=13,
+        live_attempted=14,
+        live_succeeded=15,
+        live_failed=16,
+        live_atomically_blocked=17,
+    )
+
+    print_human(_empty_run_result(counters=counters))
+
+    output = capsys.readouterr().out
+    expected_lines = (
+        "logical valuation requests attempted: 1",
+        "logical valuation requests succeeded: 2",
+        "logical valuation requests failed:    3",
+        "logical valuation requests blocked:   4",
+        "run reuse hits:              5",
+        "run reuse successes:         6",
+        "run reuse failures:          7",
+        "cache fresh hits:            8",
+        "cache misses:                9",
+        "cache policy blocked:        10",
+        "cache expired:               11",
+        "cache selection failures:    12",
+        "live demand:                 13",
+        "live attempted:              14",
+        "live succeeded:              15",
+        "live failed:                 16",
+        "live atomically blocked:     17",
+    )
+    for line in expected_lines:
+        assert line in output
+
+
+def test_json_shape_preserves_phase14_counters() -> None:
+    payload = _to_jsonable(
+        _empty_run_result(
+            counters=ScannerRunStageCounters(
+                cache_hits_fresh_selected=2,
+                live_demand=3,
+            )
+        )
+    )
+
+    assert set(payload) == {
+        "started_at",
+        "completed_at",
+        "goods_ids",
+        "counters",
+        "diagnostics",
+        "recipe_evaluations",
+        "opportunities",
+    }
+    assert payload["counters"]["cache_hits_fresh_selected"] == 2
+    assert payload["counters"]["live_demand"] == 3
+    assert "steamdt_price_cache_backend" not in payload
+
+
+@pytest.mark.parametrize(
+    ("backend", "redis_url", "namespace"),
+    [
+        ("filesystem", "", "steamdt-price-cache-v1"),
+        ("redis", "", "steamdt-price-cache-v1"),
+        ("redis", "not-a-url", "steamdt-price-cache-v1"),
+        ("redis", "redis://cache.test:6379/0", "bad namespace"),
+    ],
+)
+def test_invalid_cache_config_fails_before_live_client_work(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    backend: str,
+    redis_url: str,
+    namespace: str,
+) -> None:
+    from scripts import run_live_scan_once as script
+
+    secret = "super-secret-password"
+    settings = _settings(
+        dry_run=False,
+        api_key="present",
+        cache_backend=backend,
+        redis_url=(
+            f"redis://user:{secret}@cache.test:6379/0"
+            if redis_url.startswith("redis://")
+            else redis_url
+        ),
+        cache_namespace=namespace,
+    )
+    monkeypatch.setattr(script, "LiveScanSettings", lambda: settings)
+    constructed: list[str] = []
+
+    def fail_live_constructor(*args: object, **kwargs: object) -> None:
+        constructed.append("live")
+        raise AssertionError("live dependencies must not be constructed")
+
+    monkeypatch.setattr(script.httpx, "AsyncClient", fail_live_constructor)
+    monkeypatch.setattr(script, "build_steamdt_http_client", fail_live_constructor)
+    monkeypatch.setattr(script, "LiveScannerOrchestrator", fail_live_constructor)
+
+    assert script.main(["--goods-id", "34279"]) == 2
+    output = capsys.readouterr().out
+    assert "LIVE_PRICE_CACHE_BLOCKED_BY_CONFIGURATION" in output
+    assert secret not in output
+    assert constructed == []
+
+
+@pytest.mark.parametrize(
+    "error",
+    [RuntimeError("scan failed"), MemoryError("oom"), asyncio.CancelledError()],
+)
+def test_cache_runtime_closes_when_scan_raises(
+    monkeypatch: pytest.MonkeyPatch,
+    error: BaseException,
+) -> None:
+    from scripts import run_live_scan_once as script
+
+    class Runtime:
+        def __init__(self) -> None:
+            self.cache = ReadOnlyRecordingCache()
+            self.close_calls = 0
+
+        async def __aenter__(self) -> Runtime:
+            return self
+
+        async def __aexit__(
+            self,
+            exc_type: object,
+            exc: BaseException | None,
+            traceback: object,
+        ) -> None:
+            self.close_calls += 1
+
+    runtime = Runtime()
+
+    async def create_runtime(_settings: LiveScanSettings) -> Runtime:
+        return runtime
+
+    async def fail_scan(*args: object, **kwargs: object) -> ScannerRunResult:
+        raise error
+
+    settings = _settings(dry_run=False, api_key="present")
+    monkeypatch.setattr(script, "LiveScanSettings", lambda: settings)
+    monkeypatch.setattr(script, "create_steamdt_price_cache_runtime", create_runtime)
+    monkeypatch.setattr(script, "run_live_scan_once", fail_scan)
+
+    with pytest.raises(type(error)) as info:
+        asyncio.run(script.main(["--goods-id", "34279", "--json"]))
+
+    assert info.value is error
+    assert runtime.close_calls == 1
+
+
+def test_http_clients_close_when_orchestrator_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scripts import run_live_scan_once as script
+
+    events: list[str] = []
+
+    class HttpClient:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        async def aclose(self) -> None:
+            events.append(f"close:{self.name}")
+
+    failure = MemoryError("sentinel")
+
+    class FailingOrchestrator:
+        def __init__(self, **kwargs: object) -> None:
+            return None
+
+        async def run_once(self, goods_ids: list[str]) -> ScannerRunResult:
+            raise failure
+
+    monkeypatch.setattr(
+        script.BuffCommunityIdentityResolver,
+        "from_snapshot_path",
+        lambda _path: object(),
+    )
+    monkeypatch.setattr(
+        script.PinnedSkinMetadataResolver,
+        "from_snapshot_path",
+        lambda _path: object(),
+    )
+    monkeypatch.setattr(
+        script.httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: HttpClient("buff"),
+    )
+    monkeypatch.setattr(
+        script,
+        "build_steamdt_http_client",
+        lambda _settings: HttpClient("steamdt"),
+    )
+    monkeypatch.setattr(script, "BuffAnonymousListingHttpClient", lambda _http: object())
+    monkeypatch.setattr(script, "BuffListingProvider", lambda _client: object())
+    monkeypatch.setattr(script, "SteamDTHttpClient", lambda _config, _http: object())
+    monkeypatch.setattr(script, "SteamDTBuffPriceProvider", lambda _client: object())
+    monkeypatch.setattr(script, "ValuationService", lambda _provider, _config: object())
+    monkeypatch.setattr(script, "LiveScannerOrchestrator", FailingOrchestrator)
+
+    args = build_parser().parse_args(["--goods-id", "34279"])
+    with pytest.raises(MemoryError) as info:
+        asyncio.run(
+            run_live_scan_once(
+                args,
+                settings=_settings(dry_run=False, api_key="present"),
+                price_cache=ReadOnlyRecordingCache(),
+                enumeration_config=RecipeEnumerationConfig(),
+            )
+        )
+
+    assert info.value is failure
+    assert events == ["close:steamdt", "close:buff"]
+
+
+def test_partial_http_construction_closes_buff_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scripts import run_live_scan_once as script
+
+    events: list[str] = []
+
+    class BuffHttpClient:
+        async def aclose(self) -> None:
+            events.append("close:buff")
+
+    failure = RuntimeError("steamdt construction failed")
+    monkeypatch.setattr(
+        script.BuffCommunityIdentityResolver,
+        "from_snapshot_path",
+        lambda _path: object(),
+    )
+    monkeypatch.setattr(
+        script.PinnedSkinMetadataResolver,
+        "from_snapshot_path",
+        lambda _path: object(),
+    )
+    monkeypatch.setattr(
+        script.httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: BuffHttpClient(),
+    )
+
+    def fail_steamdt_http(_settings: LiveScanSettings) -> None:
+        raise failure
+
+    monkeypatch.setattr(script, "build_steamdt_http_client", fail_steamdt_http)
+    args = build_parser().parse_args(["--goods-id", "34279"])
+
+    with pytest.raises(RuntimeError) as info:
+        asyncio.run(
+            run_live_scan_once(
+                args,
+                settings=_settings(dry_run=False, api_key="present"),
+                price_cache=ReadOnlyRecordingCache(),
+                enumeration_config=RecipeEnumerationConfig(),
+            )
+        )
+
+    assert info.value is failure
+    assert events == ["close:buff"]
 
 
 def test_parser_defaults_to_conservative_valuation_cap() -> None:
@@ -573,7 +1005,15 @@ def test_successful_depth_preview_is_structured_and_no_network(
     def fail_constructor(*args: object, **kwargs: object) -> None:
         failures.append("live-constructor")
 
+    async def fail_cache_factory(*args: object, **kwargs: object) -> None:
+        failures.append("cache-factory")
+
     monkeypatch.setattr(run_live_scan_once, "LiveScanSettings", fail_constructor)
+    monkeypatch.setattr(
+        run_live_scan_once,
+        "create_steamdt_price_cache_runtime",
+        fail_cache_factory,
+    )
     monkeypatch.setattr("httpx.AsyncClient", fail_constructor)
     monkeypatch.setattr(
         run_live_scan_once, "BuffAnonymousListingHttpClient", fail_constructor
@@ -669,6 +1109,9 @@ def test_universe_preview_does_not_construct_clients(
     def fail_orchestrator(*args: object, **kwargs: object) -> None:
         failures.append("LiveScannerOrchestrator")
 
+    async def fail_cache_factory(*args: object, **kwargs: object) -> None:
+        failures.append("create_steamdt_price_cache_runtime")
+
     monkeypatch.setattr("httpx.AsyncClient", fail_httpx_client)
     monkeypatch.setattr(
         "scripts.run_live_scan_once.build_steamdt_http_client", fail_steamdt
@@ -684,6 +1127,10 @@ def test_universe_preview_does_not_construct_clients(
     )
     monkeypatch.setattr(
         "scripts.run_live_scan_once.LiveScannerOrchestrator", fail_orchestrator
+    )
+    monkeypatch.setattr(
+        "scripts.run_live_scan_once.create_steamdt_price_cache_runtime",
+        fail_cache_factory,
     )
 
     # Empty catalogs produce empty universe -> builder fails closed.

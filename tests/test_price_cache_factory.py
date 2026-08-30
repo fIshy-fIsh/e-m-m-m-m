@@ -15,12 +15,26 @@ from app.services.price_cache_factory import (
     SteamDTPriceCacheContextExitError,
     SteamDTPriceCacheRuntime,
     SteamDTPriceCacheRuntimeCloseError,
+    SteamDTPriceCacheSettings,
     create_steamdt_price_cache_runtime,
 )
 from app.services.redis_price_cache import (
     DEFAULT_REDIS_PRICE_CACHE_NAMESPACE,
     RedisPriceCache,
 )
+
+
+class NarrowCacheSettings:
+    def __init__(
+        self,
+        *,
+        backend: str = "inmemory",
+        redis_url: str = "",
+        namespace: str = DEFAULT_REDIS_PRICE_CACHE_NAMESPACE,
+    ) -> None:
+        self.steamdt_price_cache_backend = backend
+        self.steamdt_price_cache_redis_namespace = namespace
+        self.redis_url = redis_url
 
 
 class FakeRedisClient:
@@ -107,7 +121,7 @@ def _settings(
 
 
 def _run_create(
-    settings: Settings,
+    settings: SteamDTPriceCacheSettings,
     **kwargs: Any,
 ) -> SteamDTPriceCacheRuntime:
     return asyncio.run(create_steamdt_price_cache_runtime(settings, **kwargs))
@@ -119,6 +133,26 @@ def _assert_no_commands(client: FakeRedisClient) -> None:
     assert client.delete_calls == 0
     assert client.ping_calls == 0
     assert client.time_calls == 0
+
+
+def test_narrow_settings_surface_composes_without_global_settings() -> None:
+    in_memory_runtime = _run_create(NarrowCacheSettings())
+    assert isinstance(in_memory_runtime.cache, InMemoryPriceCache)
+
+    client = FakeRedisClient()
+    redis_runtime = _run_create(
+        NarrowCacheSettings(
+            backend="redis",
+            redis_url="redis://cache.test:6379/4",
+            namespace="narrow-cache-v1",
+        ),
+        redis_client=client,
+    )
+    assert isinstance(redis_runtime.cache, RedisPriceCache)
+    assert redis_runtime.cache.redis_client is client
+    assert redis_runtime.cache.namespace == "narrow-cache-v1"
+    assert redis_runtime.owns_redis_client is False
+    _assert_no_commands(client)
 
 
 def test_default_backend_creates_inmemory_cache_without_redis(

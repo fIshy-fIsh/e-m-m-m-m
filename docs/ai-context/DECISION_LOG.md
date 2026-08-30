@@ -783,3 +783,31 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 - **Runtime boundary:** scanner service/session persistent cache READ support is implemented. Default `scripts/run_live_scan_once.py` resolver/cache composition is not implemented and belongs to Phase 14D. Scanner write-after-live remains not implemented.
 - **D-CACHE-001:** remains Active until Phase 14D default runtime composition lands.
 - **Next:** Phase 14D — CLI composition + scale / bounded-live validation — NOT STARTED / NOT AUTHORIZED.
+
+## D-CACHE-001 — Supersession of "No run-level SteamDT output-price cache"
+
+- **Date:** 2026-08-30 (Phase 14D)
+- **Status:** Superseded for the originally tracked run-level reuse and default CLI composition gap. Writeback/refresh, scheduled refresh, and continuous-scan tasks remain out of scope as deferred future work; the active gap they would have closed never existed inside this decision's authority.
+- **Decision:** `D-CACHE-001` originally recorded the historical Phase 13T prohibition against silent cross-recipe cache reuse in the scanner. Subsequent phases separately closed its runtime scope:
+  - Phase 14B implemented run-scoped exact-name reuse and NEW LIVE atomic budgeting.
+  - Phase 14C implemented optional scanner service/session FRESH_ONLY persistent reads with strict-BUFF selector binding.
+  - Phase 14D implements the default one-shot CLI cache runtime/resolver composition with the in-memory default and optional Redis through the existing factory seam.
+- **What remains explicitly deferred:** scanner write-after-live, scheduled/background cache refresh, generalized write-policy on the scanner path, refresh-service integration, Redis batching/concurrency, dual session/orchestrator counter ownership redesign, transactional Stage A rollback, blocked-MISS dedup, and broad AST blacklist redesign.
+- **Why reclassified now:** with Phase 14B/C/D verified on the canonical `feature/scanner-valuation-integration` branch, the original "no run-level SteamDT output-price cache at runtime" rule no longer holds for the scanner session path. The historical Phase 13T prohibition remains authoritative for code added between then and 14B; future phases that would re-introduce silent cross-run reuse must cite `D-CACHE-002` or newer decisions rather than `D-CACHE-001`.
+
+## D-PHASE14D-COMPLETE — One-shot CLI cache composition + final validation
+
+- **Date:** 2026-08-30 (Phase 14D)
+- **Status:** Active. Implementation complete on `feature/scanner-valuation-integration`; checkpoint subject `wire scanner price cache into live CLI` (verify exact SHA from Git).
+- **Decision:** Phase 14D closes the final runtime-composition gap for the strict-BUFF FRESH_ONLY scanner cache seam without introducing any new write/scheduler/refresh capability:
+  - `scripts/run_live_scan_once.py` now creates an existing `SteamDTPriceCacheRuntime` through `create_steamdt_price_cache_runtime`, enters its async context, and passes `runtime.cache` into a fresh `ScannerCachedBuffPriceResolver` whose value reaches `LiveScannerOrchestrator(cached_price_resolver=...)`. The runtime and HTTP clients are deterministically closed via `AsyncExitStack` plus the existing runtime context. Exactly one `run_once()` is invoked.
+  - `app/services/price_cache_factory.py` exposes a narrow `SteamDTPriceCacheSettings` Protocol; `create_steamdt_price_cache_runtime` now accepts that protocol so the CLI does not need to materialize the global `Settings`. All existing behavior (in-memory default, optional Redis validation, zero-I/O construction, ownership, cleanup) is preserved.
+  - `LiveScanSettings` adds only the three cache-composition fields already supported by the factory: `steamdt_price_cache_backend`, `steamdt_price_cache_redis_namespace`, `redis_url`. No scanner TTL, no refresh, no scheduler fields. The valuation cap wording now describes the NEW LIVE exact-name demand.
+  - Invalid cache configuration fails before any BUFF/SteamDT live client, provider, or orchestrator construction with a stable redacted `LIVE_PRICE_CACHE_BLOCKED_BY_CONFIGURATION` marker; Redis URL and credentials are never printed.
+  - `print_human` prints every Phase 14 counter grouped as logical valuation requests, run reuse, persistent cache reads, and NEW LIVE demand/execution. JSON retains the existing `ScannerRunResult` dataclass shape and adds no envelope.
+  - The scanner CLI performs no cache write, no `purge_expired`/`delete`/`clear`, no `SteamDTPriceRefreshService`, and no Redis preflight. Default in-memory backend requires no Redis. Live success remains in the run memo only; the persistent cache is not written by the CLI.
+- **Validation:** focused CLI tests (default in-memory composition, Redis seam, invalid cache config fails before live work, exactly one scan, no write, deterministic cleanup including `MemoryError`/`CancelledError`/partial HTTP construction, JSON shape preservation, human counter groups), narrowed factory tests (`SteamDTPriceCacheSettings`), Phase 14B/C suites, protected multi-recipe and synthetic scale suites, ruff, mypy, and full pytest pass. Full count: `3428 passed, 23 skipped, 1 warning`.
+- **Protected scope:** `valuation_service.py`, `live_recipe_valuation.py`, `steamdt_buff_price_provider.py`, `steamdt_buff_price_policy.py`, `price_provider.py`, `tradeup_engine.py`, `ev_service.py`, `risk_filter.py`, `recipe_solver.py`, `scanner_recipe_composition.py`, every Phase 12D cache module, `.env.example`, `.github/**`, `pyproject.toml`, and the protected scale tests remain unchanged.
+- **Runtime boundary:** default one-shot CLI composes the strict-BUFF FRESH_ONLY cache seam. Scanner write-after-live, scheduled background refresh, continuous scanning, and any scanner TTL environment/config setting remain unimplemented.
+- **D-CACHE-001:** superseded for the originally tracked run-level cache gap; deferred write/refresh concerns remain separate future-work items.
+- **Next:** Valuation Budget Calibration remains NOT STARTED / NOT AUTHORIZED.

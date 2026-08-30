@@ -150,7 +150,7 @@ LiveScannerOrchestrator.run_once
 
 The orchestrator never constructs an InMemory/Redis runtime. With no resolver injection, the exact Phase 14B behavior remains. Cache backend/codec/adapter/resolver errors propagate and are not live candidates. Stage B never reads or writes cache and never calls refresh services.
 
-Status: **IMPLEMENTED at the scanner service/session boundary** (Phase 14C). Default `scripts/run_live_scan_once.py` cache composition remains **NOT IMPLEMENTED** (Phase 14D). Scanner write-after-live is not implemented. Stored snapshot `PriceCachePolicy` is writer-owned; no scanner read-time numeric TTL exists.
+Status: **IMPLEMENTED end-to-end** (Phase 14C reads + Phase 14D default one-shot CLI cache composition). Default `scripts/run_live_scan_once.py` now composes `create_steamdt_price_cache_runtime` and injects `ScannerCachedBuffPriceResolver(runtime.cache)` into `LiveScannerOrchestrator`. Default backend is process-local in-memory; Redis remains optional through the existing three-field settings seam. Scanner write-after-live is not implemented. Stored snapshot `PriceCachePolicy` is writer-owned; no scanner read-time numeric TTL exists.
 
 ### Run-level cross-recipe exact-name valuation reuse
 
@@ -158,7 +158,7 @@ A fresh scanner-owned session is constructed inside every `run_once()` call. The
 
 `max_valuation_requests_per_run` counts NEW LIVE exact-name demand after memo/cache classification. The orchestrator prepares demand before any provider call and atomically blocks the whole recipe if demand exceeds the remaining cap. Legacy logical valuation counters remain recipe-facing; additive run-reuse/cache/live-demand counters expose resolution work.
 
-Status: **IMPLEMENTED** (Phase 14B reuse + Phase 14C FRESH_ONLY reads). `D-CACHE-001` remains Active until Phase 14D default CLI runtime composition lands. Scanner write-after-live remains unimplemented.
+Status: **IMPLEMENTED end-to-end** (Phase 14B reuse + Phase 14C FRESH_ONLY reads + Phase 14D default CLI cache composition). `D-CACHE-001` is superseded for the originally tracked run-reuse + CLI composition gap. Scanner write-after-live remains unimplemented; deferred write/refresh concerns remain separate future work.
 
 ## SteamDT Endpoint Inventory
 

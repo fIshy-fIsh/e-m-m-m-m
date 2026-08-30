@@ -228,7 +228,8 @@ The protected-core files below may be modified only under an explicit reviewed m
 - `app/services/ev_service.py`
 - `app/services/risk_filter.py`
 - `app/services/recipe_solver.py` — Phase 13T-1 added the additive bounded enumeration API (`RecipeEnumerationConfig`, `RecipeEnumerationDiagnostics`, `RecipeEnumerationResult`, `enumerate_recipe_selections`). Legacy `construct_recipe_selections`, `construct_recipes`, and `solve_recipes` remain unchanged and continue to expose their pre-13T zero-or-one contract verbatim.
-- `app/services/scanner_orchestrator.py` — Phase 13T-3A integrated bounded recipe enumeration; Phase 14B added fresh run sessions and atomic NEW-LIVE admission; Phase 14C adds optional injected cached resolver and per-plan cache counter aggregation. It constructs no cache backend/runtime and leaves default CLI composition to Phase 14D.
+- `app/services/scanner_orchestrator.py` — Phase 13T-3A integrated bounded recipe enumeration; Phase 14B added fresh run sessions and atomic NEW-LIVE admission; Phase 14C added optional injected cached resolver and per-plan cache counter aggregation. It constructs no cache backend/runtime.
+- `scripts/run_live_scan_once.py` — Phase 14D composes `create_steamdt_price_cache_runtime` and injects `ScannerCachedBuffPriceResolver(runtime.cache)` into the orchestrator; default in-memory; Redis optional; invalid cache config fails before live client work; deterministic cleanup; no write-after-live.
 - `app/services/scanner_valuation_session.py` — Phase 14B scanner-owned boundary, extended by Phase 14C. Stage A now performs deterministic exact memo → optional sequential FRESH_ONLY cache → NEW LIVE classification. Fresh strict success/failure enter the memo; MISS/EXPIRED/POLICY_BLOCKED remain unmemoized live candidates. Stage B remains live-provider-only and reuses existing `ValuationService`; no cache write or refresh call.
 - `app/services/scanner_cached_buff_price_resolver.py` — Phase 14C structural composition wrapper. Accepts the existing Phase12D cache-reader protocol, internally constructs `SteamDTCachedPriceResolver` with `select_scanner_cached_buff_price`, and exposes only fixed FRESH_ONLY scanner resolution. Arbitrary generic-selector resolvers cannot satisfy the scanner public API.
 - `app/services/scanner_cached_buff_price_selector.py` — Phase 14C scanner-owned adapter matching the raw cached resolver selector protocol while delegating policy to `select_buff_output_price`; exact BUFF, positive finite sell, source `steamdt:buff`, no generic platform/bid fallback.
@@ -265,7 +266,7 @@ The strict-BUFF cache-selection adapter is composed at the session level via reu
   - Identity binding is wired into the runtime (`D-IDENTITY-007`).
   - The orchestrator consumes `enumerate_scanner_recipe_selections` (Phase 13T-3A).
   - Bounded enumeration has been validated offline (Phase 13T-4A) and live (Phase 13T-4B).
-- Phase 14B run-scoped exact-name reuse and Phase 14C scanner service/session FRESH_ONLY cache READ support are complete. Default CLI runtime composition remains Phase 14D and is not a current blocker.
+- Phase 14B run-scoped exact-name reuse, Phase 14C scanner service/session FRESH_ONLY cache READ support, and Phase 14D default one-shot CLI cache composition are complete. Default `scripts/run_live_scan_once.py` runtime is in-memory and Redis is optional. `D-CACHE-001` is superseded for the originally tracked run-reuse + CLI composition gap.
 
 ## Completed Capabilities (cumulative)
 
@@ -295,12 +296,12 @@ The strict-BUFF cache-selection adapter is composed at the session level via reu
 
 - BUFF identity bridge is **provisional** under `D-IDENTITY-006` (community catalog snapshot, runtime implemented in 13N-3B, file `data/identity/buff_identity_v1.json`). Identity binding between `BuffListingProvider` and `BuffListingCandidateAdapter` is implemented (13N-3C) but not yet wired into the orchestration runtime.
 - Intrinsic flag source incomplete: `stattrak` / `souvenir` are owned by the candidate layer, but the current `BuffListing` DTO does not expose them. Production adapter wiring is blocked until these values can be preserved (see `D-MIGRATION-002`).
-- Phase 14B run reuse and Phase 14C FRESH_ONLY scanner service/session reads are complete; see `D-PHASE14B-COMPLETE` and `D-PHASE14C-COMPLETE`. Default Phase 14D CLI composition remains open.
+- Phase 14B run reuse, Phase 14C FRESH_ONLY scanner service/session reads, and Phase 14D default one-shot CLI cache composition are complete; see `D-PHASE14B-COMPLETE`, `D-PHASE14C-COMPLETE`, and `D-PHASE14D-COMPLETE`. Deferred write/refresh concerns remain separate future work.
 
 ## Technical Debt
 
 - **13H-0 / 13K-1 intrinsic flag compatibility debt** — `trade_up_pipeline.py::candidates_to_input_items` (13H-0) and `buff_listing_candidate_adapter.py::convert_buff_listing_to_candidate` (13K-1) both default `stattrak=False, souvenir=False` because the upstream `BuffListing` DTO does not yet expose those fields. Historical behavior; preserved for compatibility; validated offline by synthetic scale validation (13J-1) and the adapter's own test suite. Forbidden as production behavior. References: `D-MIGRATION-001`, `D-MIGRATION-002`.
-- **Run-level exact-name valuation reuse and persistent READ seam** — Phase 14B implements one-run exact success/failure memo; Phase 14C adds optional FRESH_ONLY resolver reads with strict BUFF selection. No scanner writeback. Default CLI cache composition remains Phase 14D, so `D-CACHE-001` stays Active.
+- **Run-level exact-name valuation reuse and persistent READ seam** — Phase 14B implements one-run exact success/failure memo; Phase 14C adds optional FRESH_ONLY resolver reads with strict BUFF selection; Phase 14D wires the default one-shot CLI cache composition. No scanner writeback. `D-CACHE-001` is superseded for the originally tracked run-reuse + CLI composition gap.
 
 ## Standing Engineering Constraints
 

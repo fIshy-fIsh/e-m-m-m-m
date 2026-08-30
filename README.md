@@ -72,7 +72,7 @@ The scanner is a **manual one-shot CLI**, not a 24/7 service. Continuous schedul
 - **No DB persistence path.** No opportunity, alert, scan-run, or listing history is written to PostgreSQL.
 - **No real Discord opportunity delivery.** The `pipeline_alert_service` mock exists for unit tests; no Webhook integration is enabled.
 - **No FastAPI operational surface** beyond the bare `/health` skeleton endpoint.
-- **Default one-shot CLI cache composition is not implemented.** Scanner service/session cache-read support exists, but `scripts/run_live_scan_once.py` does not construct or inject a cache resolver; that runtime composition is Phase 14D.
+- **Default one-shot CLI cache composition is wired.** `scripts/run_live_scan_once.py` now constructs the existing Phase 12D cache runtime through `create_steamdt_price_cache_runtime`, hands `runtime.cache` to `ScannerCachedBuffPriceResolver`, and injects it into `LiveScannerOrchestrator`. Default backend is in-memory; Redis remains optional through the existing factory seam.
 - **Scanner write-after-live is not implemented.** The scanner never calls cache `put` or `SteamDTPriceRefreshService`; the existing manual refresh stack remains the writer. Stored snapshot `PriceCachePolicy` is writer-owned, and the scanner adds no read-time numeric TTL setting.
 - **No auto-universe live refresh / no listing history database.** Auto-universe planning is offline and offline-only by default (`--universe-preview` mode performs zero network calls).
 
@@ -142,7 +142,7 @@ scanner strict-BUFF cached selector (Phase 14C)
 SteamDTPriceRefreshService / planner / executor (manual writer stack only)
 ```
 
-Run-level cross-recipe exact-name reuse (Phase 14B) and scanner service/session persistent cache READ support (Phase 14C) are **implemented**. `D-CACHE-001` remains Active until Phase 14D provides default `run_live_scan_once.py` runtime composition.
+Run-level cross-recipe exact-name reuse (Phase 14B), scanner service/session persistent cache READ support (Phase 14C), and default one-shot CLI cache composition (Phase 14D) are **implemented**. Scanner write-after-live, refresh, scheduler/background work, and any scanner TTL env/config remain unimplemented. `D-CACHE-001` is superseded for the original run-reuse + CLI composition gap; deferred write/refresh concerns remain separate future work.
 
 The production one-shot CLI does **not** yet inject the cache resolver. Scanner write-after-live is absent. Freshness is evaluated by the backends from each stored snapshot's writer-owned `PriceCachePolicy`; there is no scanner read-time TTL knob, and the manual script's five-minute policy is historical writer precedent only.
 
@@ -263,13 +263,15 @@ Where is the project in its roadmap?
   Phase 14C is complete on `feature/scanner-valuation-integration`.
   Phase 14B implemented one-run exact-name success/failure reuse and
   NEW-LIVE accounting; Phase 14C added optional scanner service/session
-  FRESH_ONLY reads with strict-BUFF cached selection and no writeback.
+  FRESH_ONLY reads with strict-BUFF cached selection and no writeback;
+  Phase 14D wired the default one-shot CLI cache composition with
+  in-memory default and optional Redis through the existing factory.
   R0-A through R0-D are complete; canonical main remains P3 (`24c95c0...`).
 
 What should happen next?
-  Phase 14D — default one-shot CLI cache composition plus scale /
-  bounded-live validation — is next, not started, and not authorized.
-  Scanner write-after-live remains unimplemented and out of scope.
+  Valuation Budget Calibration remains next and not authorized.
+  Scanner write-after-live, refresh, scheduler/background work, and
+  any scanner TTL env/config remain unimplemented and out of scope.
 ```
 
 ## Where to look next

@@ -523,6 +523,46 @@ R0-D completion condition: this checkpoint merged and verified on `main`. CONDIT
 **Phase 14A / 14A-R1 / 14B / 14C are COMPLETE.**
 **Phase 14D and Valuation Budget Calibration remain NOT STARTED / NOT AUTHORIZED.**
 
+### Completed — Phase 14D One-shot CLI cache composition + final validation
+
+```text
+implemented:
+  scripts/run_live_scan_once.py
+    LiveScanSettings exposes only the three cache-composition fields
+      already supported by the factory
+    create_steamdt_price_cache_runtime -> runtime.cache ->
+      ScannerCachedBuffPriceResolver -> LiveScannerOrchestrator
+    invalid cache config fail closed before any BUFF/SteamDT live work
+    AsyncExitStack + runtime context for deterministic cleanup
+    exactly one run_once; no scheduler; no write-after-live
+  app/services/price_cache_factory.py
+    narrow SteamDTPriceCacheSettings Protocol
+    existing behavior preserved (in-memory default; optional Redis;
+      zero-I/O construction; ownership; cleanup)
+  tests/test_run_live_scan_once.py
+    default in-memory composition injects strict scanner resolver
+    redis settings reach existing factory seam
+    invalid cache config fails before live work; no secret disclosure
+    deterministic cleanup on success / RuntimeError / MemoryError /
+      CancelledError / partial HTTP construction
+    exactly one orchestrator; exactly one run_once; no write methods;
+      no refresh service
+    human output prints every Phase 14 counter group
+    JSON shape preserves existing ScannerRunResult dataclass keys
+    universe preview still forbids cache runtime / live client
+  tests/test_price_cache_factory.py
+    narrow protocol-backed composition; existing full Settings coverage
+
+not implemented:
+  scanner write-after-live
+  scheduled / background refresh
+  continuous scanner / scheduler
+  scanner TTL environment or config setting
+
+validated:
+  full offline suite: 3428 passed / 23 skipped / 1 warning
+```
+
 ### Completed — Phase 14B Run-scoped exact-name valuation reuse
 
 ```text
@@ -582,7 +622,7 @@ not implemented:
 
 ```text
 status:
-  NOT STARTED / NOT AUTHORIZED
+  COMPLETE — see "Completed — Phase 14D" above
 ```
 
 ### Later — Valuation Budget Calibration
