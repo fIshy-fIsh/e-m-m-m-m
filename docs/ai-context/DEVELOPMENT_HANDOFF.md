@@ -551,14 +551,15 @@ The components remain in the tree as paused, offline-tested optional infrastruct
 ## Next Action (ordered)
 
 - **Phase 14B and Phase 14C are COMPLETE.** Run reuse, NEW-LIVE accounting, and optional scanner service/session FRESH_ONLY cache reads are implemented and offline validated. `D-PHASE14B-COMPLETE` and `D-PHASE14C-COMPLETE` record the checkpoints.
-- **Phase 14B / 14C / 14D are COMPLETE.** Phase 14D wired the default one-shot CLI cache composition and is recorded by `D-PHASE14D-COMPLETE`. Valuation Budget Calibration remains pending.
+- **Phase 14:** `CANONICAL MAIN INTEGRATION COMPLETE`. Phase 14A / 14A-R1 / 14B / 14C / 14D merged to main via PR #4 at P4 = `26c69bae9e482452f56f380277d8b10fefa29d52` (parents `{24c95c029..., 47227b33...}`, tree `39a82914...`). Main push CI run `33320657978` SUCCESS. Feature branch `feature/scanner-valuation-integration` safely retired.
+- **Valuation Budget Calibration:** NOT STARTED / NOT AUTHORIZED.
 - Scanner write-after-live remains unimplemented and out of scope.
 - `D-CACHE-001` is superseded for the originally tracked run-reuse + CLI composition gap; deferred write/refresh concerns remain separate future work and continue to require explicit authorization.
 - **R0-C Main History Consolidation is COMPLETE.** Post-R0-C main tip is `9cfaf36db028661075a495587ac32e51256fffe8` (now an ancestor of P2).
 - **R0-C docs checkpoint is MERGED / VERIFIED.** Canonical `main` tip is `328269112f229faf3fce4cf0be4b9c7875582b65` (P2); topology / ancestry / tree / CI workflow blob all verified; final-main push CI green.
 - **R0-D cleanup execution and completion checkpoint are COMPLETE.** R0-D1 audit, R0-D2 / R0-D2-BIS / R0-D2-TER, and PR #3 post-merge verification are complete. Canonical `main` is P3 (`24c95c0...`). Cleanup summary is captured in `PROJECT_CONTEXT.md` and `specs/roadmap.md`.
 - **R0-D completion documentation checkpoint PR is MERGED / VERIFIED.** PR #3 (`R0-D completion documentation checkpoint`) merged on `main` using `Create a merge commit` at P3 = `24c95c029f583d5cc0b0a67986e48c06d0ef7957`; final-main push CI green (`CI` / run `33240760167`, conclusion `success`). R0-D is COMPLETE.
-- Scanner Valuation Integration: Phase 14A / 14A-R1 / 14B / 14C / 14D are COMPLETE. Valuation Budget Calibration remains pending.
+- Scanner Valuation Integration: Phase 14A / 14A-R1 / 14B / 14C / 14D are **canonically integrated on `main`** via PR #4. Valuation Budget Calibration remains pending.
 - Valuation Budget Calibration is **PROPOSED / NOT AUTHORIZED**: measure unique-output cardinality offline before proposing any numeric cap.
 - Any future development phase must be explicitly authorized and must not silently relax `D-ENUM-001`–`D-ENUM-004`, `D-CACHE-001..004`, `D-BUDGET-001`, `D-ACCOUNTING-001`, `D-SCANNER-001`, `D-VALIDATION-001`, `D-MEMORY-001`, `D-ADAPTER-003`, or `D-ADAPTER-004`.
 

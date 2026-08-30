@@ -72,18 +72,15 @@
 - Pre-R0-C DEV tip (historical)：`4c2f1ef`（`sync docs after minimum CI validation`）。
 - Post-R0-C canonical main：`9cfaf36`（`sync docs after R0-C repository consolidation`），parents `{24ece858, 3aa44e93}`，tree `7a39d28`。作为祖先节点保留；当前 canonical main 已迁移到下方 P3。
 - Post-R0-C docs checkpoint：`b13201b`（`sync docs after R0-C repository consolidation` docs PR，PR #2），merge commit 在 P2。
-- 当前 canonical main：`P3 = 24c95c029f583d5cc0b0a67986e48c06d0ef7957`，parents `{328269112f229faf3fce4cf0be4b9c7875582b65, 6964cc4ff25cd4ad72fe65f92f40a5ce70a4a268}`，tree `608d3e47...`。R0-D 完成 docs checkpoint PR (#3) 已合并至 main；P2 = 328269112... 现为 P3 祖先节点保留。
+- 当前 canonical main：`P4 = 26c69bae9e482452f56f380277d8b10fefa29d52`，parents `{24c95c029f583d5cc0b0a67986e48c06d0ef7957, 47227b33cd088a0961320254dd6c0de75e3564bb}`，tree `39a82914fa53fd414d141fbb87cbf197c1ff2c19`。R0-D 完成 docs checkpoint PR (#3) 已合并至 main；P3 = 24c95c0... 现为 P4 祖先节点保留。Phase 14 通过 PR #4（subject `Integrate scanner valuation cache and run-level reuse`）merge 至 main；`47227b3...` 现为 P4 祖先节点保留为历史 implementation checkpoint；合并分支 `feature/scanner-valuation-integration` 已正常删除。
 - 当前 Git HEAD 必须通过仓库实时验证（`git rev-parse HEAD` / `git status --short`），不在此处硬编码。
 - 当前 bounded multi-recipe 校验：`tests/test_multi_recipe_scanner_scale_validation.py`。
 - Minimum CI 已建立并远端验证：`.github/workflows/ci.yml`（Python 3.12；`ruff check .`；`mypy app`；`pytest`）；CI workflow blob 自 R0-A 起保持 `02d0ce81...`。
 - 权威交接文档：`docs/ai-context/DEVELOPMENT_HANDOFF.md`。
 - R0-A / R0-B / R0-C / R0-C docs checkpoint / R0-D：COMPLETE。R0-D 由 PR #3 完成 docs checkpoint 合并与 CI green（run 33240760167）验证。
-- Phase 14A：COMPLETE — design freeze。`specs/2026-08-29-scanner-valuation-integration-design-freeze/{requirements,plan,validation}.md`；commit `e98cd97`。Phase 14A-R1 coherence correction：COMPLETE，commit `bb056e5`，decision `D-PHASE14A-R1-COHERENCE`。
-- Phase 14B：COMPLETE — run-scoped exact-name valuation reuse。每次 `LiveScannerOrchestrator.run_once()` 创建新的 scanner-owned session；async Stage A prepare 零 provider calls；atomic admission 后 Stage B 仅请求 NEW LIVE exact names；success 与 terminal failure 在同一 run 内复用；跨 run 不复用。`max_valuation_requests_per_run` runtime 含义迁移为 NEW LIVE exact-name demand；legacy logical counters 保持；new additive counters active；cache counters 在 14B 中保持零。`ValuationService` formula 未修改。
-- `D-CACHE-001` 已由 14B/14C/14D 完成原始 run-reuse + CLI composition 范围而实现（supersession 条目已记录）；scanner write-after-live、refresh、scheduler、TTL env 仍 NOT IMPLEMENTED。
-- Phase 14C：COMPLETE — optional cache-reader injection；scanner-owned wrapper 内部固定构造 `SteamDTCachedPriceResolver(selector=select_scanner_cached_buff_price)`；Stage A 严格 memo → FRESH_ONLY cache → live classification；cached selector 复用 `select_buff_output_price`，generic cross-platform resolver 无法进入 public scanner composition；无 stale consumption、无 cache write、无 refresh service。snapshot 的 stored `PriceCachePolicy` 由 writer 管理，无 scanner read-time numeric TTL config。
-- Phase 14D：COMPLETE — default one-shot CLI 通过 `create_steamdt_price_cache_runtime` + `ScannerCachedBuffPriceResolver` 接入 Phase 14C cache seam；inmemory 为默认；可选 Redis 复用现有 factory；新增 narrow `SteamDTPriceCacheSettings` Protocol；invalid cache config fail closed before BUFF/SteamDT live client/provider/orchestrator；`AsyncExitStack` + runtime context 保证 deterministic cleanup；JSON 形状保留；human output 增加所有 Phase 14 counter 分组；无 scanner TTL env、scheduler、refresh、write-after-live。
-- `main` 未被 Phase 14A 推送修改；HEAD 当前在 `feature/scanner-valuation-integration`，需通过 `git rev-parse HEAD` 实时确认。
+- Phase 14：CANONICAL MAIN INTEGRATION COMPLETE — Phase 14A / 14A-R1 / 14B / 14C / 14D 通过 PR #4 合并到 main（P4）。Phase 14 集成包括：run-scoped exact-name reuse；NEW LIVE request-budget accounting；FRESH_ONLY Phase 12D scanner cache reads；strict BUFF cached selection；default one-shot CLI cache composition（inmemory default，可选 Redis）；无 scanner write-after-live、无 refresh/scheduler/TTL env config。
+- Phase 14 主合并 CI 验证：run 33320657978（push event / branch main / head `26c69bae...`）/ job `quality` = SUCCESS。
+- 接下来功能性工作：Valuation Budget Calibration — NOT STARTED / NOT AUTHORIZED。
 
 ## 禁止事项
 - 自动购买

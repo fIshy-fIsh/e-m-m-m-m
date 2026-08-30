@@ -514,14 +514,30 @@ R0-D Branch / Repository Cleanup COMPLETE
                                   canonical main P3 = 24c95c029...
                                   `v1-dry-run-baseline` preserved locally
                                   no unique history lost
+
+Phase 14 Integration                  MERGED / VERIFIED
+                                  Phase 14A / 14A-R1 / 14B / 14C / 14D merged
+                                  via PR #4 (`Integrate scanner valuation cache
+                                  and run-level reuse`) onto canonical main.
+                                  canonical main P4 = 26c69bae9e482452f56f380277d8b10fefa29d52
+                                  parents: {24c95c029..., 47227b33...}
+                                  tree:   39a82914fa53fd414d141fbb87cbf197c1ff2c19
+                                  CI workflow blob 02d0ce81... preserved
+                                  main push CI run 33320657978 success
+                                  feature branch `feature/scanner-valuation-integration`
+                                  safely retired locally and on origin
+                                  `v1-dry-run-baseline` preserved locally
+                                  no unique history lost
 ```
 
 R0-D completion condition: this checkpoint merged and verified on `main`. CONDITION SATISFIED — PR #3 merged on `main` at P3 = `24c95c029f583d5cc0b0a67986e48c06d0ef7957`; final-main push CI green (run 33240760167 SUCCESS). R0-D = COMPLETE.
 
+Phase 14 integration condition: Phase 14A / 14A-R1 / 14B / 14C / 14D merged on `main`. CONDITION SATISFIED — PR #4 merged on `main` at P4 = `26c69bae9e482452f56f380277d8b10fefa29d52`; main push CI green (run 33320657978 SUCCESS). Phase 14 = COMPLETE.
+
 ## Next Functional Work
 
 **Phase 14A / 14A-R1 / 14B / 14C are COMPLETE.**
-**Phase 14D and Valuation Budget Calibration remain NOT STARTED / NOT AUTHORIZED.**
+**Phase 14D is COMPLETE (PR #4 merged). Valuation Budget Calibration remains NOT STARTED / NOT AUTHORIZED.**
 
 ### Completed — Phase 14D One-shot CLI cache composition + final validation
 
