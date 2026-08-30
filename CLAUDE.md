@@ -66,21 +66,22 @@
 6. 检查是否把未确认的 BUFF API 细节错误写死进代码。
 
 ## 当前阶段指针
-- 阶段：`PHASE_14D_COMPLETE`（default one-shot CLI 已接入 Phase 14C strict-BUFF FRESH_ONLY cache seam；scanner write-after-live、refresh、scheduler、TTL env 仍未实现；分支 `feature/scanner-valuation-integration`）。
-- Phase 14D production / test checkpoint：本分支 commit `wire scanner price cache into live CLI`（完成后通过 `git rev-parse HEAD` 实时确认）；`scripts/run_live_scan_once.py` 通过 `create_steamdt_price_cache_runtime` 组装 Phase 12D runtime，将 `ScannerCachedBuffPriceResolver(runtime.cache)` 注入 `LiveScannerOrchestrator`；default inmemory；可选 Redis 通过现有 `create_steamdt_price_cache_runtime` seam；`LiveScanSettings` 仅新增 3 个 cache composition 字段；invalid cache config 在 BUFF/SteamDT live client 工作之前 fail closed；`AsyncExitStack` + runtime context 保证 deterministic cleanup；`print_human` 输出所有 Phase 14 counter 分组；JSON 形状保留；全套验证 `3428 passed, 23 skipped, 1 warning`。
+- 阶段：`PHASE_15A_MEASUREMENT_COMPLETE`（offline measurement only；分支 `feature/valuation-budget-calibration`；Phase 15B policy decision NOT STARTED / NOT AUTHORIZED）。
+- Phase 15A evidence：`research/valuation_budget_calibration/` 使用规范化 pinned identity/metadata snapshots，经 current COHORT_DEPTH universe builder + real scanner composition/recipe solver/trade-up output construction，固定 default enumeration `2 / 256`；192 个 deterministic replay observations；结构 census 439 records；报告 `results.json` / `REPORT.md`；没有生产 budget/default/hard-max/CLI/atomic semantics 变化。
+- Phase 15A production diff：empty；只新增 research harness/artifacts、focused calibration tests 和最小 docs checkpoint。
 - Post-Phase-13T handoff baseline：`bb09068`（`sync AI context after Phase 13T`）。
 - Pre-R0-C DEV tip (historical)：`4c2f1ef`（`sync docs after minimum CI validation`）。
-- Post-R0-C canonical main：`9cfaf36`（`sync docs after R0-C repository consolidation`），parents `{24ece858, 3aa44e93}`，tree `7a39d28`。作为祖先节点保留；当前 canonical main 已迁移到下方 P3。
-- Post-R0-C docs checkpoint：`b13201b`（`sync docs after R0-C repository consolidation` docs PR，PR #2），merge commit 在 P2。
-- 当前 canonical main：`P4 = 26c69bae9e482452f56f380277d8b10fefa29d52`，parents `{24c95c029f583d5cc0b0a67986e48c06d0ef7957, 47227b33cd088a0961320254dd6c0de75e3564bb}`，tree `39a82914fa53fd414d141fbb87cbf197c1ff2c19`。R0-D 完成 docs checkpoint PR (#3) 已合并至 main；P3 = 24c95c0... 现为 P4 祖先节点保留。Phase 14 通过 PR #4（subject `Integrate scanner valuation cache and run-level reuse`）merge 至 main；`47227b3...` 现为 P4 祖先节点保留为历史 implementation checkpoint；合并分支 `feature/scanner-valuation-integration` 已正常删除。
+- Post-R0-C canonical main：`9cfaf36`（`sync docs after R0-C repository consolidation`），parents `{24ece858, 3aa44e93}`，tree `7a39d28`。作为祖先节点保留；当前 canonical main 已迁移。
+- Post-R0-C docs checkpoint：`b13201b`（`sync docs after R0-C repository consolidation` docs PR，PR #2）。
+- Phase 14 canonical integration main：`P4 = 26c69bae9e482452f56f380277d8b10fefa29d52`，parents `{24c95c029f583d5cc0b0a67986e48c06d0ef7957, 47227b33cd088a0961320254dd6c0de75e3564bb}`，tree `39a82914fa53fd414d141fbb87cbf197c1ff2c19`；PR #4 merged；main CI run `33320657978` SUCCESS。
+- 当前 canonical main（Phase 14 docs checkpoint PR #5 merged）：`215c91c46a6d95de793649a87bccceb3a24a42d3`，parents `{26c69bae9e482452f56f380277d8b10fefa29d52, fc5144f2b27815eff167995314156c8288276aa2}`，tree `ca11f054978b4133e1ea95b51ba70b3bda419e5b`；main CI run `33321890478` SUCCESS。
 - 当前 Git HEAD 必须通过仓库实时验证（`git rev-parse HEAD` / `git status --short`），不在此处硬编码。
 - 当前 bounded multi-recipe 校验：`tests/test_multi_recipe_scanner_scale_validation.py`。
 - Minimum CI 已建立并远端验证：`.github/workflows/ci.yml`（Python 3.12；`ruff check .`；`mypy app`；`pytest`）；CI workflow blob 自 R0-A 起保持 `02d0ce81...`。
 - 权威交接文档：`docs/ai-context/DEVELOPMENT_HANDOFF.md`。
 - R0-A / R0-B / R0-C / R0-C docs checkpoint / R0-D：COMPLETE。R0-D 由 PR #3 完成 docs checkpoint 合并与 CI green（run 33240760167）验证。
-- Phase 14：CANONICAL MAIN INTEGRATION COMPLETE — Phase 14A / 14A-R1 / 14B / 14C / 14D 通过 PR #4 合并到 main（P4）。Phase 14 集成包括：run-scoped exact-name reuse；NEW LIVE request-budget accounting；FRESH_ONLY Phase 12D scanner cache reads；strict BUFF cached selection；default one-shot CLI cache composition（inmemory default，可选 Redis）；无 scanner write-after-live、无 refresh/scheduler/TTL env config。
-- Phase 14 主合并 CI 验证：run 33320657978（push event / branch main / head `26c69bae...`）/ job `quality` = SUCCESS。
-- 接下来功能性工作：Valuation Budget Calibration — NOT STARTED / NOT AUTHORIZED。
+- Phase 14：CANONICAL MAIN INTEGRATION COMPLETE — Phase 14A / 14A-R1 / 14B / 14C / 14D 通过 PR #4 合并到 main。Phase 14 集成包括：run-scoped exact-name reuse；NEW LIVE request-budget accounting；FRESH_ONLY Phase 12D scanner cache reads；strict BUFF cached selection；default one-shot CLI cache composition（inmemory default，可选 Redis）；无 scanner write-after-live、无 refresh/scheduler/TTL env config。
+- Phase 15B：NOT STARTED / NOT AUTHORIZED；Phase 15A 不推荐最终 production cap。
 
 ## 禁止事项
 - 自动购买

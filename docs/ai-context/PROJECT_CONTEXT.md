@@ -64,13 +64,13 @@ The bridge `market_hash_name ↔ BUFF goods_id` is the **provisional community c
 ## Git / Phase Baselines
 
 ```text
-Current phase:                              PHASE_14C_COMPLETE
+Current phase:                              PHASE_15A_MEASUREMENT_COMPLETE
 
-Latest production / test checkpoint:        Phase 14C branch commit
-                                            add scanner fresh-only price cache reads
-                                            (verify exact SHA from Git at task entry)
-                                            full validation: 3413 passed,
-                                            23 skipped, 1 warning
+Latest Phase 15A checkpoint:                offline exact-output-name calibration
+                                            192 deterministic replays,
+                                            439 structural census records,
+                                            production budget unchanged
+                                            (verify exact commit SHA from Git)
 
 Post-Phase-13T AI-context synchronization
 baseline:                                    bb09068
@@ -164,7 +164,8 @@ Live repository HEAD / branch / working tree:
 - **R0-C — Main History Consolidation:** **COMPLETE**. PR #1 (`Reconcile main history with current project lineage`) merged using `Create a merge commit`. Final canonical `main` tip is `9cfaf36db028661075a495587ac32e51256fffe8` with parents `{24ece8582d1b3cb1b72322afc15de94b652a8bcc, 3aa44e9364268308d0fbb4c0532f4a910f4f85e8}`; tree `7a39d28f2654cdf3b4eb98c8123227de64db5e34`; CI workflow blob `02d0ce81d3704d9bc9c513df9b474855ffeae703`. DEV tip `4c2f1ef6cd850985e71f041601ae58489abe947b` is an ancestor. Final-main push CI: workflow `CI`, run `33173529766`, conclusion `success`.
 - **R0-D — Branch / Repository Cleanup:** **COMPLETE**. PR #3 (`R0-D completion documentation checkpoint`) merged using `Create a merge commit`. Final canonical `main` tip is `24c95c029f583d5cc0b0a67986e48c06d0ef7957` (P3) with parents `{328269112f229faf3fce4cf0be4b9c7875582b65 (P2), 6964cc4ff25cd4ad72fe65f92f40a5ce70a4a268 (R0-D3 docs commit)}`; tree `608d3e473072afb0d97aadf46ea0be8b1f55ca26`; CI workflow blob `02d0ce81d3704d9bc9c513df9b474855ffeae703` preserved unchanged since R0-A. Final-main push CI: workflow `CI`, run `33240760167`, event `push`, branch `main`, head SHA `24c95c0…`, conclusion `success`. Cleanup execution summary is captured in the dedicated block above (305 worktrees + 305 generated branches + 5 named local branches + 4 named remote branches removed; `v1-dry-run-baseline` preserved; no unique history lost).
 
-- **Phase:** `PHASE14_CANONICAL_MAIN_INTEGRATION_COMPLETE`. Phase 14A / 14A-R1 / 14B / 14C / 14D merged onto canonical main via PR #4. Canonical main P4 = `26c69bae9e482452f56f380277d8b10fefa29d52`, parents `{24c95c029..., 47227b33...}`, tree `39a82914...`. Main push CI run `33320657978` SUCCESS.
+- **Phase:** `PHASE15A_MEASUREMENT_COMPLETE`. Phase 15A is offline measurement only on `feature/valuation-budget-calibration`: normalized pinned identity/metadata snapshots → current COHORT_DEPTH universe builder → real default scanner composition (`2 / 256`) → real recipe solver/trade-up output construction. Evidence: `research/valuation_budget_calibration/results.json` and `REPORT.md`; focused tests: `tests/test_valuation_budget_calibration.py`. No production budget/default/hard-max/CLI/atomic-semantics change. Phase 15B policy decision is NOT STARTED / NOT AUTHORIZED.
+- **Phase 14 canonical baseline:** Phase 14A / 14A-R1 / 14B / 14C / 14D merged onto canonical main via PR #4. Phase 14 docs checkpoint PR #5 merged at main `215c91c46a6d95de793649a87bccceb3a24a42d3`; main push CI run `33321890478` SUCCESS.
 - **Latest completed phases:**
   - **Phase 14C — Phase12D FRESH_ONLY cache READ integration** — optional scanner-owned `ScannerCachedBuffPriceResolver` injection; the wrapper internally fixes the existing raw resolver to `select_scanner_cached_buff_price`, so generic cross-platform selection cannot enter the public scanner composition path. Each fresh run session performs deterministic memo → sequential FRESH_ONLY cache → live classification. New cached selector delegates strict authority to `select_buff_output_price`. Selected outcomes independently require `lookup.state == FRESH`; strict selection failures retain their stable reason across same-run memo reuse; MISS/EXPIRED/POLICY_BLOCKED become NEW LIVE; typed backend/codec/adapter/resolver errors propagate. Cache-derived memo survives atomic blocks, unresolved blocked names are re-read, Stage B performs live-only resolution and no persistent writes. Snapshot TTL policy remains writer-owned; CLI composition and scanner write-after-live remain unimplemented. `D-CACHE-001` remains Active until Phase 14D runtime composition. Full validation: `3413 passed, 23 skipped, 1 warning`; ruff/mypy pass.
   - **Phase 14B — Run-scoped exact-name valuation reuse** — scanner-owned `app/services/scanner_valuation_session.py`; fresh session inside every `LiveScannerOrchestrator.run_once()`; immutable session-bound two-stage plans; atomic NEW-LIVE cap; exact success/failure reuse; no same-name retry or cross-run memo; existing `ValuationService` formula reused. Baseline full validation: 3382 passed, 23 skipped, 1 warning.
