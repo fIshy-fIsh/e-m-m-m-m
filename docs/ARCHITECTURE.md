@@ -97,7 +97,7 @@ utils/ shared helper utilities
 
 ## Existing Cache / Refresh Infrastructure
 
-The Phase 12D cache and refresh stack is **implemented and unit-tested**. It is **not** currently wired into the live scanner valuation path. The two concepts are kept separate.
+The Phase 12D cache and refresh stack is **implemented and unit-tested**. It remains **unwired** from the live scanner valuation path. Phase 14B adds a separate scanner-owned run memo; it is not a persistent cache and imports no Phase 12D module.
 
 ### Persistent / cache snapshot infrastructure
 
@@ -124,17 +124,41 @@ steamdt_refresh_integration      manual end-to-end refresh integration command
 
 Status: implemented, unit-tested, opt-in via `STEAMDT_PRICE_CACHE_BACKEND`. Existing SteamDT client retry, typed errors, endpoint limiter, and server cooldown semantics are preserved unchanged.
 
-### Live scanner cache integration
+### Live scanner persistent-cache READ integration
 
-The live scanner valuation path (`scripts/run_live_scan_once.py` -> `LiveScannerOrchestrator` -> `ValuationService` -> `SteamDTBuffPriceProvider`) currently calls `SteamDTBuffPriceProvider.get_price()` / `get_prices()` directly. None of the four files import any Phase 12D cache module.
+The Phase 14C scanner service/session path is:
 
-Status: **NOT IMPLEMENTED**.
+```text
+LiveScannerOrchestrator.run_once
+  -> fresh RunScopedValuationSession (one run only; optional resolver injected)
+  -> async prepare_output_prices
+       -> exact-name run memo first
+       -> scanner-owned resolver wrapper fixes the raw resolver to
+          select_scanner_cached_buff_price
+       -> sequential cache reads with explicit FRESH_ONLY
+       -> scanner strict-BUFF adapter delegates to select_buff_output_price
+       -> selected outcomes independently require FRESH lookup state
+       -> fresh SELECTED / SELECTION_FAILURE enter the run memo
+          (selection failures retain the stable strict-BUFF reason)
+       -> MISS / EXPIRED / POLICY_BLOCKED become ordered NEW LIVE demand
+  -> atomic NEW-LIVE exact-name admission
+  -> resolve_prepared (live provider for NEW exact names only; no cache work)
+  -> full logical PriceLookupResult (memo + cache + live)
+  -> existing ValuationService field application
+  -> existing metrics / risk / opportunity path
+```
 
-### Run-level cross-recipe exact-price reuse
+The orchestrator never constructs an InMemory/Redis runtime. With no resolver injection, the exact Phase 14B behavior remains. Cache backend/codec/adapter/resolver errors propagate and are not live candidates. Stage B never reads or writes cache and never calls refresh services.
 
-The same exact output market name in separate recipe valuation calls is currently a separate logical request. A per-run "already valued" memoization keyed by output market hash name does not exist.
+Status: **IMPLEMENTED end-to-end** (Phase 14C reads + Phase 14D default one-shot CLI cache composition). Default `scripts/run_live_scan_once.py` now composes `create_steamdt_price_cache_runtime` and injects `ScannerCachedBuffPriceResolver(runtime.cache)` into `LiveScannerOrchestrator`. Default backend is process-local in-memory; Redis remains optional through the existing three-field settings seam. Scanner write-after-live is not implemented. Stored snapshot `PriceCachePolicy` is writer-owned; no scanner read-time numeric TTL exists.
 
-Status: **NOT IMPLEMENTED** (D-CACHE-001). Future implementation requires separate authorization and must preserve exact-price / fail-closed semantics, the atomic valuation budget, and bounded multi-recipe ordering.
+### Run-level cross-recipe exact-name valuation reuse
+
+A fresh scanner-owned session is constructed inside every `run_once()` call. The exact key is `output_market_hash_name`; no normalization, case folding, aliasing, `goods_id`, or `platformItemId` substitution is used. Successes and terminal failures are reused across later recipes in the same run; blocked NEW names are not memoized; nothing survives across runs.
+
+`max_valuation_requests_per_run` counts NEW LIVE exact-name demand after memo/cache classification. The orchestrator prepares demand before any provider call and atomically blocks the whole recipe if demand exceeds the remaining cap. Legacy logical valuation counters remain recipe-facing; additive run-reuse/cache/live-demand counters expose resolution work.
+
+Status: **IMPLEMENTED end-to-end** (Phase 14B reuse + Phase 14C FRESH_ONLY reads + Phase 14D default CLI cache composition). `D-CACHE-001` is superseded for the originally tracked run-reuse + CLI composition gap. Scanner write-after-live remains unimplemented; deferred write/refresh concerns remain separate future work.
 
 ## SteamDT Endpoint Inventory
 

@@ -3,17 +3,20 @@
 ## Current Position
 
 ```text
-Current phase:                            PHASE_13T_COMPLETE
+Current phase:                            PHASE_14C_COMPLETE
 
 Current capability:                       read-only bounded multi-recipe one-shot scanner
+                                          with run-scoped exact-name reuse and optional
+                                          Phase12D FRESH_ONLY persistent cache reads
 
-Active development line:                  canonical main
-                                          (historical feature/steamdt-cache-rate-limit is an
-                                           ancestor; removed during R0-D cleanup)
+Active development line:                  feature/scanner-valuation-integration
+                                          (canonical main P3 unchanged)
 
-Latest production / test checkpoint:      9288794
-                                        add bounded multi-recipe scale validation
-                                        (full SHA 92887947e0e1808f1bc23258cf53adb10a0036ee)
+Latest production / test checkpoint:      Phase 14C branch commit
+                                          add scanner fresh-only price cache reads
+                                          (verify exact SHA from Git)
+                                          full validation: 3413 passed /
+                                          23 skipped / 1 warning
 
 Post-Phase-13T documentation /
 handoff baseline:                         bb09068
@@ -23,19 +26,62 @@ handoff baseline:                         bb09068
 Default recipe enumeration:               2 candidates / 256 states
 
 Repository normalization:                  COMPLETE
-                                        canonical main = P2 =
-                                          328269112f229faf3fce4cf0be4b9c7875582b65
-                                        parents: {9cfaf36..., b13201b...}
-                                        tree:   b7648ad185aaf9ae4f4ca1057294e4b84010ab8d
+                                        canonical main = P3 =
+                                          24c95c029f583d5cc0b0a67986e48c06d0ef7957
+                                        parents: {328269112f229faf3fce4cf0be4b9c7875582b65,
+                                                   6964cc4ff25cd4ad72fe65f92f40a5ce70a4a268}
+                                        tree:   608d3e473072afb0d97aadf46ea0be8b1f55ca26
                                         CI workflow blob 02d0ce81... preserved
-                                        (R0-A / R0-B / R0-C / R0-C docs checkpoint all complete)
+                                        (R0-A / R0-B / R0-C / R0-C docs checkpoint /
+                                         R0-D all complete; canonical main advanced
+                                         to P3 by the R0-D completion documentation
+                                         checkpoint PR #3)
 
-Branch / repository cleanup (R0-D):       IN PROGRESS — CLEANUP COMPLETE /
-                                          COMPLETION DOCS PR OPEN
+Branch / repository cleanup (R0-D):       COMPLETE
                                         (R0-D1 audit, R0-D2 / R0-D2-BIS / R0-D2-TER
-                                         cleanup all complete; canonical main unchanged
-                                         by cleanup; this documentation checkpoint PR is
-                                         the final step before R0-D can be marked COMPLETE)
+                                         cleanup all complete; R0-D completion
+                                         documentation checkpoint PR #3 merged;
+                                         final-main push CI green at run 33240760167
+                                         SUCCESS)
+
+Phase 14A / R1 design authority:          COMPLETE
+                                        e98cd97 / bb056e5
+                                        specs/2026-08-29-scanner-valuation-integration-design-freeze/
+
+Phase 14B — Run-scoped exact-name
+valuation reuse:                          COMPLETE
+                                        fresh session per run_once
+                                        async memo-only prepare (zero provider calls)
+                                        atomic NEW-LIVE exact-name admission
+                                        execute NEW exact names only
+                                        success + terminal-failure reuse
+                                        no same-name retry / no cross-run reuse
+                                        existing ValuationService formula reused
+                                        legacy logical counters preserved
+                                        additive run_reuse/live/cache counters
+                                        deep-pool: 20 logical / 10 provider /
+                                          10 reuse; cap 10 pass; cap 9 zero-provider block
+                                        no Phase12D cache use on resolver-None path
+
+Phase 14C — Phase12D FRESH_ONLY
+cache READ integration:                  COMPLETE
+                                        optional scanner-owned resolver wrapper
+                                          over injected cache-reader boundary
+                                        raw resolver structurally fixed to strict selector
+                                        memo -> cache -> live Stage A order
+                                        sequential explicit FRESH_ONLY reads
+                                        strict-BUFF adapter delegates to
+                                          select_buff_output_price
+                                        fresh selection success/failure memoized
+                                        MISS / EXPIRED / POLICY_BLOCKED become NEW LIVE
+                                        backend/codec/adapter errors propagate
+                                        no stale values / no persistent writeback
+                                        snapshot PriceCachePolicy writer-owned;
+                                          no scanner numeric TTL config
+                                        default CLI composition remains pending
+
+Phase 14D — CLI composition + scale /
+bounded-live validation:                NEXT / NOT STARTED / NOT AUTHORIZED
 
 Live repository HEAD / branch / tree:     MUST be verified from Git at task entry;
                                         do not infer current HEAD from this document
@@ -124,8 +170,11 @@ Current caveat:
 
 ```text
 Phase 12D persistent / cache infrastructure:  IMPLEMENTED + UNIT TESTED
-Live scanner cache integration:                NOT IMPLEMENTED
-Run-level cross-recipe exact-price reuse:      NOT IMPLEMENTED
+Scanner service/session cache READ support:    IMPLEMENTED (PHASE 14C)
+Run-level cross-recipe exact-name reuse:        IMPLEMENTED (PHASE 14B)
+FRESH_ONLY scanner service cache reads:         IMPLEMENTED (PHASE 14C)
+Default run_live_scan_once cache composition:   NOT IMPLEMENTED (PHASE 14D)
+Scanner write-after-live:                       NOT IMPLEMENTED / OUT OF SCOPE
 ```
 
 ### Phase 12E — BUFF Listing / Adapter Foundation
@@ -288,8 +337,11 @@ Original skeleton / planning baseline
   -> R0-B minimum CI
   -> R0-C main history consolidation
   -> b13201b post-R0-C docs checkpoint
-  -> R0-D branch / repository cleanup (execution complete; docs checkpoint PR open)
-  -> proposed scanner valuation integration (next, not authorized)
+  -> R0-D branch / repository cleanup (complete)
+  -> Phase 14A/R1 scanner valuation design
+  -> Phase 14B run-scoped exact-name reuse
+  -> Phase 14C optional FRESH_ONLY scanner cache reads
+  -> Phase 14D default CLI composition (next, not authorized)
 ```
 
 ## Current Capabilities
@@ -303,8 +355,11 @@ Phase 12A typed errors and retry classification       COMPLETE
 Phase 12B endpoint-specific in-memory limiter         COMPLETE
 Phase 12C Redis shared limiter                        COMPLETE
 Phase 12D price-cache infrastructure                  COMPLETE
-Live scanner cache integration                        NOT IMPLEMENTED
-Run-level cross-recipe exact-price reuse              NOT IMPLEMENTED
+Scanner service/session persistent-cache READ seam    COMPLETE (PHASE 14C)
+Run-level cross-recipe exact-name valuation reuse     COMPLETE (PHASE 14B)
+FRESH_ONLY scanner cache reads                        COMPLETE (PHASE 14C)
+Default one-shot CLI cache composition                 NOT IMPLEMENTED (PHASE 14D)
+Scanner write-after-live                               NOT IMPLEMENTED / OUT OF SCOPE
 BUFF anonymous listing ingestion                      COMPLETE
 Live BUFF product / search / identity API             NOT INTEGRATED
 Pinned offline identity catalog                       COMPLETE
@@ -329,7 +384,7 @@ Two structural invariants preserved across all phases: (1) `candidate-owned stat
 
 ## Repository Consolidation
 
-R0-A / R0-B / R0-C / R0-C docs checkpoint are all complete. R0-D cleanup execution is complete; the completion documentation checkpoint PR is open.
+R0-A / R0-B / R0-C / R0-C docs checkpoint / R0-D are all complete. Canonical `main` advanced to P3 (`24c95c0…`) by the R0-D completion documentation checkpoint PR #3.
 
 Current branch state (after R0-D cleanup):
 
@@ -450,52 +505,127 @@ R0-C docs checkpoint             MERGED / VERIFIED
                                   CI workflow blob 02d0ce81... preserved
                                   final-main push CI run 33175931060 success
 
-R0-D Branch / Repository Cleanup IN PROGRESS — CLEANUP COMPLETE /
-                                  COMPLETION DOCS PR OPEN
+R0-D Branch / Repository Cleanup COMPLETE
                                   R0-D1 audit, R0-D2, R0-D2-BIS, R0-D2-TER complete
                                   305 agent worktrees + 305 generated local branches
                                   + 5 named local branches + 4 named remote branches
                                   removed
-                                  canonical main unchanged at P2 (328269112...)
+                                  completion docs PR #3 merged / verified
+                                  canonical main P3 = 24c95c029...
                                   `v1-dry-run-baseline` preserved locally
                                   no unique history lost
-                                  R0-D will be marked COMPLETE after the
-                                  completion docs checkpoint PR is merged
-                                  and post-merge verified on main
 ```
 
-R0-D completion condition: this checkpoint merged and verified on `main`.
+R0-D completion condition: this checkpoint merged and verified on `main`. CONDITION SATISFIED — PR #3 merged on `main` at P3 = `24c95c029f583d5cc0b0a67986e48c06d0ef7957`; final-main push CI green (run 33240760167 SUCCESS). R0-D = COMPLETE.
 
-## Next Proposed Functional Work
+## Next Functional Work
 
-**Proposed, not yet authorized.** No new functional phase is currently in progress.
+**Phase 14A / 14A-R1 / 14B / 14C are COMPLETE.**
+**Phase 14D and Valuation Budget Calibration remain NOT STARTED / NOT AUTHORIZED.**
 
-### Primary — Scanner Valuation Integration
+### Completed — Phase 14D One-shot CLI cache composition + final validation
 
 ```text
-scope:
-  integrate the EXISTING Phase 12D cache stack
-    (InMemoryPriceCache / RedisPriceCache / SteamDTCachedPriceResolver /
-     refresh service / planner / executor)
-    into the live scanner valuation path
-  add run-level exact-price reuse keyed by output market_hash_name
-  add cache-hit / cache-miss / provider-demand accounting
-  preserve exact-price / fail-closed semantics
-  preserve bounded multi-recipe ordering
-  preserve atomic fail-closed valuation budget behavior
+implemented:
+  scripts/run_live_scan_once.py
+    LiveScanSettings exposes only the three cache-composition fields
+      already supported by the factory
+    create_steamdt_price_cache_runtime -> runtime.cache ->
+      ScannerCachedBuffPriceResolver -> LiveScannerOrchestrator
+    invalid cache config fail closed before any BUFF/SteamDT live work
+    AsyncExitStack + runtime context for deterministic cleanup
+    exactly one run_once; no scheduler; no write-after-live
+  app/services/price_cache_factory.py
+    narrow SteamDTPriceCacheSettings Protocol
+    existing behavior preserved (in-memory default; optional Redis;
+      zero-I/O construction; ownership; cleanup)
+  tests/test_run_live_scan_once.py
+    default in-memory composition injects strict scanner resolver
+    redis settings reach existing factory seam
+    invalid cache config fails before live work; no secret disclosure
+    deterministic cleanup on success / RuntimeError / MemoryError /
+      CancelledError / partial HTTP construction
+    exactly one orchestrator; exactly one run_once; no write methods;
+      no refresh service
+    human output prints every Phase 14 counter group
+    JSON shape preserves existing ScannerRunResult dataclass keys
+    universe preview still forbids cache runtime / live client
+  tests/test_price_cache_factory.py
+    narrow protocol-backed composition; existing full Settings coverage
 
-constraints:
-  no invented endpoints, signatures, or field mappings
-  no fallback valuation
-  no probability renormalization
-  no scheduler or background work introduced by this phase
-  no real BUFF / SteamDT request behavior change
+not implemented:
+  scanner write-after-live
+  scheduled / background refresh
+  continuous scanner / scheduler
+  scanner TTL environment or config setting
 
-closure of D-CACHE-001:
-  run-level cross-recipe exact-price reuse lives here, NOT in Deferred
+validated:
+  full offline suite: 3428 passed / 23 skipped / 1 warning
 ```
 
-### Secondary — Valuation Budget Calibration
+### Completed — Phase 14B Run-scoped exact-name valuation reuse
+
+```text
+implemented:
+  app/services/scanner_valuation_session.py
+  reviewed scanner_orchestrator.py migration
+  fresh session per run_once
+  async prepare: memo-only, zero provider calls
+  atomic NEW-LIVE exact-name cap admission
+  execute: only NEW exact names
+  exact success + terminal-failure reuse
+  no same-name retry / no cross-run reuse
+  existing ValuationService formula authority retained
+  legacy logical counters preserved
+  additive run_reuse/live/cache counters
+  cache counters zero in 14B
+
+validated:
+  deep-pool two same-output recipes:
+    20 logical valuation requests
+    10 provider exact-name demand
+    10 run-reuse hits
+    cap 10 -> both fully valued
+    cap 9 -> both atomically blocked; zero provider calls
+  full offline suite: 3382 passed / 23 skipped / 1 warning
+
+not implemented in 14B:
+  persistent Phase12D scanner reads (completed by Phase 14C)
+  scanner write-after-live
+```
+
+### Completed — Phase 14C Phase12D FRESH_ONLY cache READ integration
+
+```text
+implemented:
+  optional scanner-owned resolver wrapper over cache-reader dependency
+  raw SteamDTCachedPriceResolver structurally bound to strict selector
+  generic cross-platform resolver rejected by public scanner API
+  deterministic run memo -> sequential cache -> live order
+  explicit PriceCacheReadPolicy.FRESH_ONLY
+  scanner strict-BUFF adapter delegates to select_buff_output_price
+  fresh SELECTED -> memo success
+  fresh SELECTION_FAILURE -> memo terminal failure / no live fallback
+  MISS / EXPIRED / POLICY_BLOCKED -> unmemoized NEW LIVE
+  cache backend / codec / adapter / contract errors propagate
+  cache outcome counters active
+  cache memo survives atomic block; unresolved misses re-read
+  no persistent writeback; no refresh service
+  snapshot PriceCachePolicy remains writer-owned; no scanner TTL config
+
+not implemented:
+  default run_live_scan_once.py cache runtime/resolver composition (14D)
+  scanner write-after-live
+```
+
+### Next — Phase 14D CLI composition + scale / bounded-live validation
+
+```text
+status:
+  COMPLETE — see "Completed — Phase 14D" above
+```
+
+### Later — Valuation Budget Calibration
 
 ```text
 scope:

@@ -5,7 +5,6 @@ from enum import StrEnum
 from typing import Protocol, cast
 from urllib.parse import urlsplit
 
-from app.config import Settings
 from app.services.price_cache import InMemoryPriceCache, PriceCache, UtcClock
 from app.services.redis_price_cache import (
     AsyncRedisPriceCacheClient,
@@ -77,6 +76,14 @@ class SteamDTPriceCacheContextExitError(RuntimeError):
         super().__init__(
             "SteamDT price-cache context body failed and runtime cleanup also failed"
         )
+
+
+class SteamDTPriceCacheSettings(Protocol):
+    """Narrow settings surface consumed by price-cache composition."""
+
+    steamdt_price_cache_backend: str
+    steamdt_price_cache_redis_namespace: str
+    redis_url: str
 
 
 class RedisPriceCacheClientFactory(Protocol):
@@ -157,7 +164,7 @@ class SteamDTPriceCacheRuntime:
 
 
 async def create_steamdt_price_cache_runtime(
-    settings: Settings,
+    settings: SteamDTPriceCacheSettings,
     *,
     clock: UtcClock | None = None,
     redis_client: AsyncRedisPriceCacheClient | None = None,

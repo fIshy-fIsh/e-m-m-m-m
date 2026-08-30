@@ -611,11 +611,11 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 ## D-CACHE-001 — No run-level SteamDT output-price cache
 
 - **Date:** 2026-08-26 (Phase 13T design freeze; reaffirmed in Phase 13T-4A / Phase 13T-4B)
-- **Status:** Active. The cache is **not implemented**.
+- **Status:** Active as the broader scanner-cache/runtime-composition record. Historical Phase 13T state below remains authoritative for Phase 13T. Phase 14B migrated run-scoped reuse; Phase 14C migrated scanner service/session FRESH_ONLY persistent cache READ; default `run_live_scan_once.py` composition remains **not implemented**.
 - **Decision:** Phase 13T intentionally excludes a run-scoped exact-name SteamDT price cache. Today, the same exact output `market_hash_name` in separate recipe valuation calls is a separate logical request that the orchestrator's cumulative budget must cover. Within one recipe, dedup is performed by `ValuationService` inside one `value_tradeup_results` call; that single-recipe dedup does not extend across recipes.
 - **Why excluded:** cross-recipe deduplication introduces freshness, failure, and request-budget semantics that are not part of the multi-recipe enumeration contract. Phase 13T must not silently redefine the cumulative budget. `valuation_service.py` and `live_recipe_valuation.py` are Protected Core; any cross-recipe cache would require explicit migration authorization.
 - **Operational effect:** under `max_valuation_requests_per_run=5` and a multi-recipe run whose recipes demand `10 + 20` unique output names, both recipes are atomically blocked before any provider lookup (`valuation_requests_blocked == 30`,` `provider_calls == 0`). This is the expected Phase 13T-4B behavior, not a regression.
-- **Future revisit:** only as a separately authorized future phase. The cache must define freshness, failure caching, request accounting, and atomicity explicitly before any implementation; the existence of this decision does not authorize implementation.
+- **Future revisit:** Phase 14B implemented run-scoped exact-name memo/budget migration; Phase 14C implemented optional scanner service/session FRESH_ONLY reads. `D-CACHE-001` remains Active until Phase 14D composes the resolver/cache runtime into the default one-shot CLI. Scanner write-after-live is not implemented.
 
 ## D-PHASE13T-COMPLETE — Phase 13T closed end-to-end
 
@@ -633,3 +633,181 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 - **What is NOT implemented:** run-level SteamDT output-price cache (`D-CACHE-001`); any new development phase.
 - **Reason:** every completed phase was committed, pushed, and frozen; subsequent reuse must be a separately reviewed phase.
 - **Future revisit:** only when a new explicit development phase is authorized. Do not reopen completed phases without new evidence.
+
+## D-CACHE-002 — Run-scoped exact-name reuse is the only Phase 14 seam
+
+- **Date:** 2026-08-29 (Phase 14A design freeze)
+- **Status:** Active. Design frozen at `specs/2026-08-29-scanner-valuation-integration-design-freeze/`. No runtime change in Phase 14A.
+- **Decision:** the **only** sanctioned seam for any future Phase 14 implementation that performs run-scoped exact-name reuse is a scanner-owned `RunScopedValuationSession` boundary, living **outside** `app/services/valuation_service.py` and `app/services/live_recipe_valuation.py` (both Protected Core). The boundary does NOT resolve BUFF listing identity, does NOT alter recipe enumeration, and does NOT cache-cross-reference `BuffCommunityIdentityResolver`.
+- **Run-scoped memo contract:** within one `LiveScannerOrchestrator.run_once()` call, exact `output_market_hash_name` strings are deduplicated against an in-memory memo; successes and terminal failures are both reused; the memo dies at end of `run_once`; nothing is persisted across runs.
+- **Reuse key:** exact byte-canonical `output_market_hash_name` — no fuzzy matching, no case folding, no aliases, no `goods_id` substitution, no `platformItemId` substitution, no hidden normalization layer. The current canonicalization is the existing Steam community market canonical name used throughout the engine path.
+- **Supersession of D-CACHE-001:** `D-CACHE-001` remains `Active` (the cache is not implemented at runtime). `D-CACHE-002` only freezes the design that any future implementation must satisfy. `D-CACHE-001` is preserved as the historical Phase 13T rule that prohibited silent introduction of cross-recipe cache behavior; Phase 14A explicitly does not promote it to "superseded". `D-CACHE-001` will be reclassified only after Phase 14B lands and is verified, and only with an explicit amendment entry.
+- **Why a new scanner-owned boundary and not a generic ValuationService cache manager:** the trade-up engine, EV service, and risk filter must remain unaware of cache mechanics. A generic global cache manager would entangle them with Phase 12D and would silently redefine the atomic preflight.
+- **Phase 14B / 14C implementation note:** run-scoped exact-name reuse is implemented by `D-PHASE14B-COMPLETE`; optional scanner service/session FRESH_ONLY persistent reads are implemented by `D-PHASE14C-COMPLETE`. `D-CACHE-001` remains Active only for default Phase 14D runtime composition.
+
+## D-CACHE-003 — Initial scanner cache policy is FRESH_ONLY
+
+- **Date:** 2026-08-29 (Phase 14A design freeze)
+- **Status:** Active. Design frozen. No runtime change in Phase 14A.
+- **Decision:** initial Phase 14C scanner integration uses `PriceCacheReadPolicy.FRESH_ONLY` exclusively. `ALLOW_STALE`, `ALLOW_STALE_GRACE`, and any future policy that consumes stale data are NOT enabled in Phase 14B or 14C.
+- **Cache hit semantics under FRESH_ONLY:**
+  - `FRESH + SELECTED` → usable cache hit; zero live-provider budget consumed; valuation may complete for that name subject to the existing strict BUFF selector rerun.
+  - `FRESH + SELECTION_FAILURE` → terminal same-run failure; reused within the run; no immediate live retry; no second-platform fallback; no bid substitution; no metadata-zero reuse. Phase 14A explicitly forbids adding a "live fallback on FRESH + SELECTION_FAILURE" path because the selector is the strict BUFF selector and the cached candidates are already the full provider response.
+  - `MISS / EXPIRED / STALE / STALE_GRACE / POLICY_BLOCKED` → live refresh candidate if budget allows; not usable as a quote without a successful live attempt.
+- **Cache backend / codec exception contract:** `PriceCacheBackendError`, `PriceCacheCodecError`, `SteamDTPriceCacheAdapterError`, and any future typed backend/codec error are propagated by identity from the session to the orchestrator. They are NOT silently reinterpreted as `MISS`. Doing so would erase the operational signal that a Redis failure or codec corruption is sending.
+- **Cache write after live success:** OFF by default in Phase 14C. An opt-in `STEAMDT_PRICE_CACHE_WRITE_AFTER_LIVE` setting may be added in a future separately authorized phase; Phase 14A does not decide this.
+- **Selector rerun:** every allowed cache hit reruns the scanner strict-BUFF adapter, whose actual authority is `select_buff_output_price`. The generic `select_steamdt_price_quote` selector is not used as scanner valuation authority.
+- **No platform filter at write time:** the cache stores the full ordered list of normalized SteamDT platform candidates per item, in provider response order. BUFF-vs-other selection happens at READ time via the existing strict selector.
+- **Why FRESH_ONLY:** Phase 13T deliberately excluded any cross-recipe cache and explicitly required that freshness semantics be defined before any implementation. `FRESH_ONLY` is the most conservative policy that still meaningfully reduces NEW LIVE demand when an item was recently refreshed (e.g. by the existing manual `scripts/steamdt_refresh_integration.py` path).
+- **Future revisit:** `ALLOW_STALE` / `ALLOW_STALE_GRACE` policies may be added in a future separately authorized phase; today they are NOT enabled.
+
+## D-BUDGET-001 — Atomic live-demand preflight (max_valuation_requests_per_run)
+
+- **Date:** 2026-08-29 (Phase 14A design freeze; supersedes the structural-demand interpretation in `D-ENUM-004` for the scanner runtime ONLY when Phase 14B lands; `D-ENUM-004` remains Active for any code path that has not yet migrated to the new interpretation)
+- **Status:** Active. Design frozen. No runtime change in Phase 14A.
+- **Decision:** `max_valuation_requests_per_run` is redefined as the count of **NEW LIVE SteamDT provider demand / attempts** within one `run_once()`, exclusive of run-reuse hits and `FRESH + SELECTED` cache hits.
+- **Atomic preflight algorithm (single-threaded inside one `run_once`):**
+  1. Derive current recipe unique output names in first-seen order.
+  2. Consult the run memo; memoed-success / memoed-failure names consume ZERO live-provider budget.
+  3. For still-unresolved names, perform `FRESH_ONLY` cache preflight; `FRESH + SELECTED` consumes ZERO; `FRESH + SELECTION_FAILURE` is memoed as terminal failure and consumes ZERO; `MISS / EXPIRED / STALE / STALE_GRACE / POLICY_BLOCKED` are live-refresh candidates. Backend / codec / adapter / resolver exceptions propagate and are NOT live candidates.
+  4. Compute `live_demand = count(live_refresh_candidate_names)`.
+  5. **Before any live call**, atomically compare `valuation_live_used + live_demand > max_valuation_requests_per_run`; if exceeded, build a blocked evaluation; `live_atomically_blocked += live_demand`; issue ZERO live SteamDT calls for that recipe.
+  6. Else `valuation_live_used += live_demand`; Stage B submits the ordered NEW LIVE exact names to the existing live price provider. Each name is charged as attempted when that provider call begins.
+- **At-most-one invariant:** at most one SteamDT live attempt per exact name per run. Phase 14A explicitly forbids adding persistent negative caching unless a future separately authorized Phase 14E does so.
+- **No partial valuation:** any incomplete recipe yields `valuation_completed=False`, no metrics, no risk, no opportunity. Never drop outputs, renormalize probabilities, substitute a previous recipe's metrics, zero-fill, or stale-fill.
+- **Migration of legacy semantics:** the legacy `valuation_requests_attempted / succeeded / failed / blocked` counters continue to record structural Phase13T demand (recipe unique output name count); the new discriminators `run_reuse_hits`, `cache_hits_fresh_selected`, `cache_misses`, `cache_policy_blocked`, `cache_expired`, `cache_selection_failures`, `live_demand`, `live_attempted`, `live_succeeded`, `live_failed`, `live_atomically_blocked` are added additively. Option A (additive) is preferred; Option B (explicit semantics migration) is the fallback if Option A surfaces ambiguity.
+- **Future revisit:** any change to the atomic preflight algorithm or the at-most-one invariant requires an explicit reviewed decision.
+
+## D-CACHE-004 — Failure reuse within a run; no automatic same-name retry
+
+- **Date:** 2026-08-29 (Phase 14A design freeze)
+- **Status:** Active. Design frozen. No runtime change in Phase 14A.
+- **Decision:** within one `LiveScannerOrchestrator.run_once()` call, the run memo records both successes and terminal failures keyed by exact `output_market_hash_name`. A terminal failure is reused for the rest of the run. There is no automatic same-name retry, no second-platform fallback, no bid substitution, no metadata-zero reuse, and no "best-effort" cache-writeback reinterpretation.
+- **Terminal failure categories:**
+  - Live lookup / selection failure (transport / API / BUFF selector rejection).
+  - Fresh-cache selection failure.
+  - Backend / codec exception (propagated by identity; not silently re-classified).
+- **Non-terminal categories:**
+  - Cache miss / expired / stale / stale-grace / policy-blocked under FRESH_ONLY → live refresh candidate if budget allows.
+- **No persistent negative caching** in Phase 14B or 14C; a negative outcome is reused only within the run in which it occurred.
+- **Why:** re-running a live SteamDT lookup for the same exact name in the same run after a terminal failure would either re-discover the same failure or silently swallow it; both outcomes violate the existing fail-closed valuation contract.
+- **Future revisit:** future backoff / persistent negative caching is separate work, requires an explicit reviewed decision, and is NOT implemented in Phase 14B or 14C.
+
+## D-ACCOUNTING-001 — Additive counter migration preserves legacy semantics
+
+- **Date:** 2026-08-29 (Phase 14A design freeze)
+- **Status:** Active. Design frozen. No runtime change in Phase 14A.
+- **Decision:** Phase 14B uses Option A: additive discriminator counters while preserving the legacy `ScannerRunStageCounters.valuation_requests_attempted / succeeded / failed / blocked` semantics exactly. Phase 14B implementation and tests confirm no Option B rename is required.
+- **New discriminators (additive):** `run_reuse_hits`, `cache_hits_fresh_selected`, `cache_misses`, `cache_policy_blocked`, `cache_expired`, `cache_selection_failures`, `live_demand`, `live_attempted`, `live_succeeded`, `live_failed`, `live_atomically_blocked`.
+- **Invariants for completed runs:**
+  - `run_reuse_hits == run_reuse_successes + run_reuse_failures`.
+  - `live_demand == live_attempted + live_atomically_blocked`.
+  - `live_attempted == live_succeeded + live_failed`.
+  - No arithmetic equality is defined between legacy `valuation_requests_attempted` and the Phase 14 discriminator counters.
+- **Why additive and not a rename:** every pre-existing test that asserts on the legacy counters (notably `tests/test_multi_recipe_scanner_scale_validation.py`) must continue to pass unchanged, except for additive assertions on the new discriminators. A silent rename would force a multi-file migration and risk test/doc drift.
+- **Future revisit:** Option A is now implemented and verified by Phase 14B (`D-PHASE14B-COMPLETE`). Any future counter rename would require a new explicit migration; it is not part of Phase 14C.
+
+## D-PHASE14A-COMPLETE — Phase 14A design freeze closed
+
+- **Date:** 2026-08-29 (Phase 14A design freeze)
+- **Status:** Active.
+- **Decision:** Phase 14A — the scanner valuation integration design freeze — is complete. The freeze covers:
+  - `specs/2026-08-29-scanner-valuation-integration-design-freeze/{requirements,plan,validation}.md`;
+  - `D-CACHE-002` (run-scoped exact-name reuse is the only Phase 14 seam);
+  - `D-CACHE-003` (initial scanner cache policy is `FRESH_ONLY`);
+  - `D-BUDGET-001` (atomic live-demand preflight);
+  - `D-CACHE-004` (failure reuse within a run; no automatic same-name retry);
+  - `D-ACCOUNTING-001` (additive counter migration; Option A preferred);
+  - the future 14B / 14C / 14D implementation sequence and the future test matrix A-N.
+- **Final authoritative state at Phase 14A closure:** branch `feature/scanner-valuation-integration`; `main` unchanged at P3 = `24c95c029f583d5cc0b0a67986e48c06d0ef7957`; the closure commit is the local HEAD of `feature/scanner-valuation-integration` (verify via `git rev-parse HEAD` at task entry); `ahead/behind = 0 0`; `PHASE_14A_COMPLETE`. CI workflow blob `02d0ce81...` preserved unchanged.
+- **What is NOT implemented:** Phase 14B / 14C / 14D; the `RunScopedValuationSession` boundary; Phase 12D cache wiring into the scanner path; `D-CACHE-001` remains `Active` (the runtime cache is still not implemented).
+- **Reason:** Phase 14A is a design freeze; no application code is touched. The design is the contract that any future implementation must satisfy.
+- **Future revisit:** any future Phase 14 implementation must be explicitly authorized and must not silently relax any frozen contract recorded in this decision log.
+
+## D-PHASE14A-R1-COHERENCE — Phase 14A design coherence correction before 14B
+
+- **Date:** 2026-08-29 (Phase 14A-R1 design coherence correction)
+- **Status:** Active. Design frozen. No runtime change in R1.
+- **Decision:** Phase 14A-R1 corrects nine internal design contradictions found during post-Phase-14A review. R1 is docs/spec/decision-log only; it does not promote Phase 14A to "implemented" and does not start Phase 14B implementation. The corrections are:
+  1. **Strict BUFF cache selection.** `select_steamdt_price_quote` is a generic cross-platform selector and CANNOT be configured strict BUFF-only (`SteamDTPriceSelectionConfig` has no platform field; the default strategy `LIQUIDITY_AWARE_SELL_PRICE` with `fallback_to_lowest_positive=True` will happily return a non-BUFF quote). The strict BUFF behavior lives solely in `select_buff_output_price` (`app/services/steamdt_buff_price_policy.py:73-77`): exact `BUFF` platform, exactly one BUFF record, positive finite sell price, no bid, never another platform, never `fallback_to_lowest_positive`. Phase 14C MUST compose a strict-BUFF cache-selection adapter at the session level; the resolver's default selector is replaced/wrapped for scanner use. `SteamDTCachedPriceResolver` and `select_steamdt_price_quote` are NOT modified by R1 or 14C; the strict-BUFF behavior is composed at the session level via an adapter.
+  2. **Two-stage prepare/execute session contract.** The single-method `resolve_output_prices(names)` was under-specified because it implicitly returned `live_demand` while requiring the orchestrator to atomically preflight that demand before any live call. R1 freezes an explicit two-stage contract: STAGE A `prepare_output_prices(names)` (no live SteamDT calls; consults run memo; in 14C, also performs FRESH_ONLY cache reads; classifies names into memo successes / memo terminal failures / `cache_hits_fresh_selected` / `cache_terminal_selection_failures` / `cache_misses_or_refresh_candidates`; backend/codec/contract errors propagate by identity); STAGE B `resolve_prepared(plan)` (only called by the orchestrator after the atomic cap admission succeeds; may issue live SteamDT calls; populates the run memo). If the orchestrator's atomic preflight blocks the recipe, Stage B is NEVER called and ZERO live calls are issued.
+  3. **Cache backend / codec / adapter errors are NOT live candidates.** `PriceCacheBackendError(RuntimeError)`, `PriceCacheCodecError(ValueError)`, and `SteamDTPriceCacheAdapterError` propagate by identity from `SteamDTCachedPriceResolver` (zero `try`/`except` in `app/services/steamdt_cached_price_resolver.py`). They are NOT `MISS`, NOT live candidates, NOT memo entries, do not consume live budget, and do not silently reinterpret the cached state. The `SteamDTCachedPriceResolutionStatus` enum has exactly five values — `SELECTED`, `MISS`, `POLICY_BLOCKED`, `EXPIRED`, `SELECTION_FAILURE` — and does not invent `BACKEND_ERROR` or `CODEC_ERROR` values; backend/codec/contract errors propagate as typed exceptions.
+  4. **Live provider failure semantics preserved.** `SteamDTBuffPriceProvider.get_prices` catches ordinary `SteamDTBuffPriceSelectionError` and other `Exception` per-name and converts to `PriceLookupResult.missing` + `prices.errors` (with redacted text and `item_index`, no name leakage). `MemoryError` propagates by identity (bare `raise` at `app/services/steamdt_buff_price_provider.py:52-53`). Other `BaseException` subclasses (`asyncio.CancelledError`, `KeyboardInterrupt`, `SystemExit`, `GeneratorExit`) propagate because the catch chain stops at `except Exception`. The Phase 14 session records `PriceLookupResult.quotes[name]` as memo SUCCESS and `PriceLookupResult.missing[name]` (with corresponding `errors` entry) as memo TERMINAL FAILURE; identity-mismatch quotes (`quote.market_hash_name != market_hash_name`) are recorded as missing. R1 explicitly does NOT claim that ordinary transport/API/selection failures propagate by identity from `SteamDTBuffPriceProvider.get_prices`; they do not — they are converted to `PriceLookupResult` outcomes and recorded as memo SUCCESS / TERMINAL FAILURE.
+  5. **Counter contract (Option A finalized).** Legacy `valuation_requests_attempted / succeeded / failed / blocked` semantics are preserved exactly. `valuation_requests_attempted` is incremented only for ADMITTED recipes (atomic preflight passed); blocked recipes do NOT increment `attempted`. `valuation_requests_blocked` is incremented by `requested_count` for BLOCKED recipes. New additive discriminators: `run_reuse_hits`, `run_reuse_successes`, `run_reuse_failures`, `cache_hits_fresh_selected`, `cache_misses`, `cache_policy_blocked`, `cache_expired`, `cache_selection_failures`, `live_demand`, `live_attempted`, `live_succeeded`, `live_failed`, `live_atomically_blocked`. **Completed-run invariants** (only for runs where `ScannerRunResult` is materialized):
+     - `run_reuse_hits == run_reuse_successes + run_reuse_failures`
+     - `live_demand == live_attempted + live_atomically_blocked`
+     - `live_attempted == live_succeeded + live_failed`
+     No arithmetic equality is defined or implied between the legacy `valuation_requests_attempted` counter and any Phase 14 counter. If the run aborts with `MemoryError` / uncatchable `BaseException` / cache-fatal error, no `ScannerRunResult` exists and the completed-run invariants need not describe partial execution.
+  6. **14B reuse test corrected.** For Recipe1 `A B C D E F G H I J` and Recipe2 `A B C D E F G H I K` (no persistent cache): distinct names = 11; `live_demand == 11`; `live_attempted == 11`; Recipe2 memo hits = 9 (`A..I`); `run_reuse_hits == 9`, `run_reuse_successes == 9` if all `A..I` succeeded, `run_reuse_failures == 0`. **NOT** `run_reuse_hits == 0`. Failure variant for Recipe1 `X Y` (X succeeds, Y fails live) and Recipe2 `X Y Z`: X reuses as success; Y reuses as terminal failure; Z triggers one new live demand; no second live attempt for Y; Recipe2 incomplete because Y failed; no metrics/risk/opportunity.
+  7. **TTL numeric default not frozen.** NO scanner `fresh_ttl` numeric default is frozen in Phase 14A-R1. The 5-minute value at `scripts/steamdt_refresh_integration.py:59` is historical manual-writer precedent only. Phase 14C subsequently adds no read-time TTL config: cache freshness is evaluated from each stored snapshot's writer-owned `PriceCachePolicy`.
+  8. **Write-after-live OUT OF initial 14C.** Initial Phase 14C is scanner cache READ integration only. Automatic scanner write-after-live is OFF / OUT OF SCOPE. The existing manual refresh stack (`scripts/steamdt_refresh_integration.py` + `SteamDTPriceRefreshService`) remains the writer. No write-failure runtime test is required for initial 14C. A future separately authorized phase may add scanner writeback and must then define opt-in config, write-failure semantics, write counters, and whether live success survives write failure.
+  9. **`D-CACHE-001` remains Active at R1.** R1 itself does not reclassify the decision; subsequent phases must land and be verified before its active scope can narrow.
+- **What is unchanged:** the Phase 14A spec trilogy location; canonical main pointer; local-only tag; protected research JSONs. Current runtime status is recorded by the later Phase 14B/14C completion decisions.
+- **Reason:** the original Phase 14A prose contained internal contradictions (generic vs strict BUFF selector, single-method vs two-stage contract, MISS reinterpretation, ordinary-failure-vs-typed-error confusion, counter arithmetic ambiguity, ambiguous reuse-test expectations, implicit 5-minute TTL default, ambiguous write-after-live scope). R1 corrects these before Phase 14B implementation begins. R1 is not a status advance.
+- **Future revisit:** Phase 14B and Phase 14C were subsequently authorized, implemented, tested, and closed by `D-PHASE14B-COMPLETE` and `D-PHASE14C-COMPLETE`. Phase 14D remains separately authorized future work; the corrected R1 contracts remain binding.
+
+## D-PHASE14B-COMPLETE — Run-scoped exact-name scanner valuation reuse implemented
+
+- **Date:** 2026-08-29 (Phase 14B)
+- **Status:** Active. Implementation complete on `feature/scanner-valuation-integration`; checkpoint subject `add run-scoped scanner valuation reuse` (verify exact SHA from Git).
+- **Decision:** Phase 14B implements the first Phase 14 production migration without integrating the persistent Phase 12D cache:
+  - `app/services/scanner_valuation_session.py` is the scanner-owned boundary. A fresh session is constructed inside every `LiveScannerOrchestrator.run_once()`; nothing persists across runs and no session is stored as reusable orchestrator state.
+  - Stage A `prepare_output_prices` is async and memo-only in 14B; it validates exact names, preserves first-seen order, performs zero provider calls, and returns an immutable canonical plan tied to the creating session by opaque token, plan ID, and memo revision.
+  - The orchestrator atomically admits `plan.new_live_names` against `max_valuation_requests_per_run`, whose runtime meaning is now NEW LIVE exact-name demand. Exact boundary is allowed. If demand exceeds remaining budget, the whole recipe is blocked, Stage B is never called, zero provider work occurs, and blocked NEW names are not memoized.
+  - Stage B `resolve_prepared` requests only NEW exact names. Matching positive finite `PriceQuote`s become memo success. Provider missing, omitted, mismatched, invalid, contradictory, unexpected-extra, malformed, or provider-error outcomes become bounded terminal failures. Raw provider error payloads are not replayed. Ordinary injected-provider exceptions become bounded terminal failures; `MemoryError` and non-`Exception` `BaseException` subclasses propagate verbatim.
+  - Later recipes reuse exact-name memo successes and terminal failures with no provider work and no same-name retry. Exact key identity is preserved: no strip-on-store, case folding, aliases, fuzzy matching, `goods_id`, or `platformItemId` substitution. Names with surrounding whitespace fail closed.
+  - Full logical lookup is rebuilt deterministically and passed through a session-local fixed `PriceProvider` into the existing `ValuationService`. `_replace_valuation_fields`, probability math, expected-value contribution math, missing-price strategy logic, EV, risk, trade-up formulas, and thresholds are not copied or changed. The scanner completeness gate remains authoritative: any missing/error prevents metrics, risk, and opportunity.
+  - `ScannerRunStageCounters` is extended additively. Legacy `valuation_requests_attempted/succeeded/failed/blocked` semantics remain recipe-logical. New `run_reuse_hits/successes/failures`, `live_demand/attempted/succeeded/failed/atomically_blocked`, and 14C `cache_*` placeholder fields are present. All cache counters remain zero in 14B. Completed-run invariants hold: `run_reuse_hits = run_reuse_successes + run_reuse_failures`; `live_demand = live_attempted + live_atomically_blocked`; `live_attempted = live_succeeded + live_failed`.
+- **Deep-pool evidence:** existing 100-input / 901-theoretical-state / 2-candidate fixture retains exact bounded recipe order, exact InputItem rehydration, Souvenir provenance, no projected-input escape, deterministic repeatability, metrics/risk behavior, and 20 legacy logical valuation requests. Under Phase 14B the underlying provider receives the 10 shared exact output names once; run-reuse hits = 10. Cap 10 fully values both recipes; cap 9 atomically blocks both before provider work (`attempted=0`, `blocked=20`, `live_demand=20`, `live_atomically_blocked=20`).
+- **Failure-reuse evidence:** Recipe1 `X,Y` with X success / Y provider missing and Recipe2 `X,Y,Z` produces provider calls `[(X,Y), (Z)]`; X reuses success, Y reuses terminal failure without retry, Z is the only second-recipe NEW LIVE name; both incomplete recipes have no metrics/risk/opportunity.
+- **Validation:** dedicated session suite, orchestrator integration, protected multi-recipe scale, protected synthetic scale, CLI offline tests, valuation compatibility, adversarial review, ruff, mypy, and full pytest pass. Full count: `3382 passed, 23 skipped, 1 warning`.
+- **Protected Core / scope:** reviewed modification is limited to `app/services/scanner_orchestrator.py`; new scanner-owned `app/services/scanner_valuation_session.py`; required tests/docs. `valuation_service.py`, `live_recipe_valuation.py`, `steamdt_buff_price_provider.py`, `steamdt_buff_price_policy.py`, `price_provider.py`, `tradeup_engine.py`, `ev_service.py`, `risk_filter.py`, `recipe_solver.py`, `scanner_recipe_composition.py`, and all Phase 12D cache modules are unchanged.
+- **D-CACHE-001:** remains Active as the broader runtime-composition record. Run-scoped reuse (14B) and scanner service/session FRESH_ONLY reads (14C) are complete. Default CLI composition remains Phase 14D; scanner write-after-live remains unimplemented.
+- **Next:** Phase 14D — default CLI cache composition + scale / bounded-live validation — NOT STARTED / NOT AUTHORIZED.
+
+## D-PHASE14C-COMPLETE — Scanner FRESH_ONLY persistent cache reads implemented
+
+- **Date:** 2026-08-29 (Phase 14C)
+- **Status:** Active. Implementation complete on `feature/scanner-valuation-integration`; checkpoint subject `add scanner fresh-only price cache reads` (verify exact SHA from Git).
+- **Decision:** Phase 14C layers the existing Phase12D read contract into the Phase14B scanner-owned session without modifying any Phase12D implementation module:
+  - `LiveScannerOrchestrator` accepts only an optional scanner-owned `ScannerCachedBuffPriceResolver`, not an arbitrary raw `SteamDTCachedPriceResolver`. The wrapper receives the existing cache-reader boundary and internally fixes `SteamDTCachedPriceResolver(selector=select_scanner_cached_buff_price)`, so generic cross-platform selection cannot enter the public scanner composition path. The orchestrator constructs no cache backend/runtime.
+  - Stage A resolves in deterministic exact memo → sequential cache → NEW LIVE order and passes `PriceCacheReadPolicy.FRESH_ONLY` explicitly. Resolver `None` preserves exact Phase14B behavior.
+  - `app/services/scanner_cached_buff_price_selector.py` matches the generic resolver selector protocol but delegates actual authority to `select_buff_output_price`: exact `BUFF`, exactly one BUFF row, positive finite sell, no bid, no non-BUFF fallback; selected cached quote source is exactly `steamdt:buff`.
+  - FRESH SELECTED becomes memo success only after the session independently confirms `lookup.state == FRESH`; FRESH SELECTION_FAILURE becomes terminal memo failure with its stable strict-BUFF reason code retained across same-run reuse. MISS, EXPIRED, and POLICY_BLOCKED become unmemoized ordered NEW LIVE candidates. Backend/codec/adapter/resolver/selector contract errors propagate and never become live candidates.
+  - Cache memo entries are committed during prepare before plan finalization and survive later atomic block. Unresolved blocked misses are not memoized and are read/classified again by later recipes.
+  - Stage B remains live-provider-only, performs no cache read/write, and calls no refresh service. Live success is not written to persistent cache; same-run later recipes use run memo; a new session over the same empty cache misses and fetches live again.
+  - Cache outcome counters are active and counted per Stage A occurrence. Legacy Option A counters and completed-run run/live invariants remain unchanged. Atomic cap remains NEW LIVE demand after cache classification; exact boundary admitted, over-budget whole recipe blocked before provider work.
+  - Snapshot TTL ownership remains with the writer-stored `CachedPriceSnapshot.policy`; no scanner `fresh_ttl` config, env, or `.env.example` change. The manual five-minute policy is historical writer precedent only.
+- **Validation:** strict selector, scanner session, orchestrator, protected multi-recipe/synthetic scale, CLI offline path, Phase12D resolver/cache regressions, ruff, mypy, and full pytest pass. Full count: `3413 passed, 23 skipped, 1 warning`.
+- **Protected scope:** `valuation_service.py`, strict live BUFF provider/policy, price provider, engine, EV/risk, solver/composition, all Phase12D implementation modules, CLI/config/env, CI, and dependencies are unchanged. Protected scale tests remain green.
+- **Runtime boundary:** scanner service/session persistent cache READ support is implemented. Default `scripts/run_live_scan_once.py` resolver/cache composition is not implemented and belongs to Phase 14D. Scanner write-after-live remains not implemented.
+- **D-CACHE-001:** remains Active until Phase 14D default runtime composition lands.
+- **Next:** Phase 14D — CLI composition + scale / bounded-live validation — NOT STARTED / NOT AUTHORIZED.
+
+## D-CACHE-001 — Supersession of "No run-level SteamDT output-price cache"
+
+- **Date:** 2026-08-30 (Phase 14D)
+- **Status:** Superseded for the originally tracked run-level reuse and default CLI composition gap. Writeback/refresh, scheduled refresh, and continuous-scan tasks remain out of scope as deferred future work; the active gap they would have closed never existed inside this decision's authority.
+- **Decision:** `D-CACHE-001` originally recorded the historical Phase 13T prohibition against silent cross-recipe cache reuse in the scanner. Subsequent phases separately closed its runtime scope:
+  - Phase 14B implemented run-scoped exact-name reuse and NEW LIVE atomic budgeting.
+  - Phase 14C implemented optional scanner service/session FRESH_ONLY persistent reads with strict-BUFF selector binding.
+  - Phase 14D implements the default one-shot CLI cache runtime/resolver composition with the in-memory default and optional Redis through the existing factory seam.
+- **What remains explicitly deferred:** scanner write-after-live, scheduled/background cache refresh, generalized write-policy on the scanner path, refresh-service integration, Redis batching/concurrency, dual session/orchestrator counter ownership redesign, transactional Stage A rollback, blocked-MISS dedup, and broad AST blacklist redesign.
+- **Why reclassified now:** with Phase 14B/C/D verified on the canonical `feature/scanner-valuation-integration` branch, the original "no run-level SteamDT output-price cache at runtime" rule no longer holds for the scanner session path. The historical Phase 13T prohibition remains authoritative for code added between then and 14B; future phases that would re-introduce silent cross-run reuse must cite `D-CACHE-002` or newer decisions rather than `D-CACHE-001`.
+
+## D-PHASE14D-COMPLETE — One-shot CLI cache composition + final validation
+
+- **Date:** 2026-08-30 (Phase 14D)
+- **Status:** Active. Implementation complete on `feature/scanner-valuation-integration`; checkpoint subject `wire scanner price cache into live CLI` (verify exact SHA from Git).
+- **Decision:** Phase 14D closes the final runtime-composition gap for the strict-BUFF FRESH_ONLY scanner cache seam without introducing any new write/scheduler/refresh capability:
+  - `scripts/run_live_scan_once.py` now creates an existing `SteamDTPriceCacheRuntime` through `create_steamdt_price_cache_runtime`, enters its async context, and passes `runtime.cache` into a fresh `ScannerCachedBuffPriceResolver` whose value reaches `LiveScannerOrchestrator(cached_price_resolver=...)`. The runtime and HTTP clients are deterministically closed via `AsyncExitStack` plus the existing runtime context. Exactly one `run_once()` is invoked.
+  - `app/services/price_cache_factory.py` exposes a narrow `SteamDTPriceCacheSettings` Protocol; `create_steamdt_price_cache_runtime` now accepts that protocol so the CLI does not need to materialize the global `Settings`. All existing behavior (in-memory default, optional Redis validation, zero-I/O construction, ownership, cleanup) is preserved.
+  - `LiveScanSettings` adds only the three cache-composition fields already supported by the factory: `steamdt_price_cache_backend`, `steamdt_price_cache_redis_namespace`, `redis_url`. No scanner TTL, no refresh, no scheduler fields. The valuation cap wording now describes the NEW LIVE exact-name demand.
+  - Invalid cache configuration fails before any BUFF/SteamDT live client, provider, or orchestrator construction with a stable redacted `LIVE_PRICE_CACHE_BLOCKED_BY_CONFIGURATION` marker; Redis URL and credentials are never printed.
+  - `print_human` prints every Phase 14 counter grouped as logical valuation requests, run reuse, persistent cache reads, and NEW LIVE demand/execution. JSON retains the existing `ScannerRunResult` dataclass shape and adds no envelope.
+  - The scanner CLI performs no cache write, no `purge_expired`/`delete`/`clear`, no `SteamDTPriceRefreshService`, and no Redis preflight. Default in-memory backend requires no Redis. Live success remains in the run memo only; the persistent cache is not written by the CLI.
+- **Validation:** focused CLI tests (default in-memory composition, Redis seam, invalid cache config fails before live work, exactly one scan, no write, deterministic cleanup including `MemoryError`/`CancelledError`/partial HTTP construction, JSON shape preservation, human counter groups), narrowed factory tests (`SteamDTPriceCacheSettings`), Phase 14B/C suites, protected multi-recipe and synthetic scale suites, ruff, mypy, and full pytest pass. Full count: `3428 passed, 23 skipped, 1 warning`.
+- **Protected scope:** `valuation_service.py`, `live_recipe_valuation.py`, `steamdt_buff_price_provider.py`, `steamdt_buff_price_policy.py`, `price_provider.py`, `tradeup_engine.py`, `ev_service.py`, `risk_filter.py`, `recipe_solver.py`, `scanner_recipe_composition.py`, every Phase 12D cache module, `.env.example`, `.github/**`, `pyproject.toml`, and the protected scale tests remain unchanged.
+- **Runtime boundary:** default one-shot CLI composes the strict-BUFF FRESH_ONLY cache seam. Scanner write-after-live, scheduled background refresh, continuous scanning, and any scanner TTL environment/config setting remain unimplemented.
+- **D-CACHE-001:** superseded for the originally tracked run-level cache gap; deferred write/refresh concerns remain separate future-work items.
+- **Next:** Valuation Budget Calibration remains NOT STARTED / NOT AUTHORIZED.

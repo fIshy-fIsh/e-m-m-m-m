@@ -2,13 +2,12 @@
 
 ## Current Git State (verify live)
 
-- **Branch:** `main` (canonical; tracking `origin/main`; created via R0-D2-TER step 13).
-- **HEAD:** `328269112f229faf3fce4cf0be4b9c7875582b65` (= P2, the post-R0-C-docs-checkpoint main).
-- **HEAD message:** `Merge pull request #2 from fIshy-fIsh/docs/r0c-completion-checkpoint` (merge-commit semantics).
-- **Phase:** `PHASE_13T_COMPLETE`.
-- **R0-A / R0-B / R0-C / post-R0-C docs checkpoint:** COMPLETE.
-- **R0-D cleanup execution:** COMPLETE (R0-D1 audit, R0-D2 / R0-D2-BIS / R0-D2-TER cleanup). Cleanup summary recorded in `PROJECT_CONTEXT.md` and `specs/roadmap.md`. Canonical main remained unchanged during cleanup.
-- **Uncommitted implementation work:** none. The two intentionally excluded research JSON files (`research/identity_revalidation/data/modest_serhat.json`, `research/identity_revalidation/data/timofey_ivanenko.json`) remain local/untracked; they are not product work.
+- **Branch:** `feature/scanner-valuation-integration` (Phase 14C functional branch). Tracked canonical `main` remains P3 (`24c95c029f583d5cc0b0a67986e48c06d0ef7957`) and is unchanged.
+- **HEAD:** Phase 14C checkpoint commit `add scanner fresh-only price cache reads` (verify exact SHA from Git).
+- **HEAD message:** `add scanner fresh-only price cache reads`.
+- **Phase:** `PHASE_14C_COMPLETE`.
+- **R0-A / R0-B / R0-C / post-R0-C docs checkpoint / R0-D:** COMPLETE. R0-D completion documentation checkpoint PR #3 merged on `main` at P3 (`24c95c029f583d5cc0b0a67986e48c06d0ef7957`); final-main push CI green (`CI` / run `33240760167`, conclusion `success`).
+- **Uncommitted implementation work:** none after the Phase 14C checkpoint commit. The two protected research JSON files remain local/untracked and untouched.
 
 Recent push history (oldest → newest) on canonical main includes:
 
@@ -534,28 +533,39 @@ The components remain in the tree as paused, offline-tested optional infrastruct
 - SteamDT output valuation: **fully live path verified** (Phase 13P-5; strict BUFF sell policy).
 - Goods identity bridge: **provisional offline resolver and runtime binding implemented** (`D-IDENTITY-006` / `D-IDENTITY-007`).
 - Trade-up input normalization and current Souvenir output semantics: **implemented** (Phase 13O through 13P-4).
-- Run-level SteamDT output-price cache: **NOT IMPLEMENTED** (`D-CACHE-001`); known deferred optimization only.
+- Run-scoped exact-name valuation reuse: **IMPLEMENTED** (Phase 14B). Fresh scanner-owned session per `run_once()`; atomic NEW-LIVE admission; success and terminal failure reuse; no same-name retry; no cross-run reuse.
+- Scanner service/session persistent cache READ integration: **IMPLEMENTED** (Phase 14C). Optional scanner-owned `ScannerCachedBuffPriceResolver` injection; its internal raw resolver is structurally bound to `select_scanner_cached_buff_price`, so generic cross-platform authority cannot enter public scanner composition. Deterministic memo → sequential explicit-FRESH_ONLY cache → live; independent FRESH validation; stable strict-BUFF failure reasons retained across memo reuse; cache outcome counters active; backend/codec/adapter/contract errors propagate; no stale consumption or writeback.
+- Default `run_live_scan_once.py` cache composition: **IMPLEMENTED** (Phase 14D). In-memory default; optional Redis through the existing three-field settings seam. Scanner write-after-live: **NOT IMPLEMENTED**. Stored snapshot `PriceCachePolicy` is writer-owned; no scanner read-time numeric TTL config.
+- `D-CACHE-001`: **Superseded** for the originally tracked run-reuse + CLI composition gap; deferred write/refresh concerns remain separate future work.
 - Scheduler/continuous scanning: **not implemented**.
 - R0-A Public Documentation Synchronization: **COMPLETE** (`1dbc6f1`).
 - R0-B Minimum CI: **COMPLETE / REMOTE GREEN** (`7a6349e`; GitHub Actions `CI` / `quality` success).
 - R0-C Main History Consolidation: **COMPLETE**. PR #1 (`Reconcile main history with current project lineage`) merged using `Create a merge commit`. Post-R0-C main tip `9cfaf36db028661075a495587ac32e51256fffe8` with parents `{24ece8582d1b3cb1b72322afc15de94b652a8bcc, 3aa44e9364268308d0fbb4c0532f4a910f4f85e8}`. Consolidation commit `3aa44e93…` is topology-only and its tree `7a39d28f2654cdf3b4eb98c8123227de64db5e34` equals the DEV tree `4c2f1ef6cd850985e71f041601ae58489abe947b`. CI workflow blob `02d0ce81d3704d9bc9c513df9b474855ffeae703` is preserved. Post-R0-C main push CI: workflow `CI`, run `33173529766`, event `push`, branch `main`, head SHA `9cfaf36…`, conclusion `success`. The merge was performed manually through the GitHub web UI after automated fine-grained-PAT merge attempts were blocked by GitHub token authorization.
 - R0-C docs checkpoint: **MERGED / VERIFIED**. PR #2 (`Sync documentation after R0-C consolidation`) merged using `Create a merge commit` (manual web-UI merge after automated PAT-scope limits). Final canonical `main` tip after the docs checkpoint is `328269112f229faf3fce4cf0be4b9c7875582b65` (P2) with parents `{9cfaf36…, b13201b…}` and tree `b7648ad185aaf9ae4f4ca1057294e4b84010ab8d`. CI workflow blob `02d0ce81…` preserved. Final-main push CI: workflow `CI`, run `33175931060`, event `push`, branch `main`, head SHA `328269112f…`, conclusion `success`.
-- R0-D Branch / Repository Cleanup: **IN PROGRESS — CLEANUP COMPLETE / COMPLETION DOCS PR OPEN**. R0-D1 audit, R0-D2 / R0-D2-BIS / R0-D2-TER cleanup execution are complete. Canonical `main` (P2) was unchanged by cleanup; CI workflow blob preserved. Cleanup summary: 305 Claude agent linked worktrees under `D:/CS/.claude/worktrees/agent-*` and their 305 `worktree-agent-a*` local branches removed; 5 named local branches (`docs/r0c-completion-checkpoint`, `repo/main-consolidation`, `feature/steamdt-cache-rate-limit`, `feature/steamdt-data-source`, `feature/buff-tradeup-scanner`) removed; 4 named remote branches removed. `git worktree remove` and `git branch -d` only (no `--force`, no `-D`). `v1-dry-run-baseline` retained locally at exact target `32ab47c5b66a0f331457e69f1515e5e9bb2a37e1` (was always local-only). No unique history lost. R0-D will be marked COMPLETE only after this docs checkpoint PR is merged and post-merge verified on `main`.
+- R0-D Branch / Repository Cleanup: **COMPLETE**. PR #3 (`R0-D completion documentation checkpoint`) merged on `main` using `Create a merge commit` (manual web-UI merge after automated PAT-scope limits on un-draft). Final canonical `main` tip is `24c95c029f583d5cc0b0a67986e48c06d0ef7957` (P3) with parents `{328269112f229faf3fce4cf0be4b9c7875582b65 (P2), 6964cc4ff25cd4ad72fe65f92f40a5ce70a4a268 (R0-D3 docs commit)}` and tree `608d3e473072afb0d97aadf46ea0be8b1f55ca26`. CI workflow blob `02d0ce81…` preserved unchanged since R0-A. Final-main push CI: workflow `CI`, run `33240760167`, event `push`, branch `main`, head SHA `24c95c0…`, conclusion `success`. Cleanup summary: 305 Claude agent linked worktrees under `D:/CS/.claude/worktrees/agent-*` and their 305 `worktree-agent-a*` local branches removed; 5 named local branches (`docs/r0c-completion-checkpoint`, `repo/main-consolidation`, `feature/steamdt-cache-rate-limit`, `feature/steamdt-data-source`, `feature/buff-tradeup-scanner`) removed; 4 named remote branches removed. `git worktree remove` and `git branch -d` only (no `--force`, no `-D`). `v1-dry-run-baseline` retained locally at exact target `32ab47c5b66a0f331457e69f1515e5e9bb2a37e1` (was always local-only). No unique history lost.
+- Phase 14A — Scanner Valuation Integration Design Freeze: **COMPLETE** (docs only; commit `e98cd97`).
+- Phase 14A-R1 — Design Coherence Correction: **COMPLETE** (docs only; commit `bb056e5`; decision `D-PHASE14A-R1-COHERENCE`).
+- Phase 14B — Run-scoped exact-name valuation reuse: **COMPLETE** at `c7031b61c3c44640ffd76165946809f7383f5d0c`; baseline full offline validation `3382 passed, 23 skipped, 1 warning`.
+- Phase 14C — Phase12D FRESH_ONLY cache READ integration: **COMPLETE**. `app/services/scanner_cached_buff_price_selector.py` supplies strict BUFF resolver selection via `select_buff_output_price`; `scanner_valuation_session.py` performs memo/cache/live Stage A classification and retains live-only Stage B; `scanner_orchestrator.py` injects the optional resolver and activates cache counters without constructing runtimes. No Phase12D implementation, CLI, config, refresh, or persistent write behavior changed. Full offline validation: `3413 passed, 23 skipped, 1 warning`; ruff/mypy pass.
 
 ## Next Action (ordered)
 
-- **No new product-development phase is currently authorized.**
+- **Phase 14B and Phase 14C are COMPLETE.** Run reuse, NEW-LIVE accounting, and optional scanner service/session FRESH_ONLY cache reads are implemented and offline validated. `D-PHASE14B-COMPLETE` and `D-PHASE14C-COMPLETE` record the checkpoints.
+- **Phase 14B / 14C / 14D are COMPLETE.** Phase 14D wired the default one-shot CLI cache composition and is recorded by `D-PHASE14D-COMPLETE`. Valuation Budget Calibration remains pending.
+- Scanner write-after-live remains unimplemented and out of scope.
+- `D-CACHE-001` is superseded for the originally tracked run-reuse + CLI composition gap; deferred write/refresh concerns remain separate future work and continue to require explicit authorization.
 - **R0-C Main History Consolidation is COMPLETE.** Post-R0-C main tip is `9cfaf36db028661075a495587ac32e51256fffe8` (now an ancestor of P2).
 - **R0-C docs checkpoint is MERGED / VERIFIED.** Canonical `main` tip is `328269112f229faf3fce4cf0be4b9c7875582b65` (P2); topology / ancestry / tree / CI workflow blob all verified; final-main push CI green.
-- **R0-D cleanup execution is COMPLETE** (R0-D1 audit, R0-D2 / R0-D2-BIS / R0-D2-TER). Canonical `main` (P2) remained unchanged by cleanup. Cleanup summary is captured in `PROJECT_CONTEXT.md` and `specs/roadmap.md`. R0-D will be marked fully COMPLETE only after the R0-D completion documentation checkpoint PR is merged and post-merge verified.
-- The R0-D completion documentation checkpoint PR is currently open and CI green; manual merge authorization is required next.
-- Scanner Valuation Integration is **PROPOSED / NOT AUTHORIZED**: integrate the existing Phase 12D cache stack into live scanner valuation, add run-level exact-price reuse and cache-hit / cache-miss / provider-demand accounting, and preserve strict complete-price, bounded-ordering, and atomic valuation-budget semantics.
+- **R0-D cleanup execution and completion checkpoint are COMPLETE.** R0-D1 audit, R0-D2 / R0-D2-BIS / R0-D2-TER, and PR #3 post-merge verification are complete. Canonical `main` is P3 (`24c95c0...`). Cleanup summary is captured in `PROJECT_CONTEXT.md` and `specs/roadmap.md`.
+- **R0-D completion documentation checkpoint PR is MERGED / VERIFIED.** PR #3 (`R0-D completion documentation checkpoint`) merged on `main` using `Create a merge commit` at P3 = `24c95c029f583d5cc0b0a67986e48c06d0ef7957`; final-main push CI green (`CI` / run `33240760167`, conclusion `success`). R0-D is COMPLETE.
+- Scanner Valuation Integration: Phase 14A / 14A-R1 / 14B / 14C / 14D are COMPLETE. Valuation Budget Calibration remains pending.
 - Valuation Budget Calibration is **PROPOSED / NOT AUTHORIZED**: measure unique-output cardinality offline before proposing any numeric cap.
-- Any future development phase must be explicitly authorized and must not silently relax `D-ENUM-001`–`D-ENUM-004`, `D-CACHE-001`, `D-SCANNER-001`, `D-VALIDATION-001`, `D-MEMORY-001`, `D-ADAPTER-003`, or `D-ADAPTER-004`.
+- Any future development phase must be explicitly authorized and must not silently relax `D-ENUM-001`–`D-ENUM-004`, `D-CACHE-001..004`, `D-BUDGET-001`, `D-ACCOUNTING-001`, `D-SCANNER-001`, `D-VALIDATION-001`, `D-MEMORY-001`, `D-ADAPTER-003`, or `D-ADAPTER-004`.
 
 ## Current Blockers
 
-- None for the completed Phase 13T bounded multi-recipe scanner migration.
+- None for the completed Phase 14C migration.
+- Valuation Budget Calibration requires explicit authorization before implementation.
 
 ## Standing Prohibitions (re-asserted)
 

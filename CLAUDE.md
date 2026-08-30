@@ -66,19 +66,24 @@
 6. 检查是否把未确认的 BUFF API 细节错误写死进代码。
 
 ## 当前阶段指针
-- 阶段：`PHASE_13T_COMPLETE`。
-- Phase 13T production / test checkpoint：`9288794`（`add bounded multi-recipe scale validation`）。
+- 阶段：`PHASE_14D_COMPLETE`（default one-shot CLI 已接入 Phase 14C strict-BUFF FRESH_ONLY cache seam；scanner write-after-live、refresh、scheduler、TTL env 仍未实现；分支 `feature/scanner-valuation-integration`）。
+- Phase 14D production / test checkpoint：本分支 commit `wire scanner price cache into live CLI`（完成后通过 `git rev-parse HEAD` 实时确认）；`scripts/run_live_scan_once.py` 通过 `create_steamdt_price_cache_runtime` 组装 Phase 12D runtime，将 `ScannerCachedBuffPriceResolver(runtime.cache)` 注入 `LiveScannerOrchestrator`；default inmemory；可选 Redis 通过现有 `create_steamdt_price_cache_runtime` seam；`LiveScanSettings` 仅新增 3 个 cache composition 字段；invalid cache config 在 BUFF/SteamDT live client 工作之前 fail closed；`AsyncExitStack` + runtime context 保证 deterministic cleanup；`print_human` 输出所有 Phase 14 counter 分组；JSON 形状保留；全套验证 `3428 passed, 23 skipped, 1 warning`。
 - Post-Phase-13T handoff baseline：`bb09068`（`sync AI context after Phase 13T`）。
 - Pre-R0-C DEV tip (historical)：`4c2f1ef`（`sync docs after minimum CI validation`）。
-- Post-R0-C canonical main：`9cfaf36`（`sync docs after R0-C repository consolidation`），parents `{24ece858, 3aa44e93}`，tree `7a39d28`。作为祖先节点保留；当前 canonical main 已迁移到下方 P2。
+- Post-R0-C canonical main：`9cfaf36`（`sync docs after R0-C repository consolidation`），parents `{24ece858, 3aa44e93}`，tree `7a39d28`。作为祖先节点保留；当前 canonical main 已迁移到下方 P3。
 - Post-R0-C docs checkpoint：`b13201b`（`sync docs after R0-C repository consolidation` docs PR，PR #2），merge commit 在 P2。
-- 当前 canonical main：`P2 = 328269112f229faf3fce4cf0be4b9c7875582b65`，parents `{9cfaf36, b13201b}`，tree `b7648ad1...`。R0-D 清理完成后 canonical main 保持不变。
+- 当前 canonical main：`P3 = 24c95c029f583d5cc0b0a67986e48c06d0ef7957`，parents `{328269112f229faf3fce4cf0be4b9c7875582b65, 6964cc4ff25cd4ad72fe65f92f40a5ce70a4a268}`，tree `608d3e47...`。R0-D 完成 docs checkpoint PR (#3) 已合并至 main；P2 = 328269112... 现为 P3 祖先节点保留。
 - 当前 Git HEAD 必须通过仓库实时验证（`git rev-parse HEAD` / `git status --short`），不在此处硬编码。
 - 当前 bounded multi-recipe 校验：`tests/test_multi_recipe_scanner_scale_validation.py`。
 - Minimum CI 已建立并远端验证：`.github/workflows/ci.yml`（Python 3.12；`ruff check .`；`mypy app`；`pytest`）；CI workflow blob 自 R0-A 起保持 `02d0ce81...`。
 - 权威交接文档：`docs/ai-context/DEVELOPMENT_HANDOFF.md`。
-- R0-A / R0-B / R0-C：COMPLETE。post-R0-C docs checkpoint：MERGED / VERIFIED。
-- R0-D：IN PROGRESS — CLEANUP COMPLETE / COMPLETION DOCS PR OPEN。305 Claude agent 链接 worktree 与对应 `worktree-agent-a*` 本地分支已移除；5 个命名本地分支 + 4 个远端分支已移除；`v1-dry-run-baseline` 标签保留（local-only，`32ab47c5...`）；无唯一历史丢失。当前等待本次 R0-D 完成 docs checkpoint PR 合并与合并后验证。
+- R0-A / R0-B / R0-C / R0-C docs checkpoint / R0-D：COMPLETE。R0-D 由 PR #3 完成 docs checkpoint 合并与 CI green（run 33240760167）验证。
+- Phase 14A：COMPLETE — design freeze。`specs/2026-08-29-scanner-valuation-integration-design-freeze/{requirements,plan,validation}.md`；commit `e98cd97`。Phase 14A-R1 coherence correction：COMPLETE，commit `bb056e5`，decision `D-PHASE14A-R1-COHERENCE`。
+- Phase 14B：COMPLETE — run-scoped exact-name valuation reuse。每次 `LiveScannerOrchestrator.run_once()` 创建新的 scanner-owned session；async Stage A prepare 零 provider calls；atomic admission 后 Stage B 仅请求 NEW LIVE exact names；success 与 terminal failure 在同一 run 内复用；跨 run 不复用。`max_valuation_requests_per_run` runtime 含义迁移为 NEW LIVE exact-name demand；legacy logical counters 保持；new additive counters active；cache counters 在 14B 中保持零。`ValuationService` formula 未修改。
+- `D-CACHE-001` 已由 14B/14C/14D 完成原始 run-reuse + CLI composition 范围而实现（supersession 条目已记录）；scanner write-after-live、refresh、scheduler、TTL env 仍 NOT IMPLEMENTED。
+- Phase 14C：COMPLETE — optional cache-reader injection；scanner-owned wrapper 内部固定构造 `SteamDTCachedPriceResolver(selector=select_scanner_cached_buff_price)`；Stage A 严格 memo → FRESH_ONLY cache → live classification；cached selector 复用 `select_buff_output_price`，generic cross-platform resolver 无法进入 public scanner composition；无 stale consumption、无 cache write、无 refresh service。snapshot 的 stored `PriceCachePolicy` 由 writer 管理，无 scanner read-time numeric TTL config。
+- Phase 14D：COMPLETE — default one-shot CLI 通过 `create_steamdt_price_cache_runtime` + `ScannerCachedBuffPriceResolver` 接入 Phase 14C cache seam；inmemory 为默认；可选 Redis 复用现有 factory；新增 narrow `SteamDTPriceCacheSettings` Protocol；invalid cache config fail closed before BUFF/SteamDT live client/provider/orchestrator；`AsyncExitStack` + runtime context 保证 deterministic cleanup；JSON 形状保留；human output 增加所有 Phase 14 counter 分组；无 scanner TTL env、scheduler、refresh、write-after-live。
+- `main` 未被 Phase 14A 推送修改；HEAD 当前在 `feature/scanner-valuation-integration`，需通过 `git rev-parse HEAD` 实时确认。
 
 ## 禁止事项
 - 自动购买

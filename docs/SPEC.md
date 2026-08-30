@@ -214,7 +214,10 @@ Identity:
 Atomic valuation budget:
 
 - per-run hard cap `max_valuation_requests_per_run ∈ [1, 60]`, default 5
-- required logical requests strictly greater than the remaining cap block the whole recipe before any SteamDT HTTP / provider request is sent
+- budget counts NEW LIVE exact output names not present in the run memo
+- Stage A preparation performs zero provider calls
+- NEW LIVE demand strictly greater than the remaining cap blocks the whole recipe before Stage B / provider work; exact boundary is allowed
+- blocked NEW names are not memoized; no partial provider execution
 
 ## 8. SteamDT Valuation Boundary (current production)
 
@@ -224,9 +227,9 @@ Atomic valuation budget:
 - `biddingPrice` and `biddingCount` are not read and do not substitute for a missing or unusable sell price.
 - The selected aggregate sell price is not an executable listing price or a guaranteed realized proceeds.
 
-## 9. Phase 12D Cache / Refresh Infrastructure (implemented, not wired into the live scanner)
+## 9. Phase 12D Cache / Refresh Infrastructure and Scanner Reads
 
-Persistent cache snapshot infrastructure that is unit-tested and opt-in behind `STEAMDT_PRICE_CACHE_BACKEND`:
+Persistent cache snapshot infrastructure is unit-tested and opt-in behind `STEAMDT_PRICE_CACHE_BACKEND`:
 
 - `PriceCache` (async cache protocol)
 - `InMemoryPriceCache`
@@ -238,7 +241,9 @@ Persistent cache snapshot infrastructure that is unit-tested and opt-in behind `
 - `SteamDTRefreshPlanner` (dedup + chunk)
 - `SteamDTRefreshExecutor` (sequential chunks; `max_concurrency` is only a work bound, not a rate limit)
 
-The live scanner valuation path does **not** import any Phase 12D cache module. Run-level cross-recipe exact-price reuse (D-CACHE-001) is **not** implemented.
+Phase 14B implements scanner-owned run-scoped exact-name success/failure reuse with a fresh session inside every `run_once()` call. Phase 14C adds optional scanner service/session persistent cache reads through `ScannerCachedBuffPriceResolver`: the scanner-owned wrapper accepts the existing cache-reader boundary and internally constructs `SteamDTCachedPriceResolver` with the fixed `select_scanner_cached_buff_price` selector, so an arbitrary generic-selector resolver cannot enter the public scanner API. Stage A consults run memo first, then reads sequentially with `PriceCacheReadPolicy.FRESH_ONLY`; cached candidates are selected only by the adapter delegating to `select_buff_output_price`. Selected success independently requires `lookup.state == FRESH`; strict selection failures retain their stable reason across same-run memo reuse. MISS, EXPIRED, and POLICY_BLOCKED outcomes become NEW LIVE demand. Cache backend/codec/adapter/resolver errors propagate; Stage B performs no cache read, write, or refresh call.
+
+The session is not persistent and nothing in its memo is reused across runs. The scanner never writes cache after live success. Stored snapshot `PriceCachePolicy` is writer-owned; no scanner read-time numeric TTL config exists. `scripts/run_live_scan_once.py` constructs the existing Phase 12D cache runtime and injects the strict-BUFF FRESH_ONLY reader; default backend is in-memory and Redis is optional. `D-CACHE-001` is superseded for the originally tracked run-reuse + CLI composition gap.
 
 ## 10. Data Model (current production, in-memory)
 

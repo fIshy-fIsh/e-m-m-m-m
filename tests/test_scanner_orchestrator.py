@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -10,6 +11,13 @@ from app.services.buff_intrinsic_flag_resolver import (
 )
 from app.services.buff_item_identity import BuffItemIdentity
 from app.services.buff_listing_provider import BuffListing
+from app.services.price_cache import (
+    CachedPriceSnapshot,
+    InMemoryPriceCache,
+    NormalizedPriceCandidate,
+    PriceCacheKey,
+    PriceCachePolicy,
+)
 from app.services.price_provider import MockPriceProvider, PriceLookupResult, PriceQuote
 from app.services.recipe_solver import (
     ConstructedRecipe,
@@ -22,6 +30,9 @@ from app.services.risk_filter import (
     RiskDecision,
     RiskFilterConfig,
 )
+from app.services.scanner_cached_buff_price_resolver import (
+    ScannerCachedBuffPriceResolver,
+)
 from app.services.scanner_orchestrator import LiveScannerOrchestrator
 from app.services.scanner_recipe_composition import (
     ScannerRecipeBucketDiagnostics,
@@ -29,6 +40,7 @@ from app.services.scanner_recipe_composition import (
     ScannerRecipeCompositionResult,
 )
 from app.services.skin_metadata_resolver import PinnedSkinMetadataResolver
+from app.services.steamdt_cached_price_resolver import SteamDTCachedPriceResolver
 from app.services.tradeup_engine import InputItem, TradeupResult
 from app.services.valuation_service import ValuationConfig, ValuationService
 
@@ -142,6 +154,7 @@ def _orchestrator(
     exclude_souvenir: bool = False,
     intrinsic_resolver: object | None = None,
     enumeration_config: RecipeEnumerationConfig | None = None,
+    cached_price_resolver: ScannerCachedBuffPriceResolver | None = None,
 ) -> LiveScannerOrchestrator:
     valuation: ValuationService | None = None
     if with_valuation:
@@ -164,6 +177,7 @@ def _orchestrator(
         metadata_resolver=metadata or _metadata_resolver(),
         intrinsic_resolver=intrinsic_resolver,  # type: ignore[arg-type]
         valuation_service=valuation,
+        cached_price_resolver=cached_price_resolver,
         max_valuation_requests_per_run=max_valuation_requests,
         solver_config=RecipeSolverConfig(
             input_rarity="Restricted",
@@ -233,6 +247,19 @@ def test_zero_valuation_rejects_recipe() -> None:
     result = asyncio.run(_orchestrator(with_valuation=False).run_once([GOODS_ID]))
     assert result.counters.recipes_evaluated == 1
     assert result.counters.opportunities_found == 0
+    assert result.counters.valuation_requests_attempted == 1
+    assert result.counters.valuation_requests_succeeded == 0
+    assert result.counters.valuation_requests_failed == 1
+    assert result.counters.valuation_requests_blocked == 0
+    assert result.counters.live_demand == 0
+    assert result.counters.live_attempted == 0
+    assert result.counters.live_succeeded == 0
+    assert result.counters.live_failed == 0
+    assert result.counters.live_atomically_blocked == 0
+    assert result.counters.run_reuse_hits == 0
+    assert result.recipe_evaluations[0].rejection_reason == (
+        "VALUATION_SERVICE_NOT_CONFIGURED"
+    )
 
 
 def test_risk_rejection_counts_zero_opportunities() -> None:
@@ -798,6 +825,57 @@ def _listing_provider(count: int = 12) -> FakeListingProvider:
     )
 
 
+def test_generic_cached_resolver_cannot_enter_public_orchestrator_api() -> None:
+    generic = SteamDTCachedPriceResolver(InMemoryPriceCache())
+
+    with pytest.raises(TypeError, match="ScannerCachedBuffPriceResolver"):
+        _orchestrator(
+            cached_price_resolver=generic,  # type: ignore[arg-type]
+        )
+
+
+class FixedClock:
+    def __init__(self, now: datetime) -> None:
+        self.now = now
+
+    def __call__(self) -> datetime:
+        return self.now
+
+
+async def _populate_fresh_cache(
+    cache: InMemoryPriceCache,
+    names: tuple[str, ...],
+    *,
+    now: datetime,
+    non_buff_names: frozenset[str] = frozenset(),
+) -> None:
+    for name in names:
+        platform = "Steam" if name in non_buff_names else "BUFF"
+        await cache.put(
+            CachedPriceSnapshot(
+                key=PriceCacheKey(market_hash_name=name),
+                candidates=(
+                    NormalizedPriceCandidate(
+                        platform=platform,
+                        platform_item_id=f"{platform}-id",
+                        sell_price_cny=Decimal("200"),
+                        sell_count=10,
+                        bidding_price_cny=Decimal("199"),
+                        bidding_count=10,
+                        source_update_time="opaque",
+                    ),
+                ),
+                observed_at=now - timedelta(seconds=1),
+                stored_at=now - timedelta(seconds=1),
+                policy=PriceCachePolicy(fresh_ttl=timedelta(minutes=1)),
+            )
+        )
+
+
+def _strict_cached_resolver(cache: InMemoryPriceCache) -> ScannerCachedBuffPriceResolver:
+    return ScannerCachedBuffPriceResolver(cache)
+
+
 class RecordingPriceProvider(MockPriceProvider):
     def __init__(self, names: tuple[str, ...]) -> None:
         super().__init__(
@@ -988,11 +1066,20 @@ def test_mixed_risk_results_process_all_candidates_and_keep_passed_order(
         ).run_once([GOODS_ID])
     )
 
+    # Phase 14B: identical OUTPUT_NAME across all 3 selections is memoed
+    # after Recipe 0; only Recipe 0 hits the live provider. Recipes 1 and 2
+    # reuse the memoed success.
     assert risk_calls == [False, True, True]
-    assert len(price_provider.calls) == 3
+    assert price_provider.calls == [(OUTPUT_NAME,)]
     assert result.counters.recipes_evaluated == 3
     assert result.counters.recipes_fully_valued == 3
     assert result.counters.recipes_rejected == 1
+    assert result.counters.live_attempted == 1
+    assert result.counters.live_succeeded == 1
+    assert result.counters.live_demand == 1
+    assert result.counters.run_reuse_hits == 2
+    assert result.counters.run_reuse_successes == 2
+    assert result.counters.run_reuse_failures == 0
     assert [
         opportunity.recipe.selected_listing_ids for opportunity in result.opportunities
     ] == [
@@ -1053,23 +1140,51 @@ def test_incomplete_recipe_valuation_skips_metrics_and_continues(
         ).run_once([GOODS_ID])
     )
 
-    assert price_provider.calls == [(OUTPUT_NAME,), (OUTPUT_NAME,)]
-    assert metrics_calls == [1]
-    assert risk_calls == [1]
+    # Phase 14B: Recipe 0's terminal failure is memoed; Recipe 1 reuses
+    # the failure (no second provider call). Neither recipe completes,
+    # so metrics/risk are never invoked.
+    assert price_provider.calls == [(OUTPUT_NAME,)]
+    assert metrics_calls == []
+    assert risk_calls == []
     assert result.counters.recipes_evaluated == 2
-    assert result.counters.recipes_fully_valued == 1
-    assert result.counters.recipes_valuation_failed == 1
-    assert result.counters.recipes_rejected == 1
-    assert result.counters.opportunities_found == 1
+    assert result.counters.recipes_fully_valued == 0
+    assert result.counters.recipes_valuation_failed == 2
+    assert result.counters.recipes_rejected == 2
+    assert result.counters.opportunities_found == 0
+    assert result.counters.live_attempted == 1
+    assert result.counters.live_failed == 1
+    assert result.counters.run_reuse_hits == 1
+    assert result.counters.run_reuse_failures == 1
     assert result.recipe_evaluations[0].valuation_completed is False
-    assert result.recipe_evaluations[1].valuation_completed is True
+    assert result.recipe_evaluations[1].valuation_completed is False
 
 
 @pytest.mark.parametrize(
-    ("cap", "expected_calls", "attempted", "blocked", "fully_valued"),
+    (
+        "cap",
+        "expected_calls",
+        "attempted",
+        "blocked",
+        "fully_valued",
+        "live_demand",
+        "live_attempted",
+        "live_succeeded",
+        "run_reuse_hits",
+    ),
     [
-        (4, [(OUTPUT_NAME, OUTPUT_B), (OUTPUT_NAME, OUTPUT_C)], 4, 0, 2),
-        (3, [(OUTPUT_NAME, OUTPUT_B)], 2, 2, 1),
+        # cap=4: each recipe's NEW LIVE fits within cap; both admitted.
+        # Recipe 0 needs {NAME, B}; Recipe 1 needs only {C} (NAME memoed).
+        (4, [(OUTPUT_NAME, OUTPUT_B), (OUTPUT_C,)], 4, 0, 2, 3, 3, 3, 1),
+        # cap=3: Recipe 0 needs 2, Recipe 1 needs 1 NEW LIVE; both fit.
+        (3, [(OUTPUT_NAME, OUTPUT_B), (OUTPUT_C,)], 4, 0, 2, 3, 3, 3, 1),
+        # cap=2: Recipe 0 admitted (2 NEW LIVE). Recipe 1 would need
+        # 1 more; 2 + 1 = 3 > 2 blocked atomically. Recipe 1 saw NAME
+        # as a memo hit, so run_reuse_hits = 1.
+        (2, [(OUTPUT_NAME, OUTPUT_B)], 2, 2, 1, 3, 2, 2, 1),
+        # cap=1: Recipe 0 itself would need 2 NEW LIVE; 2 > 1 blocked.
+        # Recipe 1's prepare sees Recipe 0's blocked names as NEW LIVE
+        # again (not memoed) and is also blocked.
+        (1, [], 0, 4, 0, 4, 0, 0, 0),
     ],
 )
 def test_cumulative_valuation_cap_uses_per_recipe_exact_name_requests(
@@ -1079,6 +1194,10 @@ def test_cumulative_valuation_cap_uses_per_recipe_exact_name_requests(
     attempted: int,
     blocked: int,
     fully_valued: int,
+    live_demand: int,
+    live_attempted: int,
+    live_succeeded: int,
+    run_reuse_hits: int,
 ) -> None:
     selections = (
         _controlled_selection(
@@ -1108,12 +1227,18 @@ def test_cumulative_valuation_cap_uses_per_recipe_exact_name_requests(
     assert result.counters.valuation_requests_attempted == attempted
     assert result.counters.valuation_requests_blocked == blocked
     assert result.counters.recipes_fully_valued == fully_valued
-    assert result.counters.recipes_valuation_failed == (1 if blocked else 0)
+    # Each blocked recipe has requested_count=2 in this fixture, so the
+    # number of blocked recipes equals blocked // 2.
+    assert result.counters.recipes_valuation_failed == (blocked // 2)
+    assert result.counters.live_demand == live_demand
+    assert result.counters.live_attempted == live_attempted
+    assert result.counters.live_succeeded == live_succeeded
+    assert result.counters.run_reuse_hits == run_reuse_hits
     if blocked:
-        assert result.recipe_evaluations[1].rejection_reason == (
-            "VALUATION_REQUEST_CAP_EXCEEDED"
+        assert any(
+            evaluation.rejection_reason == "VALUATION_REQUEST_CAP_EXCEEDED"
+            for evaluation in result.recipe_evaluations
         )
-        assert result.recipe_evaluations[1].valued_tradeup_results == ()
 
 
 def test_empty_bounded_composition_skips_all_recipe_services(
@@ -1214,9 +1339,9 @@ def test_rehydrated_souvenir_inputs_reach_orchestrator_valuation_boundary(
     original_evaluate = orchestrator._evaluate_selection
     observed: list[tuple[InputItem, ...]] = []
 
-    async def observe(selection, listing_index, requested_names):  # type: ignore[no-untyped-def]
+    async def observe(selection, listing_index, requested_names, session_result):  # type: ignore[no-untyped-def]
         observed.append(selection.recipe.input_items)
-        return await original_evaluate(selection, listing_index, requested_names)
+        return await original_evaluate(selection, listing_index, requested_names, session_result)
 
     monkeypatch.setattr(orchestrator, "_evaluate_selection", observe)
     result = asyncio.run(orchestrator.run_once([GOODS_ID, "souvenir-goods"]))
@@ -1270,3 +1395,483 @@ def test_valuation_unexpected_exception_propagates_verbatim(
     with pytest.raises(RuntimeError) as exc_info:
         asyncio.run(orchestrator.run_once([GOODS_ID]))
     assert exc_info.value is sentinel
+
+
+def test_run_scoped_session_is_recreated_for_each_run_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    selection = _controlled_selection(tuple(range(10)), (OUTPUT_NAME,))
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.enumerate_scanner_recipe_selections",
+        lambda **kwargs: _composition_result(  # type: ignore[no-untyped-def]
+            (selection,),
+            aggregate_candidate_limit=1,
+        ),
+    )
+    price_provider = RecordingPriceProvider((OUTPUT_NAME,))
+    orchestrator = _orchestrator(
+        provider=_listing_provider(),
+        price_provider=price_provider,
+        enumeration_config=RecipeEnumerationConfig(
+            max_recipe_candidates_returned=1,
+            max_candidate_states_explored=1,
+        ),
+    )
+
+    first = asyncio.run(orchestrator.run_once([GOODS_ID]))
+    second = asyncio.run(orchestrator.run_once([GOODS_ID]))
+
+    assert price_provider.calls == [(OUTPUT_NAME,), (OUTPUT_NAME,)]
+    for result in (first, second):
+        assert result.counters.live_demand == 1
+        assert result.counters.live_attempted == 1
+        assert result.counters.live_succeeded == 1
+        assert result.counters.run_reuse_hits == 0
+        assert result.counters.cache_hits_fresh_selected == 0
+        assert result.counters.cache_misses == 0
+        assert result.counters.cache_policy_blocked == 0
+        assert result.counters.cache_expired == 0
+        assert result.counters.cache_selection_failures == 0
+
+
+def test_same_output_recipes_preserve_legacy_logical_counters_and_reuse_live(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_names = tuple(f"Synthetic Shared Output {index}" for index in range(10))
+    selections = (
+        _controlled_selection(tuple(range(10)), output_names),
+        _controlled_selection((*range(9), 10), output_names),
+    )
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.enumerate_scanner_recipe_selections",
+        lambda **kwargs: _composition_result(  # type: ignore[no-untyped-def]
+            selections,
+            aggregate_candidate_limit=2,
+        ),
+    )
+    price_provider = RecordingPriceProvider(output_names)
+
+    result = asyncio.run(
+        _orchestrator(
+            provider=_listing_provider(),
+            price_provider=price_provider,
+            max_valuation_requests=10,
+        ).run_once([GOODS_ID])
+    )
+
+    assert price_provider.calls == [output_names]
+    assert result.counters.valuation_requests_attempted == 20
+    assert result.counters.valuation_requests_succeeded == 20
+    assert result.counters.valuation_requests_failed == 0
+    assert result.counters.valuation_requests_blocked == 0
+    assert result.counters.live_demand == 10
+    assert result.counters.live_attempted == 10
+    assert result.counters.live_succeeded == 10
+    assert result.counters.live_failed == 0
+    assert result.counters.live_atomically_blocked == 0
+    assert result.counters.run_reuse_hits == 10
+    assert result.counters.run_reuse_successes == 10
+    assert result.counters.run_reuse_failures == 0
+    assert result.counters.recipes_fully_valued == 2
+    assert result.counters.cache_hits_fresh_selected == 0
+    assert result.counters.cache_misses == 0
+    assert result.counters.cache_policy_blocked == 0
+    assert result.counters.cache_expired == 0
+    assert result.counters.cache_selection_failures == 0
+    assert (
+        result.counters.run_reuse_hits
+        == result.counters.run_reuse_successes
+        + result.counters.run_reuse_failures
+    )
+    assert result.counters.live_demand == (
+        result.counters.live_attempted
+        + result.counters.live_atomically_blocked
+    )
+    assert result.counters.live_attempted == (
+        result.counters.live_succeeded + result.counters.live_failed
+    )
+
+
+def test_same_output_recipes_one_below_cap_block_atomically_without_memo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_names = tuple(f"Synthetic Shared Output {index}" for index in range(10))
+    selections = (
+        _controlled_selection(tuple(range(10)), output_names),
+        _controlled_selection((*range(9), 10), output_names),
+    )
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.enumerate_scanner_recipe_selections",
+        lambda **kwargs: _composition_result(  # type: ignore[no-untyped-def]
+            selections,
+            aggregate_candidate_limit=2,
+        ),
+    )
+    price_provider = RecordingPriceProvider(output_names)
+
+    result = asyncio.run(
+        _orchestrator(
+            provider=_listing_provider(),
+            price_provider=price_provider,
+            max_valuation_requests=9,
+        ).run_once([GOODS_ID])
+    )
+
+    assert price_provider.calls == []
+    assert result.counters.valuation_requests_attempted == 0
+    assert result.counters.valuation_requests_succeeded == 0
+    assert result.counters.valuation_requests_failed == 0
+    assert result.counters.valuation_requests_blocked == 20
+    assert result.counters.live_demand == 20
+    assert result.counters.live_attempted == 0
+    assert result.counters.live_succeeded == 0
+    assert result.counters.live_failed == 0
+    assert result.counters.live_atomically_blocked == 20
+    assert result.counters.run_reuse_hits == 0
+    assert result.counters.recipes_fully_valued == 0
+    assert result.counters.recipes_valuation_failed == 2
+    assert all(
+        evaluation.rejection_reason == "VALUATION_REQUEST_CAP_EXCEEDED"
+        for evaluation in result.recipe_evaluations
+    )
+
+
+
+
+def test_all_fresh_same_output_recipes_use_cache_then_run_memo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_names = tuple(f"Cached Shared Output {index}" for index in range(10))
+    selections = (
+        _controlled_selection(tuple(range(10)), output_names),
+        _controlled_selection((*range(9), 10), output_names),
+    )
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.enumerate_scanner_recipe_selections",
+        lambda **kwargs: _composition_result(  # type: ignore[no-untyped-def]
+            selections,
+            aggregate_candidate_limit=2,
+        ),
+    )
+    now = datetime(2026, 8, 29, 12, 0, tzinfo=UTC)
+    cache = InMemoryPriceCache(clock=FixedClock(now))
+    asyncio.run(_populate_fresh_cache(cache, output_names, now=now))
+    provider = RecordingPriceProvider(output_names)
+
+    result = asyncio.run(
+        _orchestrator(
+            provider=_listing_provider(),
+            price_provider=provider,
+            cached_price_resolver=_strict_cached_resolver(cache),
+            max_valuation_requests=1,
+        ).run_once([GOODS_ID])
+    )
+
+    assert provider.calls == []
+    assert result.counters.valuation_requests_attempted == 20
+    assert result.counters.valuation_requests_succeeded == 20
+    assert result.counters.valuation_requests_failed == 0
+    assert result.counters.valuation_requests_blocked == 0
+    assert result.counters.cache_hits_fresh_selected == 10
+    assert result.counters.cache_misses == 0
+    assert result.counters.cache_selection_failures == 0
+    assert result.counters.run_reuse_hits == 10
+    assert result.counters.run_reuse_successes == 10
+    assert result.counters.run_reuse_failures == 0
+    assert result.counters.live_demand == 0
+    assert result.counters.live_attempted == 0
+    assert result.counters.live_succeeded == 0
+    assert result.counters.live_failed == 0
+    assert result.counters.live_atomically_blocked == 0
+    assert result.counters.recipes_fully_valued == 2
+
+
+def test_nine_fresh_one_miss_exact_live_boundary_admits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_names = tuple(f"Mixed Cached Output {index}" for index in range(10))
+    selection = _controlled_selection(tuple(range(10)), output_names)
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.enumerate_scanner_recipe_selections",
+        lambda **kwargs: _composition_result(  # type: ignore[no-untyped-def]
+            (selection,),
+            aggregate_candidate_limit=1,
+        ),
+    )
+    now = datetime(2026, 8, 29, 12, 0, tzinfo=UTC)
+    cache = InMemoryPriceCache(clock=FixedClock(now))
+    asyncio.run(_populate_fresh_cache(cache, output_names[:9], now=now))
+    provider = RecordingPriceProvider(output_names)
+
+    result = asyncio.run(
+        _orchestrator(
+            provider=_listing_provider(),
+            price_provider=provider,
+            cached_price_resolver=_strict_cached_resolver(cache),
+            max_valuation_requests=1,
+        ).run_once([GOODS_ID])
+    )
+
+    assert provider.calls == [(output_names[9],)]
+    assert result.counters.cache_hits_fresh_selected == 9
+    assert result.counters.cache_misses == 1
+    assert result.counters.live_demand == 1
+    assert result.counters.live_attempted == 1
+    assert result.counters.live_succeeded == 1
+    assert result.counters.live_atomically_blocked == 0
+    assert result.counters.valuation_requests_attempted == 10
+    assert result.counters.valuation_requests_succeeded == 10
+    assert result.counters.recipes_fully_valued == 1
+
+
+def test_prior_live_use_leaves_zero_for_mixed_recipe_and_blocks_before_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cached_names = tuple(f"Blocked Cached Output {index}" for index in range(9))
+    miss_name = "Blocked Cache Miss"
+    selections = (
+        _controlled_selection(tuple(range(10)), ("Consumes Live Cap",)),
+        _controlled_selection((*range(9), 10), (*cached_names, miss_name)),
+        _controlled_selection((*range(9), 11), (cached_names[0], miss_name)),
+    )
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.enumerate_scanner_recipe_selections",
+        lambda **kwargs: _composition_result(  # type: ignore[no-untyped-def]
+            selections,
+            aggregate_candidate_limit=3,
+        ),
+    )
+    now = datetime(2026, 8, 29, 12, 0, tzinfo=UTC)
+    cache = InMemoryPriceCache(clock=FixedClock(now))
+    asyncio.run(_populate_fresh_cache(cache, cached_names, now=now))
+    provider = RecordingPriceProvider(
+        ("Consumes Live Cap", *cached_names, miss_name)
+    )
+
+    result = asyncio.run(
+        _orchestrator(
+            provider=_listing_provider(),
+            price_provider=provider,
+            cached_price_resolver=_strict_cached_resolver(cache),
+            max_valuation_requests=1,
+            enumeration_config=RecipeEnumerationConfig(
+                max_recipe_candidates_returned=3,
+                max_candidate_states_explored=3,
+            ),
+        ).run_once([GOODS_ID])
+    )
+
+    assert provider.calls == [("Consumes Live Cap",)]
+    assert result.counters.cache_hits_fresh_selected == 9
+    assert result.counters.cache_misses == 3
+    assert result.counters.run_reuse_hits == 1
+    assert result.counters.run_reuse_successes == 1
+    assert result.counters.live_demand == 3
+    assert result.counters.live_attempted == 1
+    assert result.counters.live_atomically_blocked == 2
+    assert result.counters.valuation_requests_attempted == 1
+    assert result.counters.valuation_requests_blocked == 12
+    assert result.recipe_evaluations[1].rejection_reason == (
+        "VALUATION_REQUEST_CAP_EXCEEDED"
+    )
+    assert result.recipe_evaluations[2].rejection_reason == (
+        "VALUATION_REQUEST_CAP_EXCEEDED"
+    )
+
+
+def test_fresh_strict_buff_selection_failure_has_no_live_or_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    selections = (
+        _controlled_selection(tuple(range(10)), (OUTPUT_NAME,)),
+        _controlled_selection((*range(9), 10), (OUTPUT_NAME,)),
+    )
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.enumerate_scanner_recipe_selections",
+        lambda **kwargs: _composition_result(  # type: ignore[no-untyped-def]
+            selections,
+            aggregate_candidate_limit=2,
+        ),
+    )
+    now = datetime(2026, 8, 29, 12, 0, tzinfo=UTC)
+    cache = InMemoryPriceCache(clock=FixedClock(now))
+    asyncio.run(
+        _populate_fresh_cache(
+            cache,
+            (OUTPUT_NAME,),
+            now=now,
+            non_buff_names=frozenset({OUTPUT_NAME}),
+        )
+    )
+    provider = RecordingPriceProvider((OUTPUT_NAME,))
+
+    result = asyncio.run(
+        _orchestrator(
+            provider=_listing_provider(),
+            price_provider=provider,
+            cached_price_resolver=_strict_cached_resolver(cache),
+            max_valuation_requests=1,
+        ).run_once([GOODS_ID])
+    )
+
+    assert provider.calls == []
+    assert result.counters.cache_selection_failures == 1
+    assert result.counters.run_reuse_failures == 1
+    assert result.counters.live_demand == 0
+    assert result.counters.live_attempted == 0
+    assert result.counters.recipes_fully_valued == 0
+    assert result.counters.recipes_valuation_failed == 2
+    assert result.counters.opportunities_found == 0
+    assert all(
+        not evaluation.valuation_completed
+        and evaluation.metrics is None
+        and evaluation.risk_decision is None
+        for evaluation in result.recipe_evaluations
+    )
+
+
+def test_cache_fatal_error_propagates_before_live_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    selection = _controlled_selection(tuple(range(10)), (OUTPUT_NAME,))
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.enumerate_scanner_recipe_selections",
+        lambda **kwargs: _composition_result(  # type: ignore[no-untyped-def]
+            (selection,),
+            aggregate_candidate_limit=1,
+        ),
+    )
+    sentinel = RuntimeError("cache fatal sentinel")
+
+    class FailingReader:
+        async def get(self, key, *, read_policy):  # type: ignore[no-untyped-def]
+            raise sentinel
+
+    resolver = ScannerCachedBuffPriceResolver(FailingReader())
+    provider = RecordingPriceProvider((OUTPUT_NAME,))
+    orchestrator = _orchestrator(
+        provider=_listing_provider(),
+        price_provider=provider,
+        cached_price_resolver=resolver,
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        asyncio.run(orchestrator.run_once([GOODS_ID]))
+    assert exc_info.value is sentinel
+    assert provider.calls == []
+
+
+def test_same_orchestrator_two_runs_rechecks_cache_then_uses_same_run_memo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    selections = (
+        _controlled_selection(tuple(range(10)), (OUTPUT_NAME,)),
+        _controlled_selection((*range(9), 10), (OUTPUT_NAME,)),
+    )
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.enumerate_scanner_recipe_selections",
+        lambda **kwargs: _composition_result(  # type: ignore[no-untyped-def]
+            selections,
+            aggregate_candidate_limit=2,
+        ),
+    )
+    now = datetime(2026, 8, 29, 12, 0, tzinfo=UTC)
+    cache = InMemoryPriceCache(clock=FixedClock(now))
+    asyncio.run(_populate_fresh_cache(cache, (OUTPUT_NAME,), now=now))
+
+    class CountingReader:
+        def __init__(self, delegate: InMemoryPriceCache) -> None:
+            self.delegate = delegate
+            self.calls: list[str] = []
+
+        async def get(self, key, *, read_policy):  # type: ignore[no-untyped-def]
+            self.calls.append(key.market_hash_name)
+            return await self.delegate.get(key, read_policy=read_policy)
+
+    reader = CountingReader(cache)
+    resolver = ScannerCachedBuffPriceResolver(reader)
+    provider = RecordingPriceProvider((OUTPUT_NAME,))
+    orchestrator = _orchestrator(
+        provider=_listing_provider(),
+        price_provider=provider,
+        cached_price_resolver=resolver,
+    )
+
+    first = asyncio.run(orchestrator.run_once([GOODS_ID]))
+    second = asyncio.run(orchestrator.run_once([GOODS_ID]))
+
+    assert reader.calls == [OUTPUT_NAME, OUTPUT_NAME]
+    assert provider.calls == []
+    for result in (first, second):
+        assert result.counters.cache_hits_fresh_selected == 1
+        assert result.counters.run_reuse_hits == 1
+        assert result.counters.run_reuse_successes == 1
+        assert result.counters.live_demand == 0
+        assert result.counters.live_attempted == 0
+        assert result.counters.recipes_fully_valued == 2
+
+
+def test_terminal_failure_reused_without_retry_through_orchestrator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    selections = (
+        _controlled_selection(tuple(range(10)), ("X", "Y")),
+        _controlled_selection((*range(9), 10), ("X", "Y", "Z")),
+    )
+    monkeypatch.setattr(
+        "app.services.scanner_orchestrator.enumerate_scanner_recipe_selections",
+        lambda **kwargs: _composition_result(  # type: ignore[no-untyped-def]
+            selections,
+            aggregate_candidate_limit=2,
+        ),
+    )
+
+    class FailureReuseProvider(RecordingPriceProvider):
+        async def get_prices(
+            self,
+            market_hash_names: list[str],
+        ) -> PriceLookupResult:
+            names = tuple(market_hash_names)
+            if names == ("X", "Y"):
+                self.calls.append(names)
+                return PriceLookupResult(
+                    quotes={
+                        "X": PriceQuote(
+                            market_hash_name="X",
+                            price_cny=Decimal("200"),
+                            source="test",
+                        )
+                    },
+                    missing=["Y"],
+                    errors=["TEST_MISSING_Y"],
+                )
+            return await super().get_prices(market_hash_names)
+
+    price_provider = FailureReuseProvider(("X", "Y", "Z"))
+    result = asyncio.run(
+        _orchestrator(
+            provider=_listing_provider(),
+            price_provider=price_provider,
+            max_valuation_requests=3,
+        ).run_once([GOODS_ID])
+    )
+
+    assert price_provider.calls == [("X", "Y"), ("Z",)]
+    assert result.counters.live_demand == 3
+    assert result.counters.live_attempted == 3
+    assert result.counters.live_succeeded == 2
+    assert result.counters.live_failed == 1
+    assert result.counters.run_reuse_hits == 2
+    assert result.counters.run_reuse_successes == 1
+    assert result.counters.run_reuse_failures == 1
+    assert result.counters.valuation_requests_attempted == 5
+    assert result.counters.valuation_requests_succeeded == 3
+    assert result.counters.valuation_requests_failed == 2
+    assert result.counters.recipes_fully_valued == 0
+    assert result.counters.opportunities_found == 0
+    assert all(
+        evaluation.valuation_completed is False
+        and evaluation.metrics is None
+        and evaluation.risk_decision is None
+        for evaluation in result.recipe_evaluations
+    )

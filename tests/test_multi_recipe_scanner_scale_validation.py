@@ -414,14 +414,32 @@ def test_primary_deep_pool_real_path_is_bounded_rehydrated_and_deterministic() -
     cross_recipe_repeats = len(set(first_names[0]) & set(first_names[1]))
     assert tuple(len(names) for names in first_names) == (10, 10)
     assert cross_recipe_repeats == 10
-    assert first.price_provider.calls == list(first_names)
+    # Phase 14B: Recipe 0 issues ONE provider call with all 10 NEW LIVE
+    # names; Recipe 1 reuses those 10 names via the run memo (no second
+    # provider call). Legacy counter semantics for `attempted` are
+    # preserved: BOTH recipes are admitted and contribute their full
+    # `requested_count` to `valuation_requests_attempted`.
+    assert first.price_provider.calls == [first_names[0]]
     assert expected_logical_requests == 20
-    assert sum(len(call) for call in first.price_provider.calls) == 20
+    assert sum(len(call) for call in first.price_provider.calls) == 10
     assert first.result.counters.valuation_requests_attempted == 20
     assert first.result.counters.valuation_requests_succeeded == 20
     assert first.result.counters.valuation_requests_failed == 0
     assert first.result.counters.valuation_requests_blocked == 0
     assert first.result.counters.recipes_fully_valued == 2
+    assert first.result.counters.live_demand == 10
+    assert first.result.counters.live_attempted == 10
+    assert first.result.counters.live_succeeded == 10
+    assert first.result.counters.live_failed == 0
+    assert first.result.counters.live_atomically_blocked == 0
+    assert first.result.counters.run_reuse_hits == 10
+    assert first.result.counters.run_reuse_successes == 10
+    assert first.result.counters.run_reuse_failures == 0
+    assert first.result.counters.cache_hits_fresh_selected == 0
+    assert first.result.counters.cache_misses == 0
+    assert first.result.counters.cache_policy_blocked == 0
+    assert first.result.counters.cache_expired == 0
+    assert first.result.counters.cache_selection_failures == 0
     assert all(
         evaluation.metrics is not None
         and evaluation.risk_decision is not None
@@ -434,6 +452,8 @@ def test_primary_deep_pool_real_path_is_bounded_rehydrated_and_deterministic() -
         first.result.diagnostics.recipe_composition
         == second.result.diagnostics.recipe_composition
     )
+    # Cross-run memo is NOT allowed: each separate run has its own
+    # 10 NEW LIVE demand and its own single provider call.
     assert first.price_provider.calls == second.price_provider.calls
     assert first.result.counters == second.result.counters
 
@@ -449,20 +469,38 @@ def test_exact_and_one_below_valuation_caps_are_atomic_and_search_independent() 
     assert tuple(len(names) for names in request_names) == (10, 10)
     assert total_required == 20
 
-    exact = _run_fixture(fixture, max_valuation_requests=total_required)
+    # Phase 14B: each recipe's NEW LIVE demand = first-seen unique names
+    # not yet memoized. Because both recipes demand the SAME 10 names,
+    # Recipe 1 reuses all 10 via the run memo (NEW LIVE demand = 0).
+    # Therefore the "exact boundary" cap for the combined demand is
+    # `first_required = 10` (Recipe 0's NEW LIVE). "One below" is 9.
+    first_required = len(request_names[0])
+    blocked_required = total_required
+
+    exact = _run_fixture(fixture, max_valuation_requests=first_required)
     one_below = _run_fixture(
         fixture,
-        max_valuation_requests=total_required - 1,
+        max_valuation_requests=first_required - 1,
     )
     _assert_primary_structure(exact)
     _assert_primary_structure(one_below)
 
-    assert exact.price_provider.calls == list(request_names)
-    assert sum(len(call) for call in exact.price_provider.calls) == total_required
+    # Exact boundary: Recipe 0 admitted (10 NEW LIVE); Recipe 1 admitted
+    # (0 NEW LIVE because all 10 are memoed). One provider call with the
+    # 10 NEW LIVE names. Legacy `attempted` is the sum of ADMITTED
+    # recipe `requested_count`s = 20 (preserved from Phase 13T).
+    assert exact.price_provider.calls == [request_names[0]]
+    assert sum(len(call) for call in exact.price_provider.calls) == first_required
     assert exact.result.counters.valuation_requests_attempted == total_required
     assert exact.result.counters.valuation_requests_blocked == 0
     assert exact.result.counters.recipes_fully_valued == 2
     assert exact.result.counters.recipes_valuation_failed == 0
+    assert exact.result.counters.live_demand == first_required
+    assert exact.result.counters.live_attempted == first_required
+    assert exact.result.counters.live_succeeded == first_required
+    assert exact.result.counters.live_atomically_blocked == 0
+    assert exact.result.counters.run_reuse_hits == first_required
+    assert exact.result.counters.run_reuse_successes == first_required
     assert all(
         evaluation.valuation_completed
         and evaluation.valuation_prices_resolved
@@ -470,16 +508,25 @@ def test_exact_and_one_below_valuation_caps_are_atomic_and_search_independent() 
         for evaluation in exact.result.recipe_evaluations
     )
 
-    first_required = len(request_names[0])
-    blocked_required = len(request_names[1])
-    assert one_below.price_provider.calls == [request_names[0]]
-    assert sum(len(call) for call in one_below.price_provider.calls) == first_required
-    assert one_below.result.counters.valuation_requests_attempted == first_required
-    assert one_below.result.counters.valuation_requests_succeeded == first_required
+    # One-below boundary: Recipe 0 blocked (10 NEW LIVE > 9 cap); Recipe 1
+    # prepare sees Recipe 0's blocked names as NEW LIVE again (not
+    # memoed) and is ALSO blocked (10 NEW LIVE > 9). ZERO provider
+    # calls. Legacy `attempted` = 0 (no ADMITTED recipe); legacy
+    # `blocked` = 20 (both recipes). `live_demand` = 20; `live_attempted`
+    # = 0; `live_atomically_blocked` = 20.
+    assert one_below.price_provider.calls == []
+    assert sum(len(call) for call in one_below.price_provider.calls) == 0
+    assert one_below.result.counters.valuation_requests_attempted == 0
+    assert one_below.result.counters.valuation_requests_succeeded == 0
     assert one_below.result.counters.valuation_requests_blocked == blocked_required
-    assert one_below.result.counters.recipes_fully_valued == 1
-    assert one_below.result.counters.recipes_valuation_failed == 1
-    assert one_below.result.recipe_evaluations[0].valuation_completed is True
+    assert one_below.result.counters.recipes_fully_valued == 0
+    assert one_below.result.counters.recipes_valuation_failed == 2
+    assert one_below.result.counters.live_demand == blocked_required
+    assert one_below.result.counters.live_attempted == 0
+    assert one_below.result.counters.live_succeeded == 0
+    assert one_below.result.counters.live_atomically_blocked == blocked_required
+    assert one_below.result.counters.run_reuse_hits == 0
+    assert one_below.result.recipe_evaluations[0].valuation_completed is False
     blocked = one_below.result.recipe_evaluations[1]
     assert blocked.valuation_completed is False
     assert blocked.valuation_prices_resolved == 0
