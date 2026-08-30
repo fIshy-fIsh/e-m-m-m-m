@@ -108,7 +108,7 @@ Deliverable: the two-stage frozen contract above.
    - For every name in `PriceLookupResult.missing`, the memo records terminal failure with the corresponding `errors` entry as the memoed reason.
    - During `prepare_output_prices`, names already memoed (success or terminal failure) are excluded from any cache lookup and from `live_demand`.
    - Successful exact-name resolution is reused (no second cache lookup, no second provider call).
-   - Terminal exact-name failure (live provider outcome `missing`, fresh-cache strict-BUFF selection failure, or 14C backend/codec-propagated runtime error during `prepare`) is reused as failure; no automatic same-name retry.
+   - Terminal exact-name failures are live provider outcomes recorded as `missing`, or fresh-cache strict-BUFF selection failures. Both are reused as failure with no automatic same-name retry. Cache backend / codec / adapter / resolver contract exceptions propagate fail-closed; they are NOT memo entries, misses, or live candidates.
 6. The memo dies at end of `run_once()`. It is NOT persisted. It is NOT shared across `run_once()` calls. It is NOT a second persistent cache.
 7. No persistent negative caching in Phase 14B or 14C. A negative outcome in the run memo is reused only within that run.
 
@@ -178,7 +178,7 @@ Target invariant: **at most one SteamDT live attempt per exact name per run**. P
 3. Compute `live_demand = len(live_demand_names)` (14B) or `len(cache_misses_or_refresh_candidates)` (14C).
 4. **Before any live call**, atomically compare in the orchestrator:
    - If `valuation_live_used + live_demand > max_valuation_requests_per_run`: build a blocked evaluation; set `valuation_requests_blocked += requested_count`, `live_atomically_blocked += live_demand`, `live_demand += live_demand`; issue **ZERO** live SteamDT calls for that recipe (Stage B is NEVER called).
-5. Else: `valuation_live_used += live_demand`; `valuation_requests_attempted += requested_count`; call `resolve_prepared(plan)`. Each `live provider call` (for 14B, the per-name `SteamDTBuffPriceProvider.get_price(name)` calls; for 14C, the per-name `SteamDTPriceRefreshService.refresh_one(name)` calls inside the existing refresh path) charges `live_attempted += 1` the moment the call is actually attempted, even if it later fails. `live_demand += live_demand` regardless of whether Stage B actually executes.
+5. Else: `valuation_live_used += live_demand`; `valuation_requests_attempted += requested_count`; call `resolve_prepared(plan)`. Stage B uses the existing live `PriceProvider` only for ordered `plan.new_live_names`; those names charge `live_attempted` when the provider call is issued, even if it later fails. Stage B performs no cache read, no `SteamDTPriceRefreshService.refresh_one`, and no cache writeback. `live_demand += live_demand` regardless of whether Stage B actually executes.
 6. **Counter invariants for COMPLETED runs** (where `ScannerRunResult` is materialized):
 
 ```text
@@ -235,9 +235,9 @@ Deliverable: the counter table above.
 1. NO scanner fresh_ttl numeric default is frozen in Phase 14A-R1.
 2. The 5-minute value in `scripts/steamdt_refresh_integration.py:59` (`INTEGRATION_POLICY = PriceCachePolicy(fresh_ttl=timedelta(minutes=5))`) is **historical manual-script precedent only**, not a scanner default.
 3. `PriceCachePolicy` shape: `fresh_ttl` required (`> timedelta(0)`); `stale_ttl` and `stale_grace_ttl` default to `timedelta(0)`. The existing integration policy is effectively 5-minute fresh, zero stale, zero grace — entries jump from FRESH to EXPIRED at the 5-minute mark; `ALLOW_STALE` and `ALLOW_STALE_GRACE` are unreachable under it.
-4. The existing `STEAMDT_PRICE_CACHE_BACKEND` (`app/config.py:77`, default `"inmemory"`) and `STEAMDT_PRICE_CACHE_REDIS_NAMESPACE` (`app/config.py:78`, default `"steamdt-price-cache-v1"`) remain the env-driven knobs.
-5. Future scanner-side `PriceCachePolicy` config will live in a new `PriceCachePolicyConfig` Pydantic DTO colocated with `LiveScanSettings` in `scripts/run_live_scan_once.py`, exposed in `.env.example` as a single derived knob (e.g. `STEAMDT_PRICE_CACHE_FRESH_TTL_SECONDS`), with identical semantics for `InMemoryPriceCache` and `RedisPriceCache`. **The numeric default is chosen and documented at Phase 14C implementation time, NOT frozen in 14A-R1.**
-6. Cache keys / values / TTL must be identical in semantic behavior between the InMemory and Redis backends. Redis is optional; the default one-shot CLI continues to work without Redis.
+4. The existing `STEAMDT_PRICE_CACHE_BACKEND` (`app/config.py:77`, default `"inmemory"`) and `STEAMDT_PRICE_CACHE_REDIS_NAMESPACE` (`app/config.py:78`, default `"steamdt-price-cache-v1"`) remain the env-driven Phase12D factory knobs; Phase 14C does not consume them directly.
+5. Phase 14C adds no scanner-side read-time TTL config. Existing backends evaluate freshness from the `PriceCachePolicy` stored inside each snapshot by its authorized writer. A future scanner writeback phase, if separately authorized, must define write-side TTL independently.
+6. Cache keys / values / TTL have identical semantic behavior between the InMemory and Redis backends. Redis remains optional.
 
 Deliverable: the TTL ownership rules above.
 
@@ -247,7 +247,7 @@ Deliverable: the TTL ownership rules above.
 2. The future scanner-owned session MUST preserve existing Redis compatibility via the existing `create_steamdt_price_cache_runtime` factory.
 3. The future scanner-owned session MUST NOT add background refresh workers, scheduler behavior, periodic tasks, or daemon threads.
 4. The future scanner-owned session MUST NOT require Redis for the default one-shot CLI.
-5. The future scanner-owned session MUST compose the cache via `create_steamdt_price_cache_runtime` (`app/services/price_cache_factory.py:159`) so that `STEAMDT_PRICE_CACHE_BACKEND` semantics remain centralized.
+5. The future scanner-owned session MUST accept cache dependencies through injection; it MUST NOT construct a runtime through `create_steamdt_price_cache_runtime`. Factory/env composition belongs to Phase 14D.
 6. Invalid cache configuration MUST fail before any live SteamDT work. The factory's existing composition-error types (`SteamDTPriceCacheCompositionError`, `SteamDTPriceCacheConstructionCleanupError`, `SteamDTPriceCacheRuntimeCloseError`, `SteamDTPriceCacheContextExitError`) are the canonical failure surface.
 
 ### 11. Freeze the implementation sequence (14B / 14C / 14D)
@@ -281,15 +281,16 @@ Deliverable: the TTL ownership rules above.
 
 **14C — Phase 12D cache integration (READ only)**
 
-1. Add `SteamDTCachedPriceResolver` lookup (Phase 12D3B) ahead of the live provider path with `PriceCacheReadPolicy.FRESH_ONLY`. Inject the strict BUFF adapter at the session level (do NOT modify `SteamDTCachedPriceResolver`).
-2. Add `SteamDTPriceRefreshService.refresh_one` for live-refresh candidates (Phase 12D4A).
+1. Add `SteamDTCachedPriceResolver` lookup (Phase 12D3B) ahead of the live provider path with `PriceCacheReadPolicy.FRESH_ONLY`. Inject the strict BUFF adapter at the scanner boundary (do NOT modify `SteamDTCachedPriceResolver`).
+2. Keep the Phase 14B live provider path for NEW LIVE names. Phase 14C does not call `SteamDTPriceRefreshService.refresh_one` and does not write cache.
 3. Selector rerun on cache hits uses the strict BUFF adapter (not the resolver's default cross-platform selector).
-4. Existing refresh / read semantics preserved.
-5. InMemory works without Redis; Redis optional explicit backend.
+4. Existing read semantics preserved.
+5. InMemory works without Redis; Redis remains backend-compatible through the existing resolver/cache contract.
 6. No stale valuation (FRESH_ONLY).
 7. No scheduler.
 8. Cache backend / codec / adapter exceptions propagate by identity from the cache-read seam; no silent reinterpretation.
-9. **No scanner writeback occurs in initial 14C**. The existing manual refresh stack remains the writer. No write-failure runtime test is required for initial 14C.
+9. **No scanner writeback occurs in initial 14C**. The existing manual refresh stack remains the writer. No write-failure runtime test is required.
+10. No scanner read-time TTL setting is selected: snapshot-stored `PriceCachePolicy` is writer-owned.
 
 **14D — CLI + scale / live validation**
 

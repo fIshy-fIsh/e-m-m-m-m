@@ -3,18 +3,20 @@
 ## Current Position
 
 ```text
-Current phase:                            PHASE_14B_COMPLETE
+Current phase:                            PHASE_14C_COMPLETE
 
 Current capability:                       read-only bounded multi-recipe one-shot scanner
-                                          with run-scoped exact-name valuation reuse
+                                          with run-scoped exact-name reuse and optional
+                                          Phase12D FRESH_ONLY persistent cache reads
 
 Active development line:                  feature/scanner-valuation-integration
                                           (canonical main P3 unchanged)
 
-Latest production / test checkpoint:      Phase 14B branch commit
-                                          add run-scoped scanner valuation reuse
+Latest production / test checkpoint:      Phase 14C branch commit
+                                          add scanner fresh-only price cache reads
                                           (verify exact SHA from Git)
-                                          3382 passed / 23 skipped / 1 warning
+                                          full validation: 3413 passed /
+                                          23 skipped / 1 warning
 
 Post-Phase-13T documentation /
 handoff baseline:                         bb09068
@@ -59,12 +61,27 @@ valuation reuse:                          COMPLETE
                                         additive run_reuse/live/cache counters
                                         deep-pool: 20 logical / 10 provider /
                                           10 reuse; cap 10 pass; cap 9 zero-provider block
-                                        no Phase12D cache import or modification
+                                        no Phase12D cache use on resolver-None path
 
 Phase 14C — Phase12D FRESH_ONLY
-cache READ integration:                  NEXT / NOT STARTED / NOT AUTHORIZED
-                                        strict-BUFF cached selector required
-                                        scanner write-after-live out of scope
+cache READ integration:                  COMPLETE
+                                        optional scanner-owned resolver wrapper
+                                          over injected cache-reader boundary
+                                        raw resolver structurally fixed to strict selector
+                                        memo -> cache -> live Stage A order
+                                        sequential explicit FRESH_ONLY reads
+                                        strict-BUFF adapter delegates to
+                                          select_buff_output_price
+                                        fresh selection success/failure memoized
+                                        MISS / EXPIRED / POLICY_BLOCKED become NEW LIVE
+                                        backend/codec/adapter errors propagate
+                                        no stale values / no persistent writeback
+                                        snapshot PriceCachePolicy writer-owned;
+                                          no scanner numeric TTL config
+                                        default CLI composition remains pending
+
+Phase 14D — CLI composition + scale /
+bounded-live validation:                NEXT / NOT STARTED / NOT AUTHORIZED
 
 Live repository HEAD / branch / tree:     MUST be verified from Git at task entry;
                                         do not infer current HEAD from this document
@@ -153,10 +170,11 @@ Current caveat:
 
 ```text
 Phase 12D persistent / cache infrastructure:  IMPLEMENTED + UNIT TESTED
-Live scanner persistent-cache integration:     NOT IMPLEMENTED
+Scanner service/session cache READ support:    IMPLEMENTED (PHASE 14C)
 Run-level cross-recipe exact-name reuse:        IMPLEMENTED (PHASE 14B)
-FRESH_ONLY scanner cache reads:                  NOT IMPLEMENTED
-Scanner write-after-live:                        NOT IMPLEMENTED / OUT OF INITIAL 14C
+FRESH_ONLY scanner service cache reads:         IMPLEMENTED (PHASE 14C)
+Default run_live_scan_once cache composition:   NOT IMPLEMENTED (PHASE 14D)
+Scanner write-after-live:                       NOT IMPLEMENTED / OUT OF SCOPE
 ```
 
 ### Phase 12E — BUFF Listing / Adapter Foundation
@@ -319,8 +337,11 @@ Original skeleton / planning baseline
   -> R0-B minimum CI
   -> R0-C main history consolidation
   -> b13201b post-R0-C docs checkpoint
-  -> R0-D branch / repository cleanup (execution complete; docs checkpoint PR open)
-  -> proposed scanner valuation integration (next, not authorized)
+  -> R0-D branch / repository cleanup (complete)
+  -> Phase 14A/R1 scanner valuation design
+  -> Phase 14B run-scoped exact-name reuse
+  -> Phase 14C optional FRESH_ONLY scanner cache reads
+  -> Phase 14D default CLI composition (next, not authorized)
 ```
 
 ## Current Capabilities
@@ -334,10 +355,11 @@ Phase 12A typed errors and retry classification       COMPLETE
 Phase 12B endpoint-specific in-memory limiter         COMPLETE
 Phase 12C Redis shared limiter                        COMPLETE
 Phase 12D price-cache infrastructure                  COMPLETE
-Live scanner persistent-cache integration             NOT IMPLEMENTED
-Run-level cross-recipe exact-name valuation reuse      COMPLETE (PHASE 14B)
-FRESH_ONLY scanner cache reads                         NOT IMPLEMENTED
-Scanner write-after-live                               NOT IMPLEMENTED / OUT OF INITIAL 14C
+Scanner service/session persistent-cache READ seam    COMPLETE (PHASE 14C)
+Run-level cross-recipe exact-name valuation reuse     COMPLETE (PHASE 14B)
+FRESH_ONLY scanner cache reads                        COMPLETE (PHASE 14C)
+Default one-shot CLI cache composition                 NOT IMPLEMENTED (PHASE 14D)
+Scanner write-after-live                               NOT IMPLEMENTED / OUT OF SCOPE
 BUFF anonymous listing ingestion                      COMPLETE
 Live BUFF product / search / identity API             NOT INTEGRATED
 Pinned offline identity catalog                       COMPLETE
@@ -498,8 +520,7 @@ R0-D completion condition: this checkpoint merged and verified on `main`. CONDIT
 
 ## Next Functional Work
 
-**Phase 14A / 14A-R1 / 14B are COMPLETE.**
-**Phase 14C is NEXT / NOT STARTED / NOT AUTHORIZED.**
+**Phase 14A / 14A-R1 / 14B / 14C are COMPLETE.**
 **Phase 14D and Valuation Budget Calibration remain NOT STARTED / NOT AUTHORIZED.**
 
 ### Completed — Phase 14B Run-scoped exact-name valuation reuse
@@ -528,26 +549,38 @@ validated:
     cap 9 -> both atomically blocked; zero provider calls
   full offline suite: 3382 passed / 23 skipped / 1 warning
 
-not implemented:
-  persistent Phase12D scanner cache
-  FRESH_ONLY scanner cache reads
+not implemented in 14B:
+  persistent Phase12D scanner reads (completed by Phase 14C)
   scanner write-after-live
 ```
 
-### Next — Phase 14C Phase12D FRESH_ONLY cache READ integration
+### Completed — Phase 14C Phase12D FRESH_ONLY cache READ integration
 
 ```text
-scope:
-  run memo first
-  FRESH_ONLY persistent cache reads next
-  strict-BUFF cached selection adapter
-  miss / expired / policy-blocked -> NEW LIVE candidate
-  cache backend / codec / contract errors propagate fail-closed
-  InMemory default path; Redis optional
-  no stale valuation
-  no scanner write-after-live in initial 14C
-  no scheduler / background work
+implemented:
+  optional scanner-owned resolver wrapper over cache-reader dependency
+  raw SteamDTCachedPriceResolver structurally bound to strict selector
+  generic cross-platform resolver rejected by public scanner API
+  deterministic run memo -> sequential cache -> live order
+  explicit PriceCacheReadPolicy.FRESH_ONLY
+  scanner strict-BUFF adapter delegates to select_buff_output_price
+  fresh SELECTED -> memo success
+  fresh SELECTION_FAILURE -> memo terminal failure / no live fallback
+  MISS / EXPIRED / POLICY_BLOCKED -> unmemoized NEW LIVE
+  cache backend / codec / adapter / contract errors propagate
+  cache outcome counters active
+  cache memo survives atomic block; unresolved misses re-read
+  no persistent writeback; no refresh service
+  snapshot PriceCachePolicy remains writer-owned; no scanner TTL config
 
+not implemented:
+  default run_live_scan_once.py cache runtime/resolver composition (14D)
+  scanner write-after-live
+```
+
+### Next — Phase 14D CLI composition + scale / bounded-live validation
+
+```text
 status:
   NOT STARTED / NOT AUTHORIZED
 ```

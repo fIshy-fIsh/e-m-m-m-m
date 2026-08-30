@@ -9,17 +9,18 @@ The project performs **no** purchase, login, cookie capture, CAPTCHA bypass, BUF
 ## Current status
 
 ```text
-Phase:                                PHASE_14B_COMPLETE
+Phase:                                PHASE_14C_COMPLETE
 
 Production scanner:                   bounded multi-recipe one-shot scanner
-                                      with run-scoped exact-name valuation reuse
+                                      with run-scoped exact-name reuse and
+                                      optional FRESH_ONLY persistent cache reads
 
 Default enumeration:                  2 candidates / 256 states
 
 Active development line:              feature/scanner-valuation-integration
 
-Latest production / test checkpoint:  Phase 14B branch commit
-                                      (add run-scoped scanner valuation reuse;
+Latest production / test checkpoint:  Phase 14C branch commit
+                                      (add scanner fresh-only price cache reads;
                                        verify exact SHA from Git)
 
 Phase 14A design freeze:              e98cd97
@@ -61,7 +62,8 @@ The scanner is a **manual one-shot CLI**, not a 24/7 service. Continuous schedul
 - **EV / ROI / worst-case loss / profit probability** from the existing `calculate_opportunity_metrics` authority.
 - **Risk evaluation** under the configured `RiskFilterConfig` (default `min_roi=0.05`, `min_expected_profit_cny=20`, `max_worst_case_loss_pct=0.25`, `min_profit_probability=0.35`, `max_input_total_cost_cny=1000`).
 - **Atomic NEW-LIVE valuation budget**: per-run hard cap `max_valuation_requests_per_run ∈ [1, 60]`, default 5. It counts NEW LIVE exact output names only. Stage A memo preparation performs zero provider calls; if NEW LIVE demand exceeds the remaining cap, the whole recipe is blocked before any provider work. Exact boundary is allowed; no partial execution.
-- **Run-scoped exact-name valuation reuse** (`app/services/scanner_valuation_session.py`): a fresh scanner-owned session is created inside every `LiveScannerOrchestrator.run_once()`. Exact-name successes and terminal failures are reused across recipes in that run, without same-name retry. Nothing persists across runs. Legacy logical valuation counters are preserved; additive run-reuse/live-demand counters distinguish provider work. Phase 12D cache modules are not imported or used in Phase 14B.
+- **Run-scoped exact-name valuation reuse and optional FRESH_ONLY cache reads** (`app/services/scanner_valuation_session.py`): every `run_once()` creates a fresh session. Stage A resolves in exact memo → optional Phase12D cache → live-demand order. The public scanner API accepts only a scanner-owned resolver wrapper whose internal raw `SteamDTCachedPriceResolver` is structurally fixed to `select_scanner_cached_buff_price`; generic cross-platform resolver composition is rejected. Fresh strict-BUFF successes and reason-preserving terminal selection failures enter the run memo; MISS, EXPIRED, and POLICY_BLOCKED become NEW LIVE demand. Selected outcomes independently require FRESH lookup state. Nothing in the run memo persists across runs.
+- **Strict cached BUFF selection** (`app/services/scanner_cached_buff_price_selector.py`): cached candidates are re-evaluated through `select_buff_output_price`; the generic cross-platform selector is not scanner valuation authority. No bid, second-platform, or lowest-positive fallback.
 - **One-shot live scanner CLI** (`scripts/run_live_scan_once.py`).
 
 ## What is not implemented
@@ -70,8 +72,8 @@ The scanner is a **manual one-shot CLI**, not a 24/7 service. Continuous schedul
 - **No DB persistence path.** No opportunity, alert, scan-run, or listing history is written to PostgreSQL.
 - **No real Discord opportunity delivery.** The `pipeline_alert_service` mock exists for unit tests; no Webhook integration is enabled.
 - **No FastAPI operational surface** beyond the bare `/health` skeleton endpoint.
-- **Phase 12D cache infrastructure remains unwired from the live scanner valuation path.** The persistent/cache stack (`PriceCache`, `InMemoryPriceCache`, `RedisPriceCache`, `SteamDTCachedPriceResolver`, refresh service / planner / executor) remains unit-tested and opt-in behind `STEAMDT_PRICE_CACHE_BACKEND`, but Phase 14B does not import or use it.
-- **FRESH_ONLY scanner cache reads are not implemented.** That is Phase 14C. Scanner write-after-live is also not implemented and is out of scope for initial 14C; the existing manual refresh stack remains the writer.
+- **Default one-shot CLI cache composition is not implemented.** Scanner service/session cache-read support exists, but `scripts/run_live_scan_once.py` does not construct or inject a cache resolver; that runtime composition is Phase 14D.
+- **Scanner write-after-live is not implemented.** The scanner never calls cache `put` or `SteamDTPriceRefreshService`; the existing manual refresh stack remains the writer. Stored snapshot `PriceCachePolicy` is writer-owned, and the scanner adds no read-time numeric TTL setting.
 - **No auto-universe live refresh / no listing history database.** Auto-universe planning is offline and offline-only by default (`--universe-preview` mode performs zero network calls).
 
 ## How is the scanner structured?
@@ -87,11 +89,12 @@ BUFF anonymous listings
   -> enumerate_scanner_recipe_selections  (Phase 13T-2 composition adapter)
   -> enumerate_recipe_selections      (Phase 13T-1 bounded solver enumerator)
   -> calculate_tradeup_results        (existing trade-up engine)
-  -> scanner valuation session prepare     (exact-name run memo; zero provider calls)
+  -> scanner valuation session prepare     (run memo -> optional FRESH_ONLY cache)
+  -> strict cached BUFF selector            (select_buff_output_price authority)
   -> atomic NEW-LIVE demand admission
-  -> scanner valuation session execute     (only NEW exact names)
+  -> scanner valuation session execute     (live provider for NEW exact names only)
   -> ValuationService.value_tradeup_results (existing valuation formula authority)
-  -> SteamDTBuffPriceProvider              (exact BUFF aggregate sell price; no cache in 14B)
+  -> SteamDTBuffPriceProvider              (live exact BUFF aggregate sell price)
   -> calculate_opportunity_metrics    (EV / ROI)
   -> evaluate_opportunity             (RiskFilterConfig policy)
   -> ScannerRunResult
@@ -115,33 +118,33 @@ Current production valuation path:
 ```text
 recipe output market hash names
   -> RunScopedValuationSession.prepare_output_prices
-       -> exact-name run memo only; zero provider calls
+       -> exact-name run memo first
+       -> optional SteamDTCachedPriceResolver, explicit FRESH_ONLY, strict BUFF
+       -> classify unresolved MISS / EXPIRED / POLICY_BLOCKED as NEW LIVE
   -> LiveScannerOrchestrator atomic NEW-LIVE cap admission
   -> RunScopedValuationSession.resolve_prepared
        -> SteamDTBuffPriceProvider.get_prices(NEW exact names only)
        -> aggregate client (GET /open/cs2/v1/price/single, official Bearer token)
        -> strict exact case-sensitive BUFF record selection
-       -> full logical PriceLookupResult (memo + live)
+       -> full logical PriceLookupResult (memo + cache + live)
        -> existing ValuationService formula application
 ```
 
 The aggregate SteamDT service is confirmed against the official documentation (base URL `https://open.steamdt.com`, Bearer-token authentication, response wrapper fields, price single / batch / avg / base / kline / wear endpoints). See `docs/STEAMDT_API_NOTES.md` for the full confirmed / TODO matrix.
 
-Existing but currently unwired from the live scanner valuation path:
+Existing cache infrastructure and scanner read integration:
 
 ```text
-PriceCache (Phase 12D1 protocol)
-InMemoryPriceCache (Phase 12D1)
-RedisPriceCache (Phase 12D2A)
+PriceCache / InMemoryPriceCache / RedisPriceCache (Phase 12D)
 SteamDTCachedPriceResolver (Phase 12D3B, read-only)
-SteamDTPriceRefreshService (Phase 12D4A, single-item write)
-SteamDTRefreshPlanner (Phase 12D5A, dedup + chunk)
-SteamDTRefreshExecutor (Phase 12D5B, controlled sequential executor)
+RunScopedValuationSession optional FRESH_ONLY resolver injection (Phase 14C)
+scanner strict-BUFF cached selector (Phase 14C)
+SteamDTPriceRefreshService / planner / executor (manual writer stack only)
 ```
 
-Run-level cross-recipe exact-name valuation reuse (the Phase 14B portion of D-CACHE-001): **implemented**. The broader D-CACHE-001 record remains Active because persistent Phase 12D scanner cache integration is still open.
+Run-level cross-recipe exact-name reuse (Phase 14B) and scanner service/session persistent cache READ support (Phase 14C) are **implemented**. `D-CACHE-001` remains Active until Phase 14D provides default `run_live_scan_once.py` runtime composition.
 
-The cache stack exists for Phase 14C; it is **not** currently part of `run_live_scan_once.py`. Phase 14C must use FRESH_ONLY reads and a strict-BUFF cached selector. Automatic scanner write-after-live remains out of scope for initial 14C.
+The production one-shot CLI does **not** yet inject the cache resolver. Scanner write-after-live is absent. Freshness is evaluated by the backends from each stored snapshot's writer-owned `PriceCachePolicy`; there is no scanner read-time TTL knob, and the manual script's five-minute policy is historical writer precedent only.
 
 ## Safety boundaries (V1 hard constraints)
 
@@ -233,15 +236,16 @@ What works now?
   - EV / ROI / risk evaluation
   - one-shot CLI scanner with atomic NEW-LIVE valuation budget
   - run-scoped exact-name success/failure reuse across recipes
-  - Phase 12D cache / refresh infrastructure (offline unit-tested,
-    not wired into the live scanner valuation path)
+  - Phase 12D cache / refresh infrastructure (offline unit-tested)
+  - optional scanner service/session FRESH_ONLY cache READ integration
+    with strict-BUFF cached selection
 
 What is not implemented?
   - production scheduler
   - database persistence
   - real Discord opportunity delivery
-  - live scanner persistent-cache integration / FRESH_ONLY reads
-  - scanner write-after-live (out of scope for initial Phase 14C)
+  - default one-shot CLI cache-resolver composition (Phase 14D)
+  - scanner write-after-live
 
 How is the scanner structured?
   See the data flow diagram under "How is the scanner structured?" above.
@@ -256,17 +260,16 @@ What are the safety boundaries?
   valuation, no probability renormalization.
 
 Where is the project in its roadmap?
-  Phase 14B is complete on `feature/scanner-valuation-integration`.
-  Phase 14A / 14A-R1 froze and corrected the design; Phase 14B now
-  implements one-run exact-name success/failure reuse and NEW-LIVE
-  budget accounting without persistent cache integration. R0-A through
-  R0-D are complete; canonical main remains P3 (`24c95c0...`).
+  Phase 14C is complete on `feature/scanner-valuation-integration`.
+  Phase 14B implemented one-run exact-name success/failure reuse and
+  NEW-LIVE accounting; Phase 14C added optional scanner service/session
+  FRESH_ONLY reads with strict-BUFF cached selection and no writeback.
+  R0-A through R0-D are complete; canonical main remains P3 (`24c95c0...`).
 
 What should happen next?
-  Phase 14C — Phase12D FRESH_ONLY cache READ integration — is next,
-  not started, and not authorized in this checkpoint. It must compose
-  strict-BUFF cached selection and keep automatic scanner write-after-live
-  out of scope. Phase 14D (CLI / scale / bounded-live validation) follows.
+  Phase 14D — default one-shot CLI cache composition plus scale /
+  bounded-live validation — is next, not started, and not authorized.
+  Scanner write-after-live remains unimplemented and out of scope.
 ```
 
 ## Where to look next

@@ -2,12 +2,12 @@
 
 ## Current Git State (verify live)
 
-- **Branch:** `feature/scanner-valuation-integration` (Phase 14B functional branch). Tracked canonical `main` remains P3 (`24c95c029f583d5cc0b0a67986e48c06d0ef7957`) and is unchanged.
-- **HEAD:** Phase 14B checkpoint commit `add run-scoped scanner valuation reuse` (verify exact SHA from Git).
-- **HEAD message:** `add run-scoped scanner valuation reuse`.
-- **Phase:** `PHASE_14B_COMPLETE`.
+- **Branch:** `feature/scanner-valuation-integration` (Phase 14C functional branch). Tracked canonical `main` remains P3 (`24c95c029f583d5cc0b0a67986e48c06d0ef7957`) and is unchanged.
+- **HEAD:** Phase 14C checkpoint commit `add scanner fresh-only price cache reads` (verify exact SHA from Git).
+- **HEAD message:** `add scanner fresh-only price cache reads`.
+- **Phase:** `PHASE_14C_COMPLETE`.
 - **R0-A / R0-B / R0-C / post-R0-C docs checkpoint / R0-D:** COMPLETE. R0-D completion documentation checkpoint PR #3 merged on `main` at P3 (`24c95c029f583d5cc0b0a67986e48c06d0ef7957`); final-main push CI green (`CI` / run `33240760167`, conclusion `success`).
-- **Uncommitted implementation work:** none after the Phase 14B checkpoint commit. The two intentionally excluded research JSON files remain local/untracked and untouched.
+- **Uncommitted implementation work:** none after the Phase 14C checkpoint commit. The two protected research JSON files remain local/untracked and untouched.
 
 Recent push history (oldest → newest) on canonical main includes:
 
@@ -533,8 +533,10 @@ The components remain in the tree as paused, offline-tested optional infrastruct
 - SteamDT output valuation: **fully live path verified** (Phase 13P-5; strict BUFF sell policy).
 - Goods identity bridge: **provisional offline resolver and runtime binding implemented** (`D-IDENTITY-006` / `D-IDENTITY-007`).
 - Trade-up input normalization and current Souvenir output semantics: **implemented** (Phase 13O through 13P-4).
-- Run-scoped exact-name valuation reuse: **IMPLEMENTED** (Phase 14B). Fresh scanner-owned session per `run_once()`; async prepare is provider-free; atomic NEW-LIVE admission; execute requests NEW exact names only; success and terminal failure reuse; no same-name retry; no cross-run reuse. Legacy logical counters preserved; additive run-reuse/live counters active.
-- Persistent Phase 12D scanner cache integration: **NOT IMPLEMENTED** (`D-CACHE-001` remains Active as broader migration record). FRESH_ONLY scanner reads and scanner write-after-live remain unimplemented; initial Phase 14C is READ-only.
+- Run-scoped exact-name valuation reuse: **IMPLEMENTED** (Phase 14B). Fresh scanner-owned session per `run_once()`; atomic NEW-LIVE admission; success and terminal failure reuse; no same-name retry; no cross-run reuse.
+- Scanner service/session persistent cache READ integration: **IMPLEMENTED** (Phase 14C). Optional scanner-owned `ScannerCachedBuffPriceResolver` injection; its internal raw resolver is structurally bound to `select_scanner_cached_buff_price`, so generic cross-platform authority cannot enter public scanner composition. Deterministic memo → sequential explicit-FRESH_ONLY cache → live; independent FRESH validation; stable strict-BUFF failure reasons retained across memo reuse; cache outcome counters active; backend/codec/adapter/contract errors propagate; no stale consumption or writeback.
+- Default `run_live_scan_once.py` cache composition: **NOT IMPLEMENTED** (Phase 14D). Scanner write-after-live: **NOT IMPLEMENTED**. Stored snapshot `PriceCachePolicy` is writer-owned; no scanner read-time numeric TTL config.
+- `D-CACHE-001`: **Active** as the broader runtime-composition record until Phase 14D.
 - Scheduler/continuous scanning: **not implemented**.
 - R0-A Public Documentation Synchronization: **COMPLETE** (`1dbc6f1`).
 - R0-B Minimum CI: **COMPLETE / REMOTE GREEN** (`7a6349e`; GitHub Actions `CI` / `quality` success).
@@ -543,26 +545,27 @@ The components remain in the tree as paused, offline-tested optional infrastruct
 - R0-D Branch / Repository Cleanup: **COMPLETE**. PR #3 (`R0-D completion documentation checkpoint`) merged on `main` using `Create a merge commit` (manual web-UI merge after automated PAT-scope limits on un-draft). Final canonical `main` tip is `24c95c029f583d5cc0b0a67986e48c06d0ef7957` (P3) with parents `{328269112f229faf3fce4cf0be4b9c7875582b65 (P2), 6964cc4ff25cd4ad72fe65f92f40a5ce70a4a268 (R0-D3 docs commit)}` and tree `608d3e473072afb0d97aadf46ea0be8b1f55ca26`. CI workflow blob `02d0ce81…` preserved unchanged since R0-A. Final-main push CI: workflow `CI`, run `33240760167`, event `push`, branch `main`, head SHA `24c95c0…`, conclusion `success`. Cleanup summary: 305 Claude agent linked worktrees under `D:/CS/.claude/worktrees/agent-*` and their 305 `worktree-agent-a*` local branches removed; 5 named local branches (`docs/r0c-completion-checkpoint`, `repo/main-consolidation`, `feature/steamdt-cache-rate-limit`, `feature/steamdt-data-source`, `feature/buff-tradeup-scanner`) removed; 4 named remote branches removed. `git worktree remove` and `git branch -d` only (no `--force`, no `-D`). `v1-dry-run-baseline` retained locally at exact target `32ab47c5b66a0f331457e69f1515e5e9bb2a37e1` (was always local-only). No unique history lost.
 - Phase 14A — Scanner Valuation Integration Design Freeze: **COMPLETE** (docs only; commit `e98cd97`).
 - Phase 14A-R1 — Design Coherence Correction: **COMPLETE** (docs only; commit `bb056e5`; decision `D-PHASE14A-R1-COHERENCE`).
-- Phase 14B — Run-scoped exact-name valuation reuse: **COMPLETE**. `app/services/scanner_valuation_session.py` adds an immutable, session-bound two-stage prepare/execute boundary. `LiveScannerOrchestrator.run_once()` constructs a fresh session; Stage A classifies exact names with zero provider calls; the orchestrator atomically admits NEW-LIVE demand; Stage B invokes `PriceProvider.get_prices` only for NEW exact names, validates the result fail-closed, memoizes success/terminal failure, then reuses existing `ValuationService` field application. No Phase 12D cache module is imported or modified. Deep-pool scale: 20 logical names / 10 provider exact-name demand / 10 run-reuse hits; cap 10 admits both; cap 9 blocks both before provider work. Full offline validation: 3382 passed, 23 skipped, 1 warning.
+- Phase 14B — Run-scoped exact-name valuation reuse: **COMPLETE** at `c7031b61c3c44640ffd76165946809f7383f5d0c`; baseline full offline validation `3382 passed, 23 skipped, 1 warning`.
+- Phase 14C — Phase12D FRESH_ONLY cache READ integration: **COMPLETE**. `app/services/scanner_cached_buff_price_selector.py` supplies strict BUFF resolver selection via `select_buff_output_price`; `scanner_valuation_session.py` performs memo/cache/live Stage A classification and retains live-only Stage B; `scanner_orchestrator.py` injects the optional resolver and activates cache counters without constructing runtimes. No Phase12D implementation, CLI, config, refresh, or persistent write behavior changed. Full offline validation: `3413 passed, 23 skipped, 1 warning`; ruff/mypy pass.
 
 ## Next Action (ordered)
 
-- **Phase 14B is COMPLETE.** Run-scoped exact-name valuation reuse and NEW-LIVE budget accounting are implemented and fully offline validated. `D-PHASE14B-COMPLETE` records the checkpoint.
-- **Phase 14C — Phase12D FRESH_ONLY cache READ integration is NEXT / NOT STARTED / NOT AUTHORIZED.** It must compose strict-BUFF cached selection; initial scanner write-after-live remains out of scope.
-- **Phase 14D — CLI / scale / bounded-live validation is NOT STARTED / NOT AUTHORIZED.**
-- `D-CACHE-001` remains Active as the broader persistent-cache migration record; its run-scoped reuse portion is complete in 14B.
+- **Phase 14B and Phase 14C are COMPLETE.** Run reuse, NEW-LIVE accounting, and optional scanner service/session FRESH_ONLY cache reads are implemented and offline validated. `D-PHASE14B-COMPLETE` and `D-PHASE14C-COMPLETE` record the checkpoints.
+- **Phase 14D — default CLI cache composition + scale / bounded-live validation is NEXT / NOT STARTED / NOT AUTHORIZED.**
+- Scanner write-after-live remains unimplemented and out of scope.
+- `D-CACHE-001` remains Active until Phase 14D runtime composition lands.
 - **R0-C Main History Consolidation is COMPLETE.** Post-R0-C main tip is `9cfaf36db028661075a495587ac32e51256fffe8` (now an ancestor of P2).
 - **R0-C docs checkpoint is MERGED / VERIFIED.** Canonical `main` tip is `328269112f229faf3fce4cf0be4b9c7875582b65` (P2); topology / ancestry / tree / CI workflow blob all verified; final-main push CI green.
 - **R0-D cleanup execution and completion checkpoint are COMPLETE.** R0-D1 audit, R0-D2 / R0-D2-BIS / R0-D2-TER, and PR #3 post-merge verification are complete. Canonical `main` is P3 (`24c95c0...`). Cleanup summary is captured in `PROJECT_CONTEXT.md` and `specs/roadmap.md`.
 - **R0-D completion documentation checkpoint PR is MERGED / VERIFIED.** PR #3 (`R0-D completion documentation checkpoint`) merged on `main` using `Create a merge commit` at P3 = `24c95c029f583d5cc0b0a67986e48c06d0ef7957`; final-main push CI green (`CI` / run `33240760167`, conclusion `success`). R0-D is COMPLETE.
-- Scanner Valuation Integration: Phase 14A / 14A-R1 / 14B are COMPLETE. Phase 14B implements only the run-scoped exact-name reuse portion; Phase 14C persistent cache READ integration and Phase 14D validation remain pending.
+- Scanner Valuation Integration: Phase 14A / 14A-R1 / 14B / 14C are COMPLETE. Phase 14D default CLI runtime composition and validation remain pending.
 - Valuation Budget Calibration is **PROPOSED / NOT AUTHORIZED**: measure unique-output cardinality offline before proposing any numeric cap.
 - Any future development phase must be explicitly authorized and must not silently relax `D-ENUM-001`–`D-ENUM-004`, `D-CACHE-001..004`, `D-BUDGET-001`, `D-ACCOUNTING-001`, `D-SCANNER-001`, `D-VALIDATION-001`, `D-MEMORY-001`, `D-ADAPTER-003`, or `D-ADAPTER-004`.
 
 ## Current Blockers
 
-- None for the completed Phase 14B migration.
-- Phase 14C / 14D require explicit authorization before implementation.
+- None for the completed Phase 14C migration.
+- Phase 14D requires explicit authorization before implementation.
 
 ## Standing Prohibitions (re-asserted)
 

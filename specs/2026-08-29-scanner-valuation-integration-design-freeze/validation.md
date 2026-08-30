@@ -175,7 +175,7 @@ The design must be coherent against the existing audit facts. The validation che
 10. No partial valuation. Any missing / failed / blocked / invalid exact-name resolution yields `valuation_completed=False`, no metrics, no risk, no opportunity. The design does NOT drop outputs, renormalize probabilities, zero-fill, stale-fill, or substitute another platform.
 11. Bounded multi-recipe ordering is preserved. `LiveScannerOrchestrator.run_once` continues to iterate `composition.selections` in structural order; counter updates and cache lookups happen inside the per-recipe `_evaluate_selection` boundary.
 12. The legacy `live_recipe_valuation.py` and `valuation_service.py` APIs are NOT modified by Phase 14A-R1. Any future 14B / 14C / 14D modification to them is explicit and reviewed.
-13. No scanner fresh_ttl numeric default is frozen in Phase 14A-R1. The 5-minute value in `scripts/steamdt_refresh_integration.py:59` is historical manual-script precedent only; the Phase 14C scanner TTL is chosen and documented at implementation authorization.
+13. Phase 14C adds no scanner read-time `fresh_ttl` numeric setting. The 5-minute value in `scripts/steamdt_refresh_integration.py:59` is historical manual-writer precedent only; existing backends evaluate freshness from the writer-owned `PriceCachePolicy` stored in each snapshot.
 14. Initial Phase 14C is scanner cache READ integration only. Automatic scanner write-after-live is OUT OF SCOPE; the existing manual refresh stack remains the writer; no write-failure runtime test is required.
 15. `D-CACHE-001` remains `Active` after R1. Phase 14B (run-scope reuse) and Phase 14C (Phase 12D scanner cache integration) are the phases that, when they land and are verified, reclassify `D-CACHE-001` from `Active` to `Implemented`.
 16. The 14B / 14C / 14D sequence in `plan.md` task group 11 is internally consistent. 14B is the smallest safe step (run memo + additive counters; no persistent cache). 14C layers Phase 12D cache with strict-BUFF selection. 14D wires CLI + scale/live validation.
@@ -205,7 +205,7 @@ The 14A-R1 design freeze does not write any of these tests. They are listed here
 Recipe1 demands `A, B, C, D, E, F, G, H, I, J`. Recipe2 shares `A, B, C, D, E, F, G, H, I` plus a new name `K`. No persistent cache. Expected:
 
 - `distinct names across both recipes = 11` (the set `{A..K}`, not 20).
-- `live_demand == 11` (sum of `requested_count` for admitted recipes; here both admitted under sufficient cap).
+- `live_demand == 11` because Recipe1 contributes 10 NEW LIVE exact names and Recipe2 contributes only `K` after nine memo reuses (`10 + 1`). This is not the sum of the two admitted logical `requested_count` values, which is 20.
 - `live_attempted == 11` (each distinct name issued exactly one live SteamDT call across both recipes).
 - For Recipe2: memo hits = 9 (`A..I` from Recipe1's live success); `run_reuse_hits == 9`, `run_reuse_successes == 9` (assuming `A..I` all succeeded), `run_reuse_failures == 0`.
 - Counter invariants:

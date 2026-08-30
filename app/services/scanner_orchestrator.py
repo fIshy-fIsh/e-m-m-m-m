@@ -67,6 +67,9 @@ from app.services.recipe_solver import (
     RecipeSolverConfig,
 )
 from app.services.risk_filter import RiskDecision, RiskFilterConfig, evaluate_opportunity
+from app.services.scanner_cached_buff_price_resolver import (
+    ScannerCachedBuffPriceResolver,
+)
 from app.services.scanner_recipe_composition import (
     ScannerRecipeCompositionDiagnostics,
     enumerate_scanner_recipe_selections,
@@ -267,6 +270,7 @@ class LiveScannerOrchestrator:
         metadata_resolver: ScannerMetadataResolver,
         intrinsic_resolver: BuffListingIntrinsicFlagResolver | None = None,
         valuation_service: ValuationService | None = None,
+        cached_price_resolver: ScannerCachedBuffPriceResolver | None = None,
         max_valuation_requests_per_run: int,
         solver_config: RecipeSolverConfig,
         risk_config: RiskFilterConfig,
@@ -282,6 +286,12 @@ class LiveScannerOrchestrator:
             raise TypeError("solver_config is required")
         if risk_config is None:
             raise TypeError("risk_config is required")
+        if cached_price_resolver is not None and type(
+            cached_price_resolver
+        ) is not ScannerCachedBuffPriceResolver:
+            raise TypeError(
+                "cached_price_resolver must be a ScannerCachedBuffPriceResolver"
+            )
         if enumeration_config is not None and type(
             enumeration_config
         ) is not RecipeEnumerationConfig:
@@ -321,6 +331,7 @@ class LiveScannerOrchestrator:
         self._enumeration_config = bounded_enumeration_config
         self._risk_config = risk_config
         self._valuation_service = valuation_service
+        self._cached_price_resolver = cached_price_resolver
         self._max_valuation_requests_per_run = max_valuation_requests_per_run
         # Monotonic per-orchestrator session id counter. The session
         # itself lives for exactly one ``run_once`` call and is rebuilt
@@ -361,6 +372,7 @@ class LiveScannerOrchestrator:
                 price_provider=self._valuation_service.price_provider,
                 valuation_config=self._valuation_service.config,
                 session_id=self._next_session_id,
+                cached_price_resolver=self._cached_price_resolver,
             )
             self._next_session_id += 1
 
@@ -494,6 +506,24 @@ class LiveScannerOrchestrator:
                             counters.run_reuse_failures
                             + len(plan.memo_terminal_failures)
                         ),
+                        cache_hits_fresh_selected=(
+                            counters.cache_hits_fresh_selected
+                            + len(plan.cache_hits_fresh_selected)
+                        ),
+                        cache_misses=(
+                            counters.cache_misses + len(plan.cache_misses)
+                        ),
+                        cache_policy_blocked=(
+                            counters.cache_policy_blocked
+                            + len(plan.cache_policy_blocked)
+                        ),
+                        cache_expired=(
+                            counters.cache_expired + len(plan.cache_expired)
+                        ),
+                        cache_selection_failures=(
+                            counters.cache_selection_failures
+                            + len(plan.cache_terminal_selection_failures)
+                        ),
                     )
                     recipe_rejections["VALUATION_REQUEST_CAP_EXCEEDED"] += 1
                     recipe_evaluations.append(
@@ -523,6 +553,24 @@ class LiveScannerOrchestrator:
                     run_reuse_failures=(
                         counters.run_reuse_failures
                         + len(plan.memo_terminal_failures)
+                    ),
+                    cache_hits_fresh_selected=(
+                        counters.cache_hits_fresh_selected
+                        + len(plan.cache_hits_fresh_selected)
+                    ),
+                    cache_misses=(
+                        counters.cache_misses + len(plan.cache_misses)
+                    ),
+                    cache_policy_blocked=(
+                        counters.cache_policy_blocked
+                        + len(plan.cache_policy_blocked)
+                    ),
+                    cache_expired=(
+                        counters.cache_expired + len(plan.cache_expired)
+                    ),
+                    cache_selection_failures=(
+                        counters.cache_selection_failures
+                        + len(plan.cache_terminal_selection_failures)
                     ),
                 )
                 session_result = await session.resolve_prepared(

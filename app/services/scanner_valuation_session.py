@@ -1,30 +1,24 @@
-"""Phase 14B — Run-scoped exact-name valuation reuse session.
+"""Phase 14C — Run-scoped exact-name valuation session with cache reads.
 
 Scanner-owned lifetime: EXACTLY one ``LiveScannerOrchestrator.run_once()``
 call. Two-stage contract:
 
   Stage A — ``prepare_output_prices(names)``
-      Performs memo lookup only. ZERO provider calls.
-      Returns an immutable ``PreparedOutputPricePlan`` classifying
-      each requested name into:
-        - memo success (already resolved earlier in this run)
-        - memo terminal failure (already failed earlier in this run)
-        - new live (must be resolved by Stage B)
+      Consults the run memo first, then optionally reads the existing Phase 12D
+      cache sequentially with ``PriceCacheReadPolicy.FRESH_ONLY``. ZERO live
+      provider calls. Fresh strict-BUFF selections and terminal selection
+      failures enter the run memo immediately; miss, expired, and
+      policy-blocked names become ordered NEW LIVE demand.
 
   Stage B — ``resolve_prepared(plan, tradeup_results)``
-      Called ONLY after the orchestrator's atomic-cap admission.
-      Calls the underlying ``PriceProvider.get_prices`` ONLY for
-      ``plan.new_live_names``; never for memoed names.
-      Builds a full logical ``PriceLookupResult`` from memo + new
-      results, and applies the existing ``ValuationService`` to it
-      for valuation field application (no Protected Core math change).
+      Called ONLY after the orchestrator's atomic-cap admission. Calls the
+      underlying ``PriceProvider.get_prices`` ONLY for ``plan.new_live_names``;
+      never re-reads or writes the persistent cache. Builds a full logical
+      ``PriceLookupResult`` from memo + cache + live results, and applies the
+      existing ``ValuationService`` for valuation field application.
 
-14B does NOT integrate the persistent Phase 12D price cache. Phase 14C
-will add ``SteamDTCachedPriceResolver`` reads to Stage A using the same
-two-stage surface.
-
-The session is NOT persisted across runs; it is NOT a global singleton;
-it does NOT survive ``run_once()`` calls.
+The optional cache resolver may outlive a run. The session memo never does.
+Scanner write-after-live, refresh services, and background work are absent.
 """
 
 from __future__ import annotations
@@ -33,10 +27,22 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 
+from app.services.price_cache import PriceCacheKey, PriceCacheState
 from app.services.price_provider import (
     PriceLookupResult,
     PriceProvider,
     PriceQuote,
+)
+from app.services.scanner_cached_buff_price_resolver import (
+    ScannerCachedBuffPriceResolver,
+)
+from app.services.scanner_cached_buff_price_selector import (
+    SCANNER_STRICT_BUFF_SELECTION_STRATEGY,
+    SCANNER_STRICT_BUFF_SOURCE,
+)
+from app.services.steamdt_cached_price_resolver import (
+    SteamDTCachedPriceResolution,
+    SteamDTCachedPriceResolutionStatus,
 )
 from app.services.tradeup_engine import TradeupResult
 from app.services.valuation_service import (
@@ -101,6 +107,11 @@ class PreparedOutputPricePlan:
     requested_names: tuple[str, ...]
     memo_successes: tuple[str, ...] = ()
     memo_terminal_failures: tuple[str, ...] = ()
+    cache_hits_fresh_selected: tuple[str, ...] = ()
+    cache_terminal_selection_failures: tuple[str, ...] = ()
+    cache_misses: tuple[str, ...] = ()
+    cache_policy_blocked: tuple[str, ...] = ()
+    cache_expired: tuple[str, ...] = ()
     new_live_names: tuple[str, ...] = ()
 
 
@@ -138,6 +149,7 @@ class RunScopedValuationSession:
         price_provider: PriceProvider,
         valuation_config: ValuationConfig,
         session_id: int,
+        cached_price_resolver: ScannerCachedBuffPriceResolver | None = None,
     ) -> None:
         if price_provider is None:
             raise TypeError("price_provider is required")
@@ -145,8 +157,15 @@ class RunScopedValuationSession:
             raise TypeError("valuation_config is required")
         if type(session_id) is not int or session_id < 0:
             raise TypeError("session_id must be a non-negative integer")
+        if cached_price_resolver is not None and type(
+            cached_price_resolver
+        ) is not ScannerCachedBuffPriceResolver:
+            raise TypeError(
+                "cached_price_resolver must be a ScannerCachedBuffPriceResolver"
+            )
         self._price_provider = price_provider
         self._valuation_config = valuation_config
+        self._cached_price_resolver = cached_price_resolver
         self._session_id = session_id
         self._session_token = object()
         self._memo: dict[str, _MemoEntry] = {}
@@ -159,6 +178,11 @@ class RunScopedValuationSession:
         self._run_reuse_hits = 0
         self._run_reuse_successes = 0
         self._run_reuse_failures = 0
+        self._cache_hits_fresh_selected = 0
+        self._cache_misses = 0
+        self._cache_policy_blocked = 0
+        self._cache_expired = 0
+        self._cache_selection_failures = 0
         self._live_demand = 0
         self._live_attempted = 0
         self._live_succeeded = 0
@@ -180,6 +204,26 @@ class RunScopedValuationSession:
     @property
     def run_reuse_failures(self) -> int:
         return self._run_reuse_failures
+
+    @property
+    def cache_hits_fresh_selected(self) -> int:
+        return self._cache_hits_fresh_selected
+
+    @property
+    def cache_misses(self) -> int:
+        return self._cache_misses
+
+    @property
+    def cache_policy_blocked(self) -> int:
+        return self._cache_policy_blocked
+
+    @property
+    def cache_expired(self) -> int:
+        return self._cache_expired
+
+    @property
+    def cache_selection_failures(self) -> int:
+        return self._cache_selection_failures
 
     @property
     def live_demand(self) -> int:
@@ -227,12 +271,12 @@ class RunScopedValuationSession:
         self,
         market_hash_names: Sequence[str],
     ) -> PreparedOutputPricePlan:
-        """Stage A: classify names; ZERO live provider calls.
+        """Stage A: classify names via memo then FRESH_ONLY cache reads.
 
-        Returns a plan whose ``new_live_names`` are the exact names not
-        yet memoed. Memo hits are counted during prepare (even if the
-        recipe is later blocked), so run-reuse and live-demand counters
-        reflect the prepare classification.
+        This method never calls the live provider. Cache selected/failure
+        outcomes enter the run memo before the canonical plan is finalized.
+        Miss, expired, and policy-blocked outcomes remain unmemoized NEW LIVE
+        demand and can therefore be re-read after an atomic block.
         """
         if type(market_hash_names) in {str, bytes}:
             raise ScannerSessionError(
@@ -249,12 +293,17 @@ class RunScopedValuationSession:
 
         memo_successes: list[str] = []
         memo_terminal_failures: list[str] = []
-        new_live_names: list[str] = []
+        cache_hits_fresh_selected: list[str] = []
+        cache_terminal_selection_failures: list[str] = []
+        cache_misses: list[str] = []
+        cache_policy_blocked: list[str] = []
+        cache_expired: list[str] = []
+        unresolved_names: list[str] = []
 
         for name in unique_names:
             entry = self._memo.get(name)
             if entry is None:
-                new_live_names.append(name)
+                unresolved_names.append(name)
                 continue
             if entry.kind == "success":
                 memo_successes.append(name)
@@ -264,6 +313,50 @@ class RunScopedValuationSession:
                 memo_terminal_failures.append(name)
                 self._run_reuse_hits += 1
                 self._run_reuse_failures += 1
+
+        new_live_names: list[str] = []
+        if self._cached_price_resolver is None:
+            new_live_names.extend(unresolved_names)
+        else:
+            for name in unresolved_names:
+                resolution = await self._cached_price_resolver.resolve(name)
+                status, cached_quote, failure_reason = (
+                    self._validate_cache_resolution(name, resolution)
+                )
+                if status == SteamDTCachedPriceResolutionStatus.SELECTED:
+                    assert cached_quote is not None
+                    self._memo[name] = _MemoEntry(
+                        kind="success",
+                        quote=cached_quote,
+                    )
+                    cache_hits_fresh_selected.append(name)
+                    self._cache_hits_fresh_selected += 1
+                    self._memo_revision += 1
+                    continue
+                if status == SteamDTCachedPriceResolutionStatus.SELECTION_FAILURE:
+                    assert failure_reason is not None
+                    self._memo[name] = _MemoEntry(
+                        kind="failure",
+                        failure_reason=failure_reason,
+                    )
+                    cache_terminal_selection_failures.append(name)
+                    self._cache_selection_failures += 1
+                    self._memo_revision += 1
+                    continue
+                if status == SteamDTCachedPriceResolutionStatus.MISS:
+                    cache_misses.append(name)
+                    self._cache_misses += 1
+                elif status == SteamDTCachedPriceResolutionStatus.POLICY_BLOCKED:
+                    cache_policy_blocked.append(name)
+                    self._cache_policy_blocked += 1
+                elif status == SteamDTCachedPriceResolutionStatus.EXPIRED:
+                    cache_expired.append(name)
+                    self._cache_expired += 1
+                else:  # pragma: no cover - guarded by exact enum validation
+                    raise ScannerSessionError(
+                        "cached resolver returned an unsupported status"
+                    )
+                new_live_names.append(name)
 
         self._live_demand += len(new_live_names)
 
@@ -275,10 +368,118 @@ class RunScopedValuationSession:
             requested_names=tuple(unique_names),
             memo_successes=tuple(memo_successes),
             memo_terminal_failures=tuple(memo_terminal_failures),
+            cache_hits_fresh_selected=tuple(cache_hits_fresh_selected),
+            cache_terminal_selection_failures=tuple(
+                cache_terminal_selection_failures
+            ),
+            cache_misses=tuple(cache_misses),
+            cache_policy_blocked=tuple(cache_policy_blocked),
+            cache_expired=tuple(cache_expired),
             new_live_names=tuple(new_live_names),
         )
         self._prepared_plans[plan.plan_id] = plan
         return plan
+
+    @staticmethod
+    def _validate_cache_resolution(
+        requested_name: str,
+        resolution: object,
+    ) -> tuple[
+        SteamDTCachedPriceResolutionStatus,
+        PriceQuote | None,
+        str | None,
+    ]:
+        if type(resolution) is not SteamDTCachedPriceResolution:
+            raise ScannerSessionError(
+                "cached resolver returned an invalid resolution"
+            )
+        expected_key = PriceCacheKey(market_hash_name=requested_name)
+        if resolution.lookup.key != expected_key:
+            raise ScannerSessionError(
+                "cached resolver returned a mismatched cache key"
+            )
+        if type(resolution.status) is not SteamDTCachedPriceResolutionStatus:
+            raise ScannerSessionError(
+                "cached resolver returned an invalid status"
+            )
+        cached_quote: PriceQuote | None = None
+        failure_reason: str | None = None
+        if resolution.status == SteamDTCachedPriceResolutionStatus.SELECTED:
+            if resolution.lookup.state is not PriceCacheState.FRESH:
+                raise ScannerSessionError(
+                    "cached selected resolution must be fresh"
+                )
+            cached_quote = RunScopedValuationSession._cache_quote(
+                requested_name,
+                resolution,
+            )
+        elif resolution.status == SteamDTCachedPriceResolutionStatus.SELECTION_FAILURE:
+            if resolution.lookup.state is not PriceCacheState.FRESH:
+                raise ScannerSessionError(
+                    "cached selection failure resolution must be fresh"
+                )
+            selection = resolution.selection_result
+            if (
+                selection is None
+                or selection.market_hash_name != requested_name
+                or selection.quote is not None
+                or selection.selected_platform is not None
+                or selection.selected_strategy
+                != SCANNER_STRICT_BUFF_SELECTION_STRATEGY
+                or not resolution.selection_failure_reason_codes
+                or any(
+                    type(reason) is not str or not reason
+                    for reason in resolution.selection_failure_reason_codes
+                )
+            ):
+                raise ScannerSessionError(
+                    "cached resolver returned an invalid selection failure"
+                )
+            failure_reason = (
+                "CACHE_SELECTION_TERMINAL_FAILURE: reason="
+                f"{resolution.selection_failure_reason_codes[0]}"
+            )
+        elif resolution.status not in {
+            SteamDTCachedPriceResolutionStatus.MISS,
+            SteamDTCachedPriceResolutionStatus.POLICY_BLOCKED,
+            SteamDTCachedPriceResolutionStatus.EXPIRED,
+        }:
+            raise ScannerSessionError(
+                "cached resolver returned an unsupported status"
+            )
+        return resolution.status, cached_quote, failure_reason
+
+    @staticmethod
+    def _cache_quote(
+        requested_name: str,
+        resolution: SteamDTCachedPriceResolution,
+    ) -> PriceQuote:
+        selection = resolution.selection_result
+        quote = resolution.quote
+        if (
+            selection is None
+            or quote is None
+            or selection.market_hash_name != requested_name
+            or selection.selected_platform != "BUFF"
+            or selection.selected_strategy
+            != SCANNER_STRICT_BUFF_SELECTION_STRATEGY
+            or type(quote.market_hash_name) is not str
+            or quote.market_hash_name != requested_name
+            or type(quote.source) is not str
+            or quote.source != SCANNER_STRICT_BUFF_SOURCE
+            or type(quote.price_cny) is not Decimal
+            or not quote.price_cny.is_finite()
+            or quote.price_cny <= 0
+        ):
+            raise ScannerSessionError(
+                "cached resolver returned an invalid strict BUFF quote"
+            )
+        return PriceQuote(
+            market_hash_name=requested_name,
+            price_cny=quote.price_cny,
+            source=SCANNER_STRICT_BUFF_SOURCE,
+            raw=None,
+        )
 
     async def resolve_prepared(
         self,
@@ -383,14 +584,20 @@ class RunScopedValuationSession:
                 merged_quotes[name] = entry.quote
                 continue
             merged_missing.append(name)
-            reason = (
-                "RUN_REUSE_TERMINAL_FAILURE"
-                if name in plan.memo_terminal_failures
-                else "LIVE_LOOKUP_TERMINAL_FAILURE"
-            )
-            merged_errors.append(
-                f"{reason}: item_index={index}"
-            )
+            if name in plan.memo_terminal_failures:
+                reason = (
+                    entry.failure_reason
+                    if entry.failure_reason is not None
+                    and entry.failure_reason.startswith(
+                        "CACHE_SELECTION_TERMINAL_FAILURE: reason="
+                    )
+                    else "RUN_REUSE_TERMINAL_FAILURE"
+                )
+            elif name in plan.cache_terminal_selection_failures:
+                reason = entry.failure_reason or "CACHE_SELECTION_TERMINAL_FAILURE"
+            else:
+                reason = "LIVE_LOOKUP_TERMINAL_FAILURE"
+            merged_errors.append(f"{reason}: item_index={index}")
 
         # Build a session-local fixed provider and apply valuation
         # field application via the existing ValuationService. This

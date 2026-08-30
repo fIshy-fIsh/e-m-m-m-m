@@ -227,9 +227,9 @@ Atomic valuation budget:
 - `biddingPrice` and `biddingCount` are not read and do not substitute for a missing or unusable sell price.
 - The selected aggregate sell price is not an executable listing price or a guaranteed realized proceeds.
 
-## 9. Phase 12D Cache / Refresh Infrastructure (implemented; scanner integration pending)
+## 9. Phase 12D Cache / Refresh Infrastructure and Scanner Reads
 
-Persistent cache snapshot infrastructure that is unit-tested and opt-in behind `STEAMDT_PRICE_CACHE_BACKEND`:
+Persistent cache snapshot infrastructure is unit-tested and opt-in behind `STEAMDT_PRICE_CACHE_BACKEND`:
 
 - `PriceCache` (async cache protocol)
 - `InMemoryPriceCache`
@@ -241,7 +241,9 @@ Persistent cache snapshot infrastructure that is unit-tested and opt-in behind `
 - `SteamDTRefreshPlanner` (dedup + chunk)
 - `SteamDTRefreshExecutor` (sequential chunks; `max_concurrency` is only a work bound, not a rate limit)
 
-The live scanner valuation path does **not** import any Phase 12D cache module. Phase 14B implements scanner-owned run-scoped exact-name success/failure reuse with a fresh session inside every `run_once()` call. The session is not persistent and nothing is reused across runs. `D-CACHE-001` remains Active as the broader migration record because persistent FRESH_ONLY scanner cache reads are **not implemented**; scanner write-after-live is also not implemented and remains out of scope for initial Phase 14C.
+Phase 14B implements scanner-owned run-scoped exact-name success/failure reuse with a fresh session inside every `run_once()` call. Phase 14C adds optional scanner service/session persistent cache reads through `ScannerCachedBuffPriceResolver`: the scanner-owned wrapper accepts the existing cache-reader boundary and internally constructs `SteamDTCachedPriceResolver` with the fixed `select_scanner_cached_buff_price` selector, so an arbitrary generic-selector resolver cannot enter the public scanner API. Stage A consults run memo first, then reads sequentially with `PriceCacheReadPolicy.FRESH_ONLY`; cached candidates are selected only by the adapter delegating to `select_buff_output_price`. Selected success independently requires `lookup.state == FRESH`; strict selection failures retain their stable reason across same-run memo reuse. MISS, EXPIRED, and POLICY_BLOCKED outcomes become NEW LIVE demand. Cache backend/codec/adapter/resolver errors propagate; Stage B performs no cache read, write, or refresh call.
+
+The session is not persistent and nothing in its memo is reused across runs. The scanner never writes cache after live success. Stored snapshot `PriceCachePolicy` is writer-owned; no scanner read-time numeric TTL config exists. `scripts/run_live_scan_once.py` does not yet construct/inject the resolver (Phase 14D), so `D-CACHE-001` remains Active until default runtime composition lands.
 
 ## 10. Data Model (current production, in-memory)
 

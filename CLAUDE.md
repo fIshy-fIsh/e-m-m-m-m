@@ -66,8 +66,8 @@
 6. 检查是否把未确认的 BUFF API 细节错误写死进代码。
 
 ## 当前阶段指针
-- 阶段：`PHASE_14B_COMPLETE`（run-scoped exact-name valuation reuse 已实现；persistent Phase12D scanner cache 尚未集成；分支 `feature/scanner-valuation-integration`）。
-- Phase 14B production / test checkpoint：本分支 commit `add run-scoped scanner valuation reuse`（完成后通过 `git rev-parse HEAD` 实时确认）；新增 `app/services/scanner_valuation_session.py` 与 45 个 offline regression tests；全套验证 `3382 passed, 23 skipped, 1 warning`。
+- 阶段：`PHASE_14C_COMPLETE`（scanner service/session 已实现 Phase12D FRESH_ONLY cache READ；default CLI composition 与 scanner write-after-live 尚未实现；分支 `feature/scanner-valuation-integration`）。
+- Phase 14C production / test checkpoint：本分支 commit `add scanner fresh-only price cache reads`（完成后通过 `git rev-parse HEAD` 实时确认）；新增 strict-BUFF cached selector 与 scanner-owned resolver wrapper，将 optional cache-reader dependency 接入 Stage A；全套验证 `3413 passed, 23 skipped, 1 warning`。
 - Post-Phase-13T handoff baseline：`bb09068`（`sync AI context after Phase 13T`）。
 - Pre-R0-C DEV tip (historical)：`4c2f1ef`（`sync docs after minimum CI validation`）。
 - Post-R0-C canonical main：`9cfaf36`（`sync docs after R0-C repository consolidation`），parents `{24ece858, 3aa44e93}`，tree `7a39d28`。作为祖先节点保留；当前 canonical main 已迁移到下方 P3。
@@ -80,8 +80,9 @@
 - R0-A / R0-B / R0-C / R0-C docs checkpoint / R0-D：COMPLETE。R0-D 由 PR #3 完成 docs checkpoint 合并与 CI green（run 33240760167）验证。
 - Phase 14A：COMPLETE — design freeze。`specs/2026-08-29-scanner-valuation-integration-design-freeze/{requirements,plan,validation}.md`；commit `e98cd97`。Phase 14A-R1 coherence correction：COMPLETE，commit `bb056e5`，decision `D-PHASE14A-R1-COHERENCE`。
 - Phase 14B：COMPLETE — run-scoped exact-name valuation reuse。每次 `LiveScannerOrchestrator.run_once()` 创建新的 scanner-owned session；async Stage A prepare 零 provider calls；atomic admission 后 Stage B 仅请求 NEW LIVE exact names；success 与 terminal failure 在同一 run 内复用；跨 run 不复用。`max_valuation_requests_per_run` runtime 含义迁移为 NEW LIVE exact-name demand；legacy logical counters 保持；new additive counters active；cache counters 在 14B 中保持零。`ValuationService` formula 未修改。
-- `D-CACHE-001` 仍为 Active broader migration record：其 run-scoped reuse 部分已由 14B 迁移；persistent Phase12D scanner-cache integration / FRESH_ONLY reads / scanner writeback 仍 NOT IMPLEMENTED。
-- Phase 14C：NEXT / NOT STARTED / NOT AUTHORIZED（Phase12D FRESH_ONLY cache READ integration；strict BUFF cached selector；initial write-after-live out of scope）。
+- `D-CACHE-001` 仍为 Active broader migration record：14B 已迁移 run-scoped reuse；14C 已迁移 scanner service/session FRESH_ONLY persistent cache READ；default `run_live_scan_once.py` runtime composition 仍待 14D。scanner write-after-live 仍 NOT IMPLEMENTED。
+- Phase 14C：COMPLETE — optional cache-reader injection；scanner-owned wrapper 内部固定构造 `SteamDTCachedPriceResolver(selector=select_scanner_cached_buff_price)`；Stage A 严格 memo → FRESH_ONLY cache → live classification；cached selector 复用 `select_buff_output_price`，generic cross-platform resolver 无法进入 public scanner composition；无 stale consumption、无 cache write、无 refresh service。snapshot 的 stored `PriceCachePolicy` 由 writer 管理，无 scanner read-time numeric TTL config。
+- Phase 14D：NEXT / NOT STARTED / NOT AUTHORIZED（default one-shot CLI cache composition + scale / bounded-live validation）。
 - `main` 未被 Phase 14A 推送修改；HEAD 当前在 `feature/scanner-valuation-integration`，需通过 `git rev-parse HEAD` 实时确认。
 
 ## 禁止事项
