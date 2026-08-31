@@ -552,21 +552,24 @@ The components remain in the tree as paused, offline-tested optional infrastruct
 
 - **Phase 14B and Phase 14C are COMPLETE.** Run reuse, NEW-LIVE accounting, and optional scanner service/session FRESH_ONLY cache reads are implemented and offline validated. `D-PHASE14B-COMPLETE` and `D-PHASE14C-COMPLETE` record the checkpoints.
 - **Phase 14:** `CANONICAL MAIN INTEGRATION COMPLETE`. Phase 14A / 14A-R1 / 14B / 14C / 14D merged to main via PR #4 at P4 = `26c69bae9e482452f56f380277d8b10fefa29d52` (parents `{24c95c029..., 47227b33...}`, tree `39a82914...`). Main push CI run `33320657978` SUCCESS. Feature branch `feature/scanner-valuation-integration` safely retired.
-- **Valuation Budget Calibration:** NOT STARTED / NOT AUTHORIZED.
+- **Valuation Budget Calibration Phase 15A:** **OFFLINE MEASUREMENT COMPLETE** on `feature/valuation-budget-calibration`. The primary metric is exact `run_unique_output_names` across ordered default (`2 / 256`) recipe candidates. A 439-record structural census and 192 deterministic replay observations use normalized pinned identity/metadata and the real COHORT_DEPTH universe builder, scanner composition, recipe solver, and trade-up output construction. Evidence is in `research/valuation_budget_calibration/results.json` and `REPORT.md`; tests are in `tests/test_valuation_budget_calibration.py`. The replay distribution is scenario-coverage evidence, not a market-frequency distribution (`PHASE15A_REPRESENTATIVENESS_LIMITATION`). No production code or budget/default/hard-max/CLI/atomic semantics changed.
+- **Valuation Budget Calibration Phase 15B:** **POLICY FREEZE COMPLETE** on `feature/valuation-budget-calibration`. Decision artifact: `research/valuation_budget_calibration/POLICY_DECISION.md`; decision log: `D-VALUATION-BUDGET-POLICY-001`. `NO_PRODUCTION_DEFAULT_CHANGE_PENDING_REPRESENTATIVE_SNAPSHOT`: default remains `5`. `HARD_MAX_60_REVIEW_DEFERRED`: hard max remains `60`. Phase 15A designed-corpus shares are not production probabilities. No production/test/script/workflow or numeric policy change; representative read-only listing-snapshot calibration is the next gate.
 - Scanner write-after-live remains unimplemented and out of scope.
 - `D-CACHE-001` is superseded for the originally tracked run-reuse + CLI composition gap; deferred write/refresh concerns remain separate future work and continue to require explicit authorization.
 - **R0-C Main History Consolidation is COMPLETE.** Post-R0-C main tip is `9cfaf36db028661075a495587ac32e51256fffe8` (now an ancestor of P2).
 - **R0-C docs checkpoint is MERGED / VERIFIED.** Canonical `main` tip is `328269112f229faf3fce4cf0be4b9c7875582b65` (P2); topology / ancestry / tree / CI workflow blob all verified; final-main push CI green.
 - **R0-D cleanup execution and completion checkpoint are COMPLETE.** R0-D1 audit, R0-D2 / R0-D2-BIS / R0-D2-TER, and PR #3 post-merge verification are complete. Canonical `main` is P3 (`24c95c0...`). Cleanup summary is captured in `PROJECT_CONTEXT.md` and `specs/roadmap.md`.
 - **R0-D completion documentation checkpoint PR is MERGED / VERIFIED.** PR #3 (`R0-D completion documentation checkpoint`) merged on `main` using `Create a merge commit` at P3 = `24c95c029f583d5cc0b0a67986e48c06d0ef7957`; final-main push CI green (`CI` / run `33240760167`, conclusion `success`). R0-D is COMPLETE.
-- Scanner Valuation Integration: Phase 14A / 14A-R1 / 14B / 14C / 14D are **canonically integrated on `main`** via PR #4. Valuation Budget Calibration remains pending.
-- Valuation Budget Calibration is **PROPOSED / NOT AUTHORIZED**: measure unique-output cardinality offline before proposing any numeric cap.
+- Scanner Valuation Integration: Phase 14A / 14A-R1 / 14B / 14C / 14D are **canonically integrated on `main`** via PR #4.
+- Valuation Budget Calibration Phase 15A is **OFFLINE MEASUREMENT COMPLETE** at `df621d4`; Phase 15A branch CI run `33325598811` / `quality` SUCCESS.
+- Valuation Budget Calibration Phase 15B is **POLICY FREEZE COMPLETE**: production default remains `5`; hard max remains `60`; representative read-only listing snapshots are required before any numeric policy change.
 - Any future development phase must be explicitly authorized and must not silently relax `D-ENUM-001`–`D-ENUM-004`, `D-CACHE-001..004`, `D-BUDGET-001`, `D-ACCOUNTING-001`, `D-SCANNER-001`, `D-VALIDATION-001`, `D-MEMORY-001`, `D-ADAPTER-003`, or `D-ADAPTER-004`.
 
 ## Current Blockers
 
-- None for the completed Phase 14C migration.
-- Valuation Budget Calibration requires explicit authorization before implementation.
+- No implementation blocker: Phase 15B intentionally authorizes no numeric production-policy change.
+- Representative read-only listing-snapshot evidence with a declared sampling frame and enough observations across time is required before any default-budget proposal.
+- Any hard-maximum change additionally requires separate external-call safety-envelope review and explicit authorization.
 
 ## Standing Prohibitions (re-asserted)
 

@@ -3,20 +3,21 @@
 ## Current Position
 
 ```text
-Current phase:                            PHASE_14C_COMPLETE
+Current phase:                            PHASE_15B_POLICY_FREEZE_COMPLETE
 
 Current capability:                       read-only bounded multi-recipe one-shot scanner
-                                          with run-scoped exact-name reuse and optional
-                                          Phase12D FRESH_ONLY persistent cache reads
+                                          plus offline exact-output-name calibration
+                                          evidence and no-change budget policy freeze
 
-Active development line:                  feature/scanner-valuation-integration
-                                          (canonical main P3 unchanged)
+Active development line:                  feature/valuation-budget-calibration
+                                          (research/tests/docs/policy only)
 
-Latest production / test checkpoint:      Phase 14C branch commit
-                                          add scanner fresh-only price cache reads
-                                          (verify exact SHA from Git)
-                                          full validation: 3413 passed /
-                                          23 skipped / 1 warning
+Latest Phase 15 checkpoints:              Phase 15A df621d4
+                                          measure scanner valuation output cardinality
+                                          CI run 33325598811 SUCCESS
+                                          Phase 15B policy freeze:
+                                          default 5 unchanged / hard max 60 unchanged
+                                          representative snapshot gate required
 
 Post-Phase-13T documentation /
 handoff baseline:                         bb09068
@@ -81,7 +82,18 @@ cache READ integration:                  COMPLETE
                                         default CLI composition remains pending
 
 Phase 14D — CLI composition + scale /
-bounded-live validation:                NEXT / NOT STARTED / NOT AUTHORIZED
+bounded-live validation:                COMPLETE
+
+Phase 15A — Valuation Budget
+Calibration offline measurement:        COMPLETE
+                                        no production budget change
+
+Phase 15B — Valuation Budget
+Policy decision / freeze:               COMPLETE
+                                        default 5 unchanged
+                                        hard max 60 unchanged
+                                        representative snapshot required
+                                        before numeric policy change
 
 Live repository HEAD / branch / tree:     MUST be verified from Git at task entry;
                                         do not infer current HEAD from this document
@@ -641,22 +653,72 @@ status:
   COMPLETE — see "Completed — Phase 14D" above
 ```
 
-### Later — Valuation Budget Calibration
+### Completed — Phase 15A Valuation Budget Calibration: offline measurement
 
 ```text
-scope:
-  offline measurement of unique output-name cardinality distribution
-    (min / P25 / median / P75 / P90 / P95 / max)
-    under the current cohort-depth allocation and the default
-    bounded enumeration (2 / 256)
-  evidence-based max_valuation_requests_per_run policy
+status:
+  COMPLETE on feature/valuation-budget-calibration
 
-constraints:
-  no future numeric cap is hardcoded; the cap remains a separately
-  configurable parameter
-  CLI flag semantics unchanged
-  atomic budget semantics unchanged
+measurement:
+  primary metric = run_unique_output_names
+  exact-name union across ordered default scanner recipe candidates
+  empty persistent cache + fresh run memo interpretation
+  current COHORT_DEPTH allocation and fixed default enumeration 2 / 256
+  R-7 empirical quantiles with exact rational arithmetic
+
+corpus:
+  normalized pinned identity + metadata snapshots only
+  structural census across eligible input cohorts / next-rarity pools
+  deterministic synthetic offer-order replays through the real universe
+    builder, scanner composition, recipe solver, and trade-up output engine
+  no BUFF / SteamDT / Redis / .env / credentials
+  synthetic orderings make no market-frequency claim
+
+artifacts:
+  research/valuation_budget_calibration/results.json
+  research/valuation_budget_calibration/REPORT.md
+  research/valuation_budget_calibration/{corpus,measurement,report}.py
+  tests/test_valuation_budget_calibration.py
+
+policy boundary:
+  no max_valuation_requests_per_run default/hard-max/CLI change
+  no atomic NEW-LIVE semantics change
+  no production code change
+  Phase 15B policy decision completed separately below
 ```
+
+### Completed — Phase 15B Valuation Budget Policy Decision / Freeze
+
+```text
+status:
+  COMPLETE on feature/valuation-budget-calibration
+
+review conclusion:
+  NO_PRODUCTION_DEFAULT_CHANGE_PENDING_REPRESENTATIVE_SNAPSHOT
+  production default remains 5
+  HARD_MAX_60_REVIEW_DEFERRED
+  hard maximum remains 60
+
+reason:
+  Phase 15A establishes structural demand and designed scenario coverage,
+    not expected production workload or production-run probabilities
+  designed-corpus threshold shares must not be reported as real-run coverage
+  structurally valid default-universe demand reaches 95, but raising the
+    hard maximum would expand the external-call safety envelope
+
+next numeric policy gate:
+  separately authorized representative read-only listing-snapshot calibration
+  declared sampling window/frame and goods-universe selection
+  timestamp, exact identity, price, paintwear, intrinsic mode, rarity,
+    collection, missingness, and enough observations across time
+  preserve cohort-depth, default 2 / 256, strict composition, exact
+    NEW-LIVE semantics, and all read-only/non-trading constraints
+
+artifact:
+  research/valuation_budget_calibration/POLICY_DECISION.md
+  D-VALUATION-BUDGET-POLICY-001
+```
+
 
 ## Deferred
 
