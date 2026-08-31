@@ -3,21 +3,21 @@
 ## Current Position
 
 ```text
-Current phase:                            PHASE_15A_MEASUREMENT_COMPLETE
+Current phase:                            PHASE_15B_POLICY_FREEZE_COMPLETE
 
 Current capability:                       read-only bounded multi-recipe one-shot scanner
                                           plus offline exact-output-name calibration
-                                          evidence; production budget unchanged
+                                          evidence and no-change budget policy freeze
 
 Active development line:                  feature/valuation-budget-calibration
-                                          (offline research/tests/docs only)
+                                          (research/tests/docs/policy only)
 
-Latest Phase 15A checkpoint:              measure scanner valuation output cardinality
-                                          (verify exact SHA from Git after commit)
-                                          192 deterministic replay observations /
-                                          439 structural census records
-                                          artifacts under
-                                          research/valuation_budget_calibration/
+Latest Phase 15 checkpoints:              Phase 15A df621d4
+                                          measure scanner valuation output cardinality
+                                          CI run 33325598811 SUCCESS
+                                          Phase 15B policy freeze:
+                                          default 5 unchanged / hard max 60 unchanged
+                                          representative snapshot gate required
 
 Post-Phase-13T documentation /
 handoff baseline:                         bb09068
@@ -87,7 +87,13 @@ bounded-live validation:                COMPLETE
 Phase 15A — Valuation Budget
 Calibration offline measurement:        COMPLETE
                                         no production budget change
-                                        Phase 15B NOT STARTED / NOT AUTHORIZED
+
+Phase 15B — Valuation Budget
+Policy decision / freeze:               COMPLETE
+                                        default 5 unchanged
+                                        hard max 60 unchanged
+                                        representative snapshot required
+                                        before numeric policy change
 
 Live repository HEAD / branch / tree:     MUST be verified from Git at task entry;
                                         do not infer current HEAD from this document
@@ -678,25 +684,39 @@ policy boundary:
   no max_valuation_requests_per_run default/hard-max/CLI change
   no atomic NEW-LIVE semantics change
   no production code change
-  Phase 15B policy decision NOT STARTED / NOT AUTHORIZED
+  Phase 15B policy decision completed separately below
 ```
 
-### Later — Phase 15B Valuation Budget Policy Decision
+### Completed — Phase 15B Valuation Budget Policy Decision / Freeze
 
 ```text
 status:
-  NOT STARTED / NOT AUTHORIZED
+  COMPLETE on feature/valuation-budget-calibration
 
-scope:
-  review Phase 15A structural and replay evidence
-  obtain/assess the missing representative market-frequency evidence
-  make a separate explicit policy decision, if authorized
+review conclusion:
+  NO_PRODUCTION_DEFAULT_CHANGE_PENDING_REPRESENTATIVE_SNAPSHOT
+  production default remains 5
+  HARD_MAX_60_REVIEW_DEFERRED
+  hard maximum remains 60
 
-constraints:
-  Phase 15A reference thresholds are analysis only, not defaults
-  no future numeric cap is implicitly authorized by Phase 15A
-  the cap remains separately configurable
-  CLI flag semantics and atomic NEW-LIVE semantics remain unchanged
+reason:
+  Phase 15A establishes structural demand and designed scenario coverage,
+    not expected production workload or production-run probabilities
+  designed-corpus threshold shares must not be reported as real-run coverage
+  structurally valid default-universe demand reaches 95, but raising the
+    hard maximum would expand the external-call safety envelope
+
+next numeric policy gate:
+  separately authorized representative read-only listing-snapshot calibration
+  declared sampling window/frame and goods-universe selection
+  timestamp, exact identity, price, paintwear, intrinsic mode, rarity,
+    collection, missingness, and enough observations across time
+  preserve cohort-depth, default 2 / 256, strict composition, exact
+    NEW-LIVE semantics, and all read-only/non-trading constraints
+
+artifact:
+  research/valuation_budget_calibration/POLICY_DECISION.md
+  D-VALUATION-BUDGET-POLICY-001
 ```
 
 

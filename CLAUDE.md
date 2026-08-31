@@ -66,9 +66,12 @@
 6. 检查是否把未确认的 BUFF API 细节错误写死进代码。
 
 ## 当前阶段指针
-- 阶段：`PHASE_15A_MEASUREMENT_COMPLETE`（offline measurement only；分支 `feature/valuation-budget-calibration`；Phase 15B policy decision NOT STARTED / NOT AUTHORIZED）。
+- 阶段：`PHASE_15B_POLICY_FREEZE_COMPLETE`（policy/docs only；分支 `feature/valuation-budget-calibration`；无 production numeric policy change）。
+- Phase 15B decision：`NO_PRODUCTION_DEFAULT_CHANGE_PENDING_REPRESENTATIVE_SNAPSHOT`；production default 保持 `5`；`HARD_MAX_60_REVIEW_DEFERRED`；hard max 保持 `60`。Phase 15A designed replay quantiles/threshold shares 是 structural coverage evidence，不是 production-run probability distribution。
+- Phase 15B artifact：`research/valuation_budget_calibration/POLICY_DECISION.md`；下一 numeric policy gate 需要 separately authorized representative read-only listing-snapshot calibration。
 - Phase 15A evidence：`research/valuation_budget_calibration/` 使用规范化 pinned identity/metadata snapshots，经 current COHORT_DEPTH universe builder + real scanner composition/recipe solver/trade-up output construction，固定 default enumeration `2 / 256`；192 个 deterministic replay observations；结构 census 439 records；报告 `results.json` / `REPORT.md`；没有生产 budget/default/hard-max/CLI/atomic semantics 变化。
-- Phase 15A production diff：empty；只新增 research harness/artifacts、focused calibration tests 和最小 docs checkpoint。
+- Phase 15A checkpoint：`df621d4de162080293553874f7b374a58bc4e6be`（`measure scanner valuation output cardinality`）；branch CI run `33325598811` / job `quality` SUCCESS。
+- Phase 15A/15B production diff：empty；仅 research harness/artifacts、focused calibration tests 和最小 docs/policy checkpoint。
 - Post-Phase-13T handoff baseline：`bb09068`（`sync AI context after Phase 13T`）。
 - Pre-R0-C DEV tip (historical)：`4c2f1ef`（`sync docs after minimum CI validation`）。
 - Post-R0-C canonical main：`9cfaf36`（`sync docs after R0-C repository consolidation`），parents `{24ece858, 3aa44e93}`，tree `7a39d28`。作为祖先节点保留；当前 canonical main 已迁移。
@@ -81,7 +84,7 @@
 - 权威交接文档：`docs/ai-context/DEVELOPMENT_HANDOFF.md`。
 - R0-A / R0-B / R0-C / R0-C docs checkpoint / R0-D：COMPLETE。R0-D 由 PR #3 完成 docs checkpoint 合并与 CI green（run 33240760167）验证。
 - Phase 14：CANONICAL MAIN INTEGRATION COMPLETE — Phase 14A / 14A-R1 / 14B / 14C / 14D 通过 PR #4 合并到 main。Phase 14 集成包括：run-scoped exact-name reuse；NEW LIVE request-budget accounting；FRESH_ONLY Phase 12D scanner cache reads；strict BUFF cached selection；default one-shot CLI cache composition（inmemory default，可选 Redis）；无 scanner write-after-live、无 refresh/scheduler/TTL env config。
-- Phase 15B：NOT STARTED / NOT AUTHORIZED；Phase 15A 不推荐最终 production cap。
+- Phase 15B：POLICY FREEZE COMPLETE；default `5` 与 hard max `60` 均 unchanged；代表性 read-only snapshot calibration 未单独授权，任何 numeric policy implementation 仍 NOT AUTHORIZED。
 
 ## 禁止事项
 - 自动购买
