@@ -66,9 +66,9 @@
 6. 检查是否把未确认的 BUFF API 细节错误写死进代码。
 
 ## 当前阶段指针
-- 阶段：`PHASE_15C2_IMPLEMENTATION_COMPLETE`（research-only representative snapshot planner/schema/collector/storage/replay/one-shot CLI；分支 `feature/representative-snapshot-calibration`；14-day campaign NOT STARTED / NOT AUTHORIZED）。
+- 阶段：`PHASE_15C2B_LIVE_SMOKE_COMPLETE`（exactly one non-policy live interface observation；分支 `feature/representative-snapshot-calibration`；representative campaign NOT STARTED / NOT AUTHORIZED）。
 - Phase 15C-2 implementation：严格 schema-v1（unknown/duplicate/type/Decimal/count/status/provenance fail closed）；deterministic snapshot ID/jitter；exact 10-page sequential collector with >=2-second request-start pacing and no retry；immutable canonical JSON + SHA-256 + append-only manifest；COMPLETE-only fully offline replay fixed `2 / 256`；plan-only zero HTTP。
-- Phase 15C-2 smoke：`NOT_EXECUTED`；commit-derived Industrial Grade/normal stratum 在执行时没有落入 frozen scheduled+30-minute window，故按协议零 live request、无 artifact、无 policy evidence。
+- Phase 15C-2B smoke：`EXECUTED / COMPLETE`；fixed campaign `phase15c2b-non-policy-smoke-a869cd09`，Industrial Grade / normal，nominal `2026-08-31T15:17Z` / scheduled `15:25Z` / valid-until `15:55Z`；exact 10 BUFF requests；manifest/schema/canonical bytes/SHA PASS；socket-disabled offline replay PASS（recipes 2，run-unique 45，per-recipe `[45,35]`，recipe-2 incremental 0，states 2）；artifact outside Git；仅 interface compatibility，非 representative/policy evidence。
 - Phase 15C-1 protocol remains controlling：balanced eight productive rarity/mode strata；每 observation 重建 current 10-goods COHORT_DEPTH / target 3 / Souvenir include universe；14 UTC days / 112 planned attempts / minimum 96 COMPLETE / 10 per stratum / 12 UTC dates；live datasets 默认不进 Git。
 - Interface boundary：current anonymous page-1/default-sort path + existing identity/intrinsic/metadata bindings 足够支持 narrow current-scanner frame；full-market/order-book/pagination-complete claim 仍为 `PHASE15C1_LIVE_COLLECTION_INTERFACE_GAP`。
 - Phase 15B decision remains controlling：`NO_PRODUCTION_DEFAULT_CHANGE_PENDING_REPRESENTATIVE_SNAPSHOT`；production default 保持 `5`；`HARD_MAX_60_REVIEW_DEFERRED`；hard max 保持 `60`。Phase 15A designed replay quantiles/threshold shares 是 structural coverage evidence，不是 production-run probability distribution。
@@ -86,7 +86,7 @@
 - 权威交接文档：`docs/ai-context/DEVELOPMENT_HANDOFF.md`。
 - R0-A / R0-B / R0-C / R0-C docs checkpoint / R0-D：COMPLETE。R0-D 由 PR #3 完成 docs checkpoint 合并与 CI green（run 33240760167）验证。
 - Phase 14：CANONICAL MAIN INTEGRATION COMPLETE — Phase 14A / 14A-R1 / 14B / 14C / 14D 通过 PR #4 合并到 main。Phase 14 集成包括：run-scoped exact-name reuse；NEW LIVE request-budget accounting；FRESH_ONLY Phase 12D scanner cache reads；strict BUFF cached selection；default one-shot CLI cache composition（inmemory default，可选 Redis）；无 scanner write-after-live、无 refresh/scheduler/TTL env config。
-- Phase 15C-2：IMPLEMENTATION COMPLETE；representative 14-day campaign、scheduler/background collection 与任何 numeric policy change 均 NOT STARTED / NOT AUTHORIZED。
+- Phase 15C-2B：LIVE INTERFACE SMOKE COMPLETE；representative 14-day campaign、scheduler/background collection 与任何 numeric policy change 均 NOT STARTED / NOT AUTHORIZED。
 
 ## 禁止事项
 - 自动购买

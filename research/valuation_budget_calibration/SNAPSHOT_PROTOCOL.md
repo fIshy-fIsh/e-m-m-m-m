@@ -7,7 +7,7 @@
 - **Phase:** 15C-2 implementation checkpoint
 - **Implementation status:** research-only planner, strict schema, collector, immutable storage/manifest, offline replay, and one-shot CLI implemented on `feature/representative-snapshot-calibration`
 - **Representative campaign:** NOT STARTED / NOT AUTHORIZED
-- **Bounded interface smoke:** NOT_EXECUTED — commit-derived Industrial Grade/normal stratum had no protocol-valid scheduled slot within the frozen 30-minute execution window; zero live requests
+- **Bounded interface smoke:** EXECUTED once under Phase 15C-2B — fixed campaign `phase15c2b-non-policy-smoke-a869cd09`, Industrial Grade / normal, nominal `2026-08-31T15:17:00Z`, scheduled `15:25:00Z`, valid until `15:55:00Z`; 10 sequential BUFF page-1/default-sort requests; `COMPLETE`; strict manifest/schema/canonical-bytes/SHA validation PASS; socket-disabled offline replay PASS with 2 recipes, 45 run-unique names, per-recipe counts `[45,35]`, recipe-2 incremental NEW `0`, and 2 explored states. Artifact remains outside Git. This is interface compatibility evidence only, not representative/policy evidence.
 - **Production policy:** default `5` unchanged; hard maximum `60` unchanged
 
 This remains the normative research protocol. The implementation does not authorize the 14-day campaign, scheduler/background collection, dataset commit, or numeric policy change.

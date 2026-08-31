@@ -3,7 +3,7 @@
 ## Current Position
 
 ```text
-Current phase:                            PHASE_15C2_IMPLEMENTATION_COMPLETE
+Current phase:                            PHASE_15C2B_LIVE_SMOKE_COMPLETE
 
 Current capability:                       read-only bounded multi-recipe one-shot scanner
                                           plus offline calibration evidence,
@@ -19,7 +19,8 @@ Latest Phase 15 checkpoints:              Phase 15A/15B merged via PR #6 at
                                           Phase 15C-1 2af6d4c /
                                             CI 33352295570 SUCCESS
                                           Phase 15C-2 implementation complete;
-                                          campaign NOT STARTED
+                                          Phase 15C-2B one live interface smoke
+                                            COMPLETE; campaign NOT STARTED
 
 Post-Phase-13T documentation /
 handoff baseline:                         bb09068
@@ -813,9 +814,17 @@ validation:
   production/app/workflow/dependency/budget diff empty
 
 smoke:
-  NOT_EXECUTED; commit-derived Industrial Grade/normal stratum had no
-    protocol-valid scheduled slot within frozen 30-minute window
-  zero live requests; no artifact; not representative evidence
+  Phase 15C-2 initial attempt NOT_EXECUTED due frozen window timing
+  Phase 15C-2B exactly one fixed-window interface smoke EXECUTED
+  campaign phase15c2b-non-policy-smoke-a869cd09
+  Industrial Grade / normal; nominal 15:17Z / scheduled 15:25Z /
+    valid-until 15:55Z on 2026-08-31
+  10 BUFF page-1/default-sort requests; COMPLETE
+  manifest/schema/canonical bytes/SHA validation PASS
+  socket-disabled offline replay PASS:
+    recipes 2 / run-unique 45 / per-recipe 45,35 /
+    recipe-2 incremental 0 / states 2
+  artifact outside Git; interface-only, not representative/policy evidence
 
 next:
   representative 14-day / 112-attempt campaign NOT STARTED / NOT AUTHORIZED

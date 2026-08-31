@@ -10,7 +10,7 @@ Phase 15C-2 implemented the frozen protocol on the same long-lived feature branc
 - replay requires COMPLETE, validates hash/provenance, fixes `2 / 256`, and performs no network I/O;
 - focused schema/storage/redaction/collector/replay/CLI/AST tests added;
 - representative 14-day campaign remains NOT STARTED / NOT AUTHORIZED;
-- one bounded interface smoke was **NOT_EXECUTED** because the commit-derived Industrial Grade/normal stratum had no protocol-valid slot inside the frozen 30-minute execution window; zero live requests were issued;
+- Phase 15C-2B later executed exactly one fixed-window interface smoke: campaign `phase15c2b-non-policy-smoke-a869cd09`, Industrial Grade / normal, nominal `2026-08-31T15:17:00Z`, scheduled `15:25:00Z`, valid until `15:55:00Z`; 10 requests; COMPLETE; strict storage/schema/bytes/SHA validation PASS; socket-disabled offline replay PASS (`recipe_count=2`, `run_unique_output_names=45`, per-recipe counts `[45,35]`, recipe-2 incremental NEW `0`, states `2`); artifact outside Git; non-representative/non-policy evidence only;
 - default `5` and hard max `60` remain unchanged.
 
 ## Validation strategy
