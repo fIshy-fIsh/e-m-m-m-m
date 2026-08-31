@@ -4,11 +4,13 @@
 
 - **Protocol ID:** `representative-listing-snapshot-v1`
 - **Schema version:** `1`
-- **Phase:** 15C-1 design freeze only
-- **Collection status:** NOT STARTED / NOT AUTHORIZED
+- **Phase:** 15C-2 implementation checkpoint
+- **Implementation status:** research-only planner, strict schema, collector, immutable storage/manifest, offline replay, and one-shot CLI implemented on `feature/representative-snapshot-calibration`
+- **Representative campaign:** NOT STARTED / NOT AUTHORIZED
+- **Bounded interface smoke:** NOT_EXECUTED — commit-derived Industrial Grade/normal stratum had no protocol-valid scheduled slot within the frozen 30-minute execution window; zero live requests
 - **Production policy:** default `5` unchanged; hard maximum `60` unchanged
 
-This is the normative research protocol for a future, separately authorized Phase 15C-2 implementation. It does not authorize a live request, dataset, scheduler, or policy change.
+This remains the normative research protocol. The implementation does not authorize the 14-day campaign, scheduler/background collection, dataset commit, or numeric policy change.
 
 ## 1. Sampling unit and observable frame
 

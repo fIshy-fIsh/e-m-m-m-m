@@ -3,22 +3,23 @@
 ## Current Position
 
 ```text
-Current phase:                            PHASE_15C1_DESIGN_FREEZE_COMPLETE
+Current phase:                            PHASE_15C2_IMPLEMENTATION_COMPLETE
 
 Current capability:                       read-only bounded multi-recipe one-shot scanner
                                           plus offline calibration evidence,
-                                          no-change budget policy freeze, and
-                                          frozen representative snapshot protocol
+                                          no-change budget policy freeze,
+                                          frozen snapshot protocol, and
+                                          research-only collector/offline replay tooling
 
 Active development line:                  feature/representative-snapshot-calibration
-                                          (design/spec/research protocol only)
+                                          (research implementation/tests/docs only)
 
-Latest Phase 15 checkpoints:              Phase 15A df621d4 / CI 33325598811 SUCCESS
-                                          Phase 15B policy: 5 / 60 unchanged
-                                          Phase 15A/15B merged via PR #6 at
+Latest Phase 15 checkpoints:              Phase 15A/15B merged via PR #6 at
                                           main 7a73cc0 / CI 33350081125 SUCCESS
-                                          Phase 15C-1 protocol design frozen;
-                                          Phase 15C-2 NOT AUTHORIZED
+                                          Phase 15C-1 2af6d4c /
+                                            CI 33352295570 SUCCESS
+                                          Phase 15C-2 implementation complete;
+                                          campaign NOT STARTED
 
 Post-Phase-13T documentation /
 handoff baseline:                         bb09068
@@ -99,7 +100,12 @@ snapshot calibration design freeze:    COMPLETE
                                         balanced eight-stratum protocol
                                         14 days / 112 attempts
                                         immutable normalized JSON + manifest
-                                        Phase 15C-2 NOT AUTHORIZED
+
+Phase 15C-2 — Snapshot collector /
+offline replay implementation:         COMPLETE
+                                        research-only; production diff empty
+                                        smoke NOT_EXECUTED / zero requests
+                                        campaign NOT STARTED / NOT AUTHORIZED
 
 Live repository HEAD / branch / tree:     MUST be verified from Git at task entry;
                                         do not infer current HEAD from this document
@@ -763,9 +769,57 @@ artifacts:
   D-VALUATION-BUDGET-SNAPSHOT-PROTOCOL-001
 
 next:
-  Phase 15C-2 collector/replay implementation and live collection
-    NOT STARTED / NOT AUTHORIZED
+  Phase 15C-2 collector/replay implementation completed separately below
+  representative campaign NOT STARTED / NOT AUTHORIZED
   default 5 and hard max 60 unchanged
+```
+
+### Completed — Phase 15C-2 Representative Snapshot Collector + Offline Replay
+
+```text
+status:
+  COMPLETE on feature/representative-snapshot-calibration
+  one-shot research tooling only; no campaign/scheduler
+
+implemented:
+  snapshot_protocol.py
+    frozen snapshot ID/jitter, eight strata, exact 10-goods planner
+  snapshot_schema.py
+    strict schema v1, duplicate/unknown/type/Decimal/count/status guards
+    persisted key/value secret and raw-request-material fail-closed scan
+  snapshot_storage.py
+    canonical immutable JSON, atomic no-overwrite create, SHA-256
+    append-only canonical JSONL manifest, manifest-only planning/missed outcomes
+  snapshot_collector.py
+    exactly 10 sequential provider calls for one exact plan
+    minimum 2-second request-start pacing, no retry
+    fetch/parse -> PARTIAL; binding/catalog contradiction -> INVALID
+    stops before valuation/SteamDT/cache/risk/opportunity
+  snapshot_replay.py
+    strict COMPLETE + hash + pinned provenance validation
+    fully offline candidate reconstruction and unchanged composition 2 / 256
+    Phase 15A exact-name measurement; zero-recipe COMPLETE retained as zero
+  capture_snapshot_once.py
+    plan-only zero HTTP; explicit one-shot non-policy smoke mode only
+    artifact root outside Git; no loop/poll/scheduler
+  tests/test_representative_snapshot_calibration.py
+    focused schema/determinism/storage/redaction/collector/replay/CLI/AST gates
+
+validation:
+  focused Phase 15C-2: 29 passed
+  Phase 15A regression: 9 passed
+  protected scale suites: 4 + 20 passed
+  ruff / mypy app / diff check passed
+  production/app/workflow/dependency/budget diff empty
+
+smoke:
+  NOT_EXECUTED; commit-derived Industrial Grade/normal stratum had no
+    protocol-valid scheduled slot within frozen 30-minute window
+  zero live requests; no artifact; not representative evidence
+
+next:
+  representative 14-day / 112-attempt campaign NOT STARTED / NOT AUTHORIZED
+  default 5 / hard max 60 unchanged
 ```
 
 

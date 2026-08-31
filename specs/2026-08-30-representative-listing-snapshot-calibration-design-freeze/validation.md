@@ -1,5 +1,18 @@
 # Phase 15C-1 — Representative Listing Snapshot Calibration Design Freeze — Validation
 
+## Phase 15C-2 implementation checkpoint
+
+Phase 15C-2 implemented the frozen protocol on the same long-lived feature branch without changing this design's sampling frame:
+
+- research-only deterministic planner, strict schema-v1 parser/model, immutable snapshot storage, append-only manifest, sequential collector, offline replay, and one-shot CLI;
+- no `app/**`, production config/budget, workflow, dependency, or protected scale-test change;
+- collector uses the frozen existing universe/listing/identity/intrinsic/metadata/candidate boundaries and stops before valuation;
+- replay requires COMPLETE, validates hash/provenance, fixes `2 / 256`, and performs no network I/O;
+- focused schema/storage/redaction/collector/replay/CLI/AST tests added;
+- representative 14-day campaign remains NOT STARTED / NOT AUTHORIZED;
+- one bounded interface smoke was **NOT_EXECUTED** because the commit-derived Industrial Grade/normal stratum had no protocol-valid slot inside the frozen 30-minute execution window; zero live requests were issued;
+- default `5` and hard max `60` remain unchanged.
+
 ## Validation strategy
 
 Phase 15C-1 validates design completeness and consistency against current code and confirmed documentation. It does not validate a collector, dataset, schedule, replay implementation, or production policy because none is authorized or created.
