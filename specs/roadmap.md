@@ -99,6 +99,91 @@ Live repository HEAD / branch / tree:     MUST be verified from Git at task entr
                                         do not infer current HEAD from this document
 ```
 
+## Design Freeze — Phase 16A Recipe-first Pre-screen Architecture
+
+```text
+status:    DESIGN FREEZE COMPLETE
+           on feature/recipe-first-prescreen-design
+           docs/spec/AI-context only; no production change
+           no PR; no merge
+
+goal:
+  Freeze a new recipe-first discovery architecture that reuses the
+  mature downstream scanner/valuation stack but replaces the
+  current goods-first discovery brain with structural recipe
+  families + offline SteamDT batch pre-screen + family-targeted
+  BUFF + existing strict final valuation + existing EV/risk.
+
+OLD:
+  MarketUniverseBuilder -> bounded goods_ids
+    -> BUFF anonymous listings
+    -> candidate/enrichment pool
+    -> recipe enumeration
+    -> SteamDT final valuation
+    -> EV / risk
+
+NEW:
+  pinned CS2 metadata + pinned BUFF identity
+    -> RecipeFamilyGenerator
+    -> static structural / output geometry
+    -> static float feasibility
+    -> SteamDT batch pre-screen
+    -> coarse / scenario economics
+    -> deterministic ranking / Top-N
+    -> TargetedBuffScanPlanner
+    -> existing BUFF anonymous listing ingestion
+    -> existing identity/intrinsic/enrichment
+    -> family-constrained concrete recipe search
+    -> existing strict final SteamDT-BUFF valuation
+    -> existing EV / risk
+    -> opportunity report
+
+frozen V1 project bounds (NOT external API limits):
+  MAX_DISTINCT_COLLECTIONS_PER_FAMILY = 3
+  TOP_RANKED_FAMILIES                 = 2
+  MAX_EXACT_GOODS_IDS_PER_PRESCREEN   = 10
+
+pre-screen vs final valuation:
+  pre-screen uses SteamDT batch response as approximate ranking
+    / pruning evidence only; strict BUFF sellPrice selector,
+    case-sensitive platform == "BUFF", positive finite
+    sellPrice, single BUFF record per name; missing / unusable
+    BUFF record fails the family closed; never uses biddingPrice,
+    never substitutes a second platform, never picks lowest
+    across platforms; sellCount / updateTime retained as
+    diagnostics only.
+  final valuation remains the existing SteamDTBuffPriceProvider
+    strict path with Phase 14B run-scoped exact-name reuse and
+    Phase 14C FRESH_ONLY cache reads unchanged.
+
+phase 15C-3 defer:
+  Phase 15C-1 protocol, Phase 15C-2 tooling, Phase 15C-2B smoke
+    remain preserved on feature/representative-snapshot-calibration
+    and are referenced, not modified.
+  Phase 15C-3 representative 14-day / 112-attempt campaign
+    remains DEFERRED until recipe-first production discovery
+    path is implemented (16B / 16C / 16D / 16E) and bounded-live
+    validated (16F). Production default remains 5; hard max
+    remains 60.
+
+implementation stages (NOT in 16A; freeze only):
+  16B  RecipeFamily domain + deterministic generator +
+       structural geometry
+  16C  Static float feasibility + SteamDT batch pre-screen
+       adapter / resolver
+  16D  Coarse economics + ranking + TargetedBuffScanPlan
+  16E  Family-constrained concrete solver integration +
+       orchestrator composition behind explicit opt-in
+  16F  ONE bounded live read-only validation
+
+artifacts:
+  specs/2026-08-31-recipe-first-prescreen-design-freeze/
+    requirements.md
+    design.md
+    plan.md
+    validation.md
+```
+
 ## Development History
 
 Concise chronological milestone grouping. Detailed commit-level evidence, decision-level rationale, and step-by-step handoff live in `docs/ai-context/DEVELOPMENT_HANDOFF.md`, `docs/ai-context/DECISION_LOG.md`, and `docs/ai-context/ARCHITECTURE_STATE.md`; this roadmap does not duplicate them.

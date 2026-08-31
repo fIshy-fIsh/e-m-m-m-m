@@ -214,3 +214,105 @@ no hardcoded secrets
 ```
 
 Unknown BUFF API details remain tracked in `docs/BUFF_API_NOTES.md`. Unknown SteamDT API details remain tracked in `docs/STEAMDT_API_NOTES.md`.
+
+## Frozen Next Architecture — Phase 16A Recipe-first Pre-screen
+
+Phase 16A freezes a new recipe-first discovery architecture that
+reuses the mature downstream calculation/safety stack but replaces
+the current goods-first discovery brain. Implementation of the new
+production path is staged under Phases 16B / 16C / 16D / 16E / 16F
+and is separately gated. The current goods-first path stays in
+place; the recipe-first path is OFF by default until production
+opt-in.
+
+```text
+pinned CS2 metadata snapshot + pinned BUFF community identity snapshot
+  -> RecipeFamilyGenerator                          (16B, offline)
+       input_rarity ∈ {Consumer, Industrial, Mil-Spec, Restricted, Classified}
+       stattrak_mode ∈ {normal, stattrak}
+       MAX_DISTINCT_COLLECTIONS_PER_FAMILY = 3       (PROJECT bound)
+  -> static structural / output geometry            (16B, offline)
+       next_rarity, represented collections, eligible exact outputs,
+       per-output probability contribution, output StatTrak mode
+  -> static float feasibility                       (16C, offline)
+       required_max_avg_adjusted(T); range feasibility != executability
+  -> SteamDT batch pre-screen                       (16C, mocked transport)
+       POST /open/cs2/v1/price/batch; strict BUFF selector;
+       case-sensitive platform == "BUFF"; positive finite sellPrice;
+       one BUFF record per name; missing/unusable BUFF -> FAIL_CLOSED;
+       never biddingPrice; never second-platform; never lowest-across;
+       sellCount / updateTime retained as diagnostics only
+  -> RecipeFamilyPreScreenEconomics                 (16D, offline)
+       optimistic / base / conservative scenarios;
+       separate DTO from OpportunityMetrics;
+       never claims executability; never passes RiskFilterConfig
+  -> deterministic ranking / Top-N                  (16D, offline)
+       gates + lexicographic ranking keys
+       TOP_RANKED_FAMILIES = 2                       (PROJECT bound)
+  -> TargetedBuffScanPlanner                        (16D, offline)
+       per-family exact input market_hash_names,
+       mapped goods_ids via pinned identity,
+       MAX_EXACT_GOODS_IDS_PER_PRESCREEN = 10       (PROJECT bound)
+       MarketUniverseBuilder retained as fallback
+       structural / eligibility / goods_id mapping utility
+  -> existing BUFF anonymous listing ingestion      (16E, page-1/default-sort)
+  -> existing identity / intrinsic / enrichment     (16E, reused)
+  -> family-constrained concrete recipe search      (16E)
+       reuses enumerate_scanner_recipe_selections
+       with RecipeEnumerationConfig(2, 256)
+       proves collection_counts match, StatTrak homogeneity,
+       normal/Souvenir projection seam, exact InputItem
+       rehydration, output identity membership;
+       duplicate listing identity fails closed
+  -> existing strict final SteamDT-BUFF valuation   (16E)
+       via RunScopedValuationSession + ScannerCachedBuffPriceResolver
+       Phase 14B run-scoped exact-name reuse and
+       Phase 14C FRESH_ONLY cache reads unchanged
+  -> existing EV / risk                             (16E)
+       calculate_opportunity_metrics, evaluate_opportunity
+  -> opportunity report (LiveOpportunity)           (16E)
+```
+
+### Phase 16A frozen V1 project bounds
+
+```text
+MAX_DISTINCT_COLLECTIONS_PER_FAMILY = 3       (not an external API limit)
+TOP_RANKED_FAMILIES                 = 2
+MAX_EXACT_GOODS_IDS_PER_PRESCREEN   = 10
+batch-size cap per pre-screen call  = 10       (not a confirmed SteamDT limit)
+```
+
+### Pre-screen vs final valuation separation
+
+- The SteamDT batch pre-screen uses the strict BUFF selector as
+  approximate ranking / pruning evidence only.
+- It NEVER produces a `LiveOpportunity`.
+- It NEVER passes the existing `RiskFilterConfig`.
+- It uses a separate `RecipeFamilyPreScreenEconomics` DTO; it does
+  not reuse `OpportunityMetrics`.
+- Final executable valuation of concrete candidates remains the
+  existing strict `SteamDTBuffPriceProvider` path.
+
+### Phase 15C-3 defer
+
+Phase 15C-1 protocol, Phase 15C-2 tooling, and Phase 15C-2B
+smoke remain preserved on `feature/representative-snapshot-calibration`.
+Phase 15C-3 representative 14-day / 112-attempt campaign is
+DEFERRED until recipe-first production discovery is implemented
+and bounded-live validated. Production default remains `5`;
+hard max remains `60`.
+
+### Safety / contract preservation
+
+The new architecture preserves:
+
+- V1 read-only market interaction;
+- exact pinned identity only; no fuzzy / casefold / alias;
+- canonical non-Souvenir output rule (May-2026 standard);
+- `MemoryError` propagation per `D-MEMORY-001`;
+- no auto-buy / auto-login / cookie / captcha bypass / risk-control
+  bypass / browser automation;
+- no second-platform fallback / no biddingPrice substitution / no
+  metadata-zero reuse / no probability renormalization;
+- production default `5`, hard max `60` unchanged;
+- no invented BUFF / SteamDT details.

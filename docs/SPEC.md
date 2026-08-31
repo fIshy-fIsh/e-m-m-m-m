@@ -380,3 +380,97 @@ This specification is the durable functional contract. The current position in t
 ## 16. Unconfirmed BUFF API Assumptions
 
 Still unconfirmed items remain tracked in `docs/BUFF_API_NOTES.md`. The scanner must continue to operate without resolving them; if an unconfirmed item becomes necessary for a future phase, the project must record the TODO rather than invent the implementation.
+
+## 17. Phase 16A — Recipe-first Pre-screen Architecture Design Freeze
+
+Phase 16A freezes a new recipe-first discovery architecture that
+reuses the mature downstream calculation/safety stack but replaces
+the current goods-first discovery brain. The current production
+path stays in place; the recipe-first path is OFF by default
+until production opt-in.
+
+### 17.1 Target data flow
+
+```
+pinned CS2 metadata snapshot + pinned BUFF community identity snapshot
+  -> RecipeFamilyGenerator
+  -> static structural / output geometry
+  -> static float feasibility
+  -> SteamDT batch pre-screen (POST /open/cs2/v1/price/batch)
+  -> RecipeFamilyPreScreenEconomics (optimistic / base / conservative)
+  -> deterministic ranking / Top-N
+  -> TargetedBuffScanPlanner
+  -> existing BUFF anonymous listing ingestion (page-1/default-sort)
+  -> existing identity / intrinsic / enrichment (reused)
+  -> family-constrained concrete recipe search (reuses 2 / 256 solver)
+  -> existing strict final SteamDT-BUFF valuation
+  -> existing EV / risk
+  -> opportunity report (LiveOpportunity)
+```
+
+### 17.2 Frozen V1 project bounds
+
+```text
+MAX_DISTINCT_COLLECTIONS_PER_FAMILY = 3       (not an external API limit)
+TOP_RANKED_FAMILIES                 = 2
+MAX_EXACT_GOODS_IDS_PER_PRESCREEN   = 10
+batch-size cap per pre-screen call  = 10       (not a confirmed SteamDT limit)
+```
+
+### 17.3 Pre-screen vs final valuation separation
+
+The SteamDT batch pre-screen uses the strict BUFF selector as
+approximate ranking / pruning evidence only:
+
+- case-sensitive `platform == "BUFF"`,
+- positive finite `sellPrice`,
+- exactly one BUFF record per name; missing / unusable BUFF
+  record -> family FAIL_CLOSED,
+- never `biddingPrice`, never a second-platform substitute,
+  never lowest-across-platforms,
+- `sellCount` / `updateTime` retained as diagnostics only.
+
+The pre-screen NEVER produces a `LiveOpportunity`, NEVER passes
+the existing `RiskFilterConfig`, and uses a separate
+`RecipeFamilyPreScreenEconomics` DTO distinct from
+`OpportunityMetrics`. Final executable valuation of concrete
+candidates remains the existing strict `SteamDTBuffPriceProvider`
+path with Phase 14B run-scoped exact-name reuse and Phase 14C
+FRESH_ONLY cache reads unchanged.
+
+### 17.4 Implementation stages (NOT in 16A; freeze only)
+
+```text
+16B  RecipeFamily domain + deterministic generator + structural geometry
+16C  Static float feasibility + SteamDT batch pre-screen adapter / resolver
+16D  Coarse economics + ranking + TargetedBuffScanPlan
+16E  Family-constrained concrete solver integration + orchestrator composition
+     behind explicit opt-in (production default OFF)
+16F  ONE bounded live read-only validation (separately authorized)
+```
+
+### 17.5 Phase 15C-3 defer
+
+Phase 15C-1 protocol, Phase 15C-2 tooling, and Phase 15C-2B
+smoke remain preserved on `feature/representative-snapshot-calibration`.
+Phase 15C-3 representative 14-day / 112-attempt campaign is
+DEFERRED until recipe-first production discovery is implemented
+and bounded-live validated. Production default remains `5`;
+hard max remains `60`.
+
+### 17.6 Safety / contract preservation
+
+The new architecture preserves:
+
+- V1 read-only market interaction;
+- exact pinned identity only; no fuzzy / casefold / alias;
+- canonical non-Souvenir output rule (May-2026 standard);
+- `MemoryError` propagation per `D-MEMORY-001`;
+- no auto-buy / auto-login / cookie / captcha bypass /
+  risk-control bypass / browser automation;
+- no second-platform fallback / no biddingPrice substitution /
+  no metadata-zero reuse / no probability renormalization;
+- production default `5`, hard max `60` unchanged;
+- no invented BUFF / SteamDT details.
+
+Full architectural contract and offline evidence: `specs/2026-08-31-recipe-first-prescreen-design-freeze/{requirements,design,plan,validation}.md`.

@@ -200,3 +200,16 @@ Live repository HEAD / branch / working tree:
 - **Working tree:** Phase 15A checkpoint `df621d4` is pushed on `feature/valuation-budget-calibration`; Phase 15B adds only policy/current-state documentation before its own checkpoint. The only unrelated working-tree entries are the two protected untracked research JSONs, which remain untouched. Canonical `main` remains `215c91c46a6d95de793649a87bccceb3a24a42d3`. Verify live via Git.
 
 > Prefer `git status` and `git log --oneline -n 20` over this snapshot.
+---
+
+## Phase 16A Recipe-first Pre-screen Architecture Design Freeze (2026-08-31)
+
+- **Phase pointer:** `PHASE_16A_DESIGN_FREEZE_COMPLETE` on `feature/recipe-first-prescreen-design` from CURRENT `origin/main`.
+- **Scope:** docs/spec/AI-context only. No production code change. No PR/merge.
+- **Frozen target architecture:**
+  `pinned CS2 metadata + pinned BUFF identity -> RecipeFamilyGenerator -> static structural/output geometry -> static float feasibility -> SteamDT batch pre-screen -> coarse/scenario economics -> deterministic ranking/Top-N -> TargetedBuffScanPlanner -> existing BUFF anonymous listing ingestion -> existing identity/intrinsic/enrichment -> family-constrained concrete recipe search -> existing strict final SteamDT-BUFF valuation -> existing EV/risk -> opportunity report`.
+- **Frozen V1 project bounds (NOT external API limits):** `MAX_DISTINCT_COLLECTIONS_PER_FAMILY = 3`, `TOP_RANKED_FAMILIES = 2`, `MAX_EXACT_GOODS_IDS_PER_PRESCREEN = 10`, batch-size cap per pre-screen call = 10 (not a confirmed SteamDT limit).
+- **Offline evidence:** `data/metadata/skin_metadata_v1.json` (sha256 `55e4d446a5343e1932f24b9069090431f87b0c750d2cb4c091947ec2411dc421`, accepted 16868) and `data/identity/buff_identity_v1.json` (sha256 `e3aab46d570869e0b6866eac44b26bca7492ea7c2c54669e74b2b4feeec506ac`, accepted 34402). State count formula `sum_{k=1..K} C(C, k) * C(9, k-1)` over the eight productive strata yields ~477 (K=1), ~143k (K=2), and ~14M (K=3) total family states.
+- **Implementation stages (NOT in 16A; freeze only):** 16B RecipeFamily domain; 16C static float feasibility + SteamDT batch pre-screen; 16D coarse economics + ranking + TargetedBuffScanPlan; 16E family-constrained concrete solver integration + orchestrator composition behind explicit opt-in (production default OFF); 16F ONE bounded live read-only validation.
+- **Phase 15C-3:** DEFERRED until recipe-first production discovery is implemented and bounded-live validated. Phase 15C-1/2/2B preserved on `feature/representative-snapshot-calibration` and referenced, not modified. Production default remains `5`; hard max remains `60`. Phase 15 evidence is NOT deleted or rewritten.
+- **Decisions:** `D-RECIPE-FIRST-001`, `D-PRESCREEN-VALUATION-001`, `D-PRESCREEN-FLOAT-001`, `D-TARGETED-BUFF-001`, `D-PHASE15C3-DEFER-001`.

@@ -574,3 +574,44 @@ The components remain in the tree as paused, offline-tested optional infrastruct
 ## Standing Prohibitions (re-asserted)
 
 No auto-buy, auto-login, cookie scraping, CAPTCHA/risk-control bypass, browser purchasing, proxy/UA rotation, mass scraping, or invented endpoints/fields. Live smokes stay gated and never auto-run. Do not modify Protected Core without an explicit migration plan.
+
+---
+
+## Phase 16A — Recipe-first Pre-screen Architecture Design Freeze (2026-08-31)
+
+### What changed
+
+Docs/spec/AI-context only on `feature/recipe-first-prescreen-design` from CURRENT `origin/main`. No production code change. No PR/merge.
+
+New files:
+- `specs/2026-08-31-recipe-first-prescreen-design-freeze/requirements.md`
+- `specs/2026-08-31-recipe-first-prescreen-design-freeze/design.md`
+- `specs/2026-08-31-recipe-first-prescreen-design-freeze/plan.md`
+- `specs/2026-08-31-recipe-first-prescreen-design-freeze/validation.md`
+
+Modified (additive only):
+- `CLAUDE.md` (active-next-step pointer).
+- `specs/roadmap.md` (Phase 16A design-freeze entry).
+- `specs/mission.md` (one additive sentence).
+- `docs/ARCHITECTURE.md` (append Frozen Next Architecture section).
+- `docs/SPEC.md` (append Phase 16A summary).
+- `docs/ai-context/PROJECT_CONTEXT.md` (Phase 16A pointer).
+- `docs/ai-context/ARCHITECTURE_STATE.md` (Phase 16A modules).
+- `docs/ai-context/DECISION_LOG.md` (5 new decisions).
+- `docs/ai-context/DEVELOPMENT_HANDOFF.md` (this entry).
+
+### Why
+
+Phase 15A measured that the goods-first brain can reach `run_unique_output_names = 95` per run under default COHORT_DEPTH / `2 / 256`. Phase 15B froze `default = 5` and `hard_max = 60` with `HARD_MAX_60_REVIEW_DEFERRED`. Phase 16A freezes a new recipe-first discovery architecture that reuses the mature downstream calculation/safety stack but replaces the goods-first brain with structural recipe families + offline SteamDT batch pre-screen + family-targeted BUFF.
+
+### Decisions
+
+- `D-RECIPE-FIRST-001` — recipe-first pre-screen becomes next discovery architecture.
+- `D-PRESCREEN-VALUATION-001` — SteamDT batch pre-screen is ranking / pruning evidence only; final valuation remains existing strict BUFF path.
+- `D-PRESCREEN-FLOAT-001` — static float feasibility prunes impossible families only.
+- `D-TARGETED-BUFF-001` — BUFF acquisition becomes family-targeted and bounded; `MarketUniverseBuilder` retained as fallback utility.
+- `D-PHASE15C3-DEFER-001` — Phase 15C-3 representative campaign deferred until recipe-first production is implemented and bounded-live validated.
+
+### Next authorized phase
+
+Phase 16B (RecipeFamily domain + deterministic generator + structural geometry, OFFLINE ONLY) is the next stage, separately authorized.

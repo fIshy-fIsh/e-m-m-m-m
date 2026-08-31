@@ -78,3 +78,5 @@ The current production scanner is a **manual one-shot CLI**. Continuous scheduli
 The project is successful when it can run the bounded multi-recipe one-shot scanner, reproduce trade-up analyses from live BUFF listings and SteamDT-BUFF aggregate sell prices, and notify only opportunities that satisfy defined EV and risk thresholds without performing any market action.
 
 The current scanner satisfies this criterion in its manual one-shot form. Continuous scheduling and real Discord delivery are roadmap items, not current capabilities.
+
+Phase 16A freezes a recipe-first pre-screen discovery architecture that preserves the V1 read-only / strict BUFF valuation / no-fallback contracts and reuses the mature downstream calculation/safety stack. Implementation of the new production path (Phases 16B–16F) is separately gated; no representative campaign runs under the new path until Phase 16F passes.

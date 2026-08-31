@@ -316,3 +316,38 @@ The project must not implement any of the following, regardless of upstream capa
 - credential or session harvesting
 
 Reason: maintain verified readonly market-data boundaries. SteamDT and BUFF anonymous paths are explicitly silent or fail closed on any inferred evasion, and the project refuses to acquire the credentials, sessions, browser signals, or purchase capability that would enable them. Any future code that would require this is out of scope and must be redirected through a non-evasion alternative or rejected.
+
+---
+
+## Phase 16A Frozen Next Architecture (2026-08-31)
+
+The Phase 16A design freeze (docs-only on `feature/recipe-first-prescreen-design`) introduces a recipe-first discovery architecture that REUSES the mature downstream calculation/safety stack but REPLACES the current goods-first discovery brain. No production code change in 16A; staged under 16B / 16C / 16D / 16E / 16F.
+
+New authoritative modules (frozen in 16A; implemented in later phases):
+
+- `RecipeFamily` (frozen dataclass): `family_key`, `family_spec_version = 1`, `input_rarity`, `stattrak_mode`, `souvenir_inclusion`, `collection_counts` (sum == 10, distinct collections <= 3), `represented_outputs`, `output_rarity`, `output_stattrak`, `structural_probability_denominator`, `family_hash`.
+- `RecipeFamilyGenerator`: pure, deterministic, offline. Inputs: pinned metadata + pinned identity + StatTrak/Souvenir policy. Outputs: ordered `RecipeFamily` tuple.
+- `StaticFloatFeasibilityAnalyzer`: offline only; canonical float math reused.
+- `SteamDTBatchPreScreenAdapter`: mocked transport in tests; strict BUFF selector (case-sensitive `platform == "BUFF"`, positive finite `sellPrice`, single BUFF record per name); batch-size cap 10 per call.
+- `RecipeFamilyPreScreenEconomics`: optimistic / base / conservative scenarios; separate DTO from `OpportunityMetrics`.
+- `RecipeFamilyRanker`: gates + lexicographic ranking keys + `TOP_RANKED_FAMILIES = 2`.
+- `TargetedBuffScanPlanner`: `MAX_EXACT_GOODS_IDS_PER_PRESCREEN = 10`; `MarketUniverseBuilder` retained as fallback utility for goods_id mapping / eligibility / hard-request bounds / diagnostics.
+
+Reused unchanged:
+
+- `MarketUniverseBuilder` (fallback only; not the new brain).
+- `BuffListingProvider` / `BuffAnonymousListingClient` (page-1/default-sort only).
+- `BuffCommunityIdentityResolver` (pinned offline community catalog, exact fail-closed).
+- `BuffListingIntrinsicFlagResolver` (three-state StatTrak / Souvenir).
+- `PinnedSkinMetadataResolver`.
+- `scanner_recipe_composition` / `recipe_solver` (default 2 / 256; hard max 6 / 1024).
+- `tradeup_engine` / `float_math`.
+- `RunScopedValuationSession` (Phase 14B atomic NEW-LIVE cap).
+- `ScannerCachedBuffPriceResolver` (Phase 14C FRESH_ONLY reads).
+- `SteamDTBuffPriceProvider` / `steamdt_buff_price_policy` (strict BUFF selector).
+- `ev_service` / `risk_filter` (final EV / risk).
+- Phase 12C Redis-shared limiter (optional, via existing settings).
+
+Out-of-scope historical compatibility (do NOT revive under Phase 16A or any later stage): `steamapis_*`, `live_metadata_catalog.py`, `live_pool_recipe_construction.py`, `steamapis_offer_session.py`, `steamapis_websocket_client.py`.
+
+Production defaults and constraints preserved: `max_valuation_requests_per_run` default `5`; hard max `60`; `HARD_MAX_GOODS_IDS = 10`; canonical non-Souvenir output rule; `MemoryError` propagation per `D-MEMORY-001`; no auto-buy / auto-login / cookie / captcha bypass / risk-control bypass / browser automation; no second-platform fallback / no biddingPrice substitution / no metadata-zero reuse / no probability renormalization; no invented BUFF / SteamDT details.

@@ -849,3 +849,59 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 - **Preserved contracts:** current cohort-depth universe builder; default `2 / 256` enumeration; strict scanner composition; exact NEW-LIVE name semantics and atomic admission; default `5`; hard max `60`; no auto-buy/trade/login/cookie/CAPTCHA/risk bypass/browser purchase; no production/test/script/workflow change.
 - **Artifact:** `research/valuation_budget_calibration/POLICY_DECISION.md`.
 - **Implementation gate:** no numeric policy implementation is authorized until representative calibration and, for a hard-max change, external-call safety review are separately approved.
+
+---
+
+## D-RECIPE-FIRST-001 — Recipe-first pre-screen becomes next discovery architecture
+
+- **Date:** 2026-08-31
+- **Decision:** Freeze a recipe-first discovery architecture on `feature/recipe-first-prescreen-design`. Pinned CS2 metadata + pinned BUFF community identity drive a `RecipeFamilyGenerator` whose products feed a SteamDT batch pre-screen, deterministic ranking, and a `TargetedBuffScanPlanner`. BUFF listing acquisition becomes family-targeted and bounded. The mature downstream calculation/safety stack stays unchanged.
+- **Status:** Active design freeze. No production code change. Implementation staged under Phases 16B / 16C / 16D / 16E / 16F and separately gated. The current goods-first path remains the production path.
+- **Reason:** Phase 15A measured that the goods-first brain can reach `run_unique_output_names = 95` per run under default COHORT_DEPTH / `2 / 256`. That confirmed the brain can spend almost the full hard max of 60 NEW LIVE exact-name demands on a single run. Recipe-first pre-screen is intended to focus BUFF acquisition and final valuation on promising structural families while keeping the mature downstream stack intact.
+- **Frozen V1 project bounds (NOT external API limits):**
+  - `MAX_DISTINCT_COLLECTIONS_PER_FAMILY = 3`
+  - `TOP_RANKED_FAMILIES = 2`
+  - `MAX_EXACT_GOODS_IDS_PER_PRESCREEN = 10`
+- **Alternatives considered:** further optimize the goods-first scanner; widen the existing `HARD_MAX_VALUATION_REQUESTS_PER_RUN`; switch to a weighted ranking model up front.
+- **Why rejected:** goods-first optimization cannot change which families reach BUFF; raising the hard max expands the external-call safety envelope (Phase 15B `HARD_MAX_60_REVIEW_DEFERRED`); weighted ranking lacks offline evidence.
+- **Future revisit:** only if a separately authorized representative campaign under the new production path (Phase 16F and onward) yields contradicting offline evidence.
+
+## D-PRESCREEN-VALUATION-001 — SteamDT batch pre-screen is ranking / pruning evidence only
+
+- **Date:** 2026-08-31
+- **Decision:** The SteamDT batch pre-screen (`POST /open/cs2/v1/price/batch`) is approximate ranking / pruning evidence only. It uses a strict BUFF selector (`platform == "BUFF"` case-sensitive, positive finite `sell_price_cny`, exactly one BUFF record per name). It NEVER substitutes `biddingPrice`, NEVER uses a second platform, and NEVER picks the lowest price across platforms. Final executable valuation remains the existing `SteamDTBuffPriceProvider` strict BUFF path.
+- **Status:** Active contract. Not implemented in 16A.
+- **Reason:** Preserve the V1 no-fallback contract and the Phase 15B `NO_PRODUCTION_DEFAULT_CHANGE_PENDING_REPRESENTATIVE_SNAPSHOT` boundary. Pre-screen is approximate; final valuation is authoritative.
+- **Alternatives considered:** let the pre-screen directly drive final valuation; allow lowest-across-platforms selection; use `biddingPrice` as a substitute.
+- **Why rejected:** each violates the V1 no-fallback contract or produces non-executable inputs.
+- **Future revisit:** only if a separately authorized review proves a documented batch-endpoint currency / freshness guarantee that justifies pre-screen promotion.
+
+## D-PRESCREEN-FLOAT-001 — Static float feasibility prunes impossible families only
+
+- **Date:** 2026-08-31
+- **Decision:** Static float feasibility uses the canonical float math in `app/utils/float_math.py` to determine, offline, whether a desired output float threshold is reachable. Range feasibility is a structural property of metadata alone; it does NOT prove BUFF has executable listings for the family.
+- **Status:** Active contract. Not implemented in 16A.
+- **Reason:** Static float bounds are well-defined from metadata; listing-float distribution is not. The pre-screen must not fabricate a listing-float distribution.
+- **Alternatives considered:** infer a listing-float distribution from pre-screen responses; treat threshold margins as market signals.
+- **Why rejected:** both fabricate data not present in the deterministic pre-screen inputs.
+- **Future revisit:** only if a separately authorized offline evidence path (e.g., representative snapshot campaign under Phase 16F) supplies an observed listing-float distribution.
+
+## D-TARGETED-BUFF-001 — Family-targeted BUFF acquisition; MarketUniverseBuilder retained as fallback utility
+
+- **Date:** 2026-08-31
+- **Decision:** BUFF acquisition becomes family-targeted and bounded by `MAX_EXACT_GOODS_IDS_PER_PRESCREEN = 10`. Exact pinned identity remains mandatory. `MarketUniverseBuilder` is retained as a fallback structural / eligibility / goods_id mapping utility but is NOT the new discovery brain.
+- **Status:** Active contract. Not implemented in 16A.
+- **Reason:** The recipe-first path needs exact identity for promising families only. The pre-screen is what selects the families; `MarketUniverseBuilder` remains useful for exact eligibility, goods_id mapping, hard-request bounds, and diagnostics.
+- **Alternatives considered:** delete `MarketUniverseBuilder`; replace it with a new goods-id mapping utility; let the recipe-first path reuse it as primary discovery.
+- **Why rejected:** deletion removes a documented utility used elsewhere; a parallel utility duplicates mapping logic; reusing it as the new discovery brain contradicts the recipe-first goal.
+- **Future revisit:** only if the recipe-first production path proves the goods-id mapping requirement is structurally different enough to justify a separate utility.
+
+## D-PHASE15C3-DEFER-001 — Phase 15C-3 representative campaign deferred until recipe-first is implemented and bounded-live validated
+
+- **Date:** 2026-08-31
+- **Decision:** The Phase 15C-3 representative 14-day / 112-attempt campaign is DEFERRED until recipe-first production discovery is implemented (Phases 16B / 16C / 16D / 16E) and bounded-live validated (Phase 16F). Phase 15C-1 protocol, Phase 15C-2 tooling, and Phase 15C-2B smoke remain preserved on `feature/representative-snapshot-calibration` and are referenced, not modified. Production default remains `5`; hard max remains `60`. No claim that Phase 15A designed / Phase 15C-1 sampled distributions represent future recipe-first production workload. Phase 15 evidence is NOT deleted or rewritten.
+- **Status:** Active deferral.
+- **Reason:** Recipe-first discovery is expected to materially change which families reach BUFF and downstream valuation-demand distribution. Phase 15C-3 sampling must run under the NEW production path, not the goods-first one.
+- **Alternatives considered:** run Phase 15C-3 under the goods-first path; run it in parallel with recipe-first implementation; cancel it.
+- **Why rejected:** goods-first sampling does not match the future production path; parallel sampling confounds attribution; cancellation loses calibration evidence.
+- **Future revisit:** after Phase 16F passes, re-scope the representative campaign under the recipe-first production path.
