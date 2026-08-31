@@ -1,0 +1,305 @@
+{
+  "schema_version": 1,
+  "protocol_id": "representative-listing-snapshot-v1",
+  "campaign_id": "synthetic-example-campaign",
+  "snapshot_id": "snap-v1-0ab63cc8123edaf92fb0c4b8",
+  "nominal_slot_utc": "2000-01-01T00:17:00Z",
+  "scheduled_for_utc": "2000-01-01T00:14:00Z",
+  "observed_at_utc": "2000-01-01T00:14:01Z",
+  "capture_completed_at_utc": "2000-01-01T00:14:25Z",
+  "timestamp_source": "collector_host_utc_clock",
+  "observation_status": "COMPLETE",
+  "stratum": {
+    "input_rarity": "Restricted",
+    "stattrak_mode": "normal",
+    "souvenir_inclusion": "include"
+  },
+  "provenance": {
+    "collector_git_commit": "0000000000000000000000000000000000000000",
+    "identity_snapshot_path": "data/identity/synthetic_identity_example.json",
+    "identity_snapshot_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "metadata_snapshot_path": "data/metadata/synthetic_metadata_example.json",
+    "metadata_snapshot_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "universe_config": {
+      "cap": 10,
+      "allocation_strategy": "cohort-depth",
+      "target_cohort_count": 3,
+      "souvenir_inclusion": "include"
+    },
+    "enumeration_config": {
+      "max_recipe_candidates_returned": 2,
+      "max_candidate_states_explored": 256
+    }
+  },
+  "universe": {
+    "target_goods_count": 10,
+    "actual_goods_count": 10,
+    "selected_cohort_count": 3,
+    "planned_goods": [
+      {
+        "goods_id": "synthetic-goods-001",
+        "universe_rank": 0,
+        "market_hash_name": "Synthetic Example Input 01 (Field-Tested)",
+        "rarity": "Restricted",
+        "stattrak": false,
+        "souvenir": false,
+        "cohort_collection": "Synthetic Collection A",
+        "cohort_allocated_slot": 0
+      },
+      {
+        "goods_id": "synthetic-goods-002",
+        "universe_rank": 1,
+        "market_hash_name": "Synthetic Example Input 02 (Field-Tested)",
+        "rarity": "Restricted",
+        "stattrak": false,
+        "souvenir": false,
+        "cohort_collection": "Synthetic Collection A",
+        "cohort_allocated_slot": 1
+      },
+      {
+        "goods_id": "synthetic-goods-003",
+        "universe_rank": 2,
+        "market_hash_name": "Synthetic Example Input 03 (Field-Tested)",
+        "rarity": "Restricted",
+        "stattrak": false,
+        "souvenir": false,
+        "cohort_collection": "Synthetic Collection A",
+        "cohort_allocated_slot": 2
+      },
+      {
+        "goods_id": "synthetic-goods-004",
+        "universe_rank": 3,
+        "market_hash_name": "Synthetic Example Input 04 (Field-Tested)",
+        "rarity": "Restricted",
+        "stattrak": false,
+        "souvenir": false,
+        "cohort_collection": "Synthetic Collection A",
+        "cohort_allocated_slot": 3
+      },
+      {
+        "goods_id": "synthetic-goods-005",
+        "universe_rank": 4,
+        "market_hash_name": "Synthetic Example Input 05 (Field-Tested)",
+        "rarity": "Restricted",
+        "stattrak": false,
+        "souvenir": false,
+        "cohort_collection": "Synthetic Collection B",
+        "cohort_allocated_slot": 0
+      },
+      {
+        "goods_id": "synthetic-goods-006",
+        "universe_rank": 5,
+        "market_hash_name": "Synthetic Example Input 06 (Field-Tested)",
+        "rarity": "Restricted",
+        "stattrak": false,
+        "souvenir": false,
+        "cohort_collection": "Synthetic Collection B",
+        "cohort_allocated_slot": 1
+      },
+      {
+        "goods_id": "synthetic-goods-007",
+        "universe_rank": 6,
+        "market_hash_name": "Synthetic Example Input 07 (Field-Tested)",
+        "rarity": "Restricted",
+        "stattrak": false,
+        "souvenir": false,
+        "cohort_collection": "Synthetic Collection B",
+        "cohort_allocated_slot": 2
+      },
+      {
+        "goods_id": "synthetic-goods-008",
+        "universe_rank": 7,
+        "market_hash_name": "Synthetic Example Input 08 (Field-Tested)",
+        "rarity": "Restricted",
+        "stattrak": false,
+        "souvenir": false,
+        "cohort_collection": "Synthetic Collection C",
+        "cohort_allocated_slot": 0
+      },
+      {
+        "goods_id": "synthetic-goods-009",
+        "universe_rank": 8,
+        "market_hash_name": "Synthetic Example Input 09 (Field-Tested)",
+        "rarity": "Restricted",
+        "stattrak": false,
+        "souvenir": false,
+        "cohort_collection": "Synthetic Collection C",
+        "cohort_allocated_slot": 1
+      },
+      {
+        "goods_id": "synthetic-goods-010",
+        "universe_rank": 9,
+        "market_hash_name": "Synthetic Example Input 10 (Field-Tested)",
+        "rarity": "Restricted",
+        "stattrak": false,
+        "souvenir": false,
+        "cohort_collection": "Synthetic Collection C",
+        "cohort_allocated_slot": 2
+      }
+    ]
+  },
+  "acquisition_summary": {
+    "pages_requested": 10,
+    "pages_completed": 10,
+    "pages_nonempty": 1,
+    "pages_empty": 9,
+    "pages_failed": 0,
+    "listings_received": 1,
+    "identity_resolved": 1,
+    "identity_unresolved": 0,
+    "intrinsic_resolved": 1,
+    "intrinsic_unresolved": 0,
+    "metadata_resolved": 1,
+    "metadata_not_found": 0,
+    "metadata_not_attempted": 0,
+    "candidate_accepted": 1,
+    "candidate_rejected": 0,
+    "replay_included": 1,
+    "replay_excluded": 0,
+    "reason_counts": {}
+  },
+  "pages": [
+    {
+      "goods_id": "synthetic-goods-001",
+      "universe_rank": 0,
+      "cohort_collection": "Synthetic Collection A",
+      "cohort_rarity": "Restricted",
+      "cohort_stattrak": false,
+      "acquisition_status": "SUCCESS",
+      "failure_reason": null,
+      "failure_detail_code": null,
+      "listing_count": 1,
+      "listings": [
+        {
+          "listing_reference": "synthetic-listing-001",
+          "listing_reference_kind": "anonymous_item_id_compatibility",
+          "asset_reference": "synthetic-asset-001",
+          "goods_id": "synthetic-goods-001",
+          "market_hash_name": "Synthetic Example Input 01 (Field-Tested)",
+          "price_cny": "12.34",
+          "paintwear": "0.1234000000000000",
+          "paintseed": null,
+          "stattrak": false,
+          "souvenir": false,
+          "rarity": "Restricted",
+          "collection_name": "Synthetic Collection A",
+          "source": "buff",
+          "identity_status": "RESOLVED",
+          "intrinsic_status": "RESOLVED",
+          "metadata_status": "RESOLVED",
+          "candidate_status": "ACCEPTED",
+          "replay_status": "INCLUDED",
+          "rejection_reason": null
+        }
+      ]
+    },
+    {
+      "goods_id": "synthetic-goods-002",
+      "universe_rank": 1,
+      "cohort_collection": "Synthetic Collection A",
+      "cohort_rarity": "Restricted",
+      "cohort_stattrak": false,
+      "acquisition_status": "EMPTY_PAGE",
+      "failure_reason": null,
+      "failure_detail_code": null,
+      "listing_count": 0,
+      "listings": []
+    },
+    {
+      "goods_id": "synthetic-goods-003",
+      "universe_rank": 2,
+      "cohort_collection": "Synthetic Collection A",
+      "cohort_rarity": "Restricted",
+      "cohort_stattrak": false,
+      "acquisition_status": "EMPTY_PAGE",
+      "failure_reason": null,
+      "failure_detail_code": null,
+      "listing_count": 0,
+      "listings": []
+    },
+    {
+      "goods_id": "synthetic-goods-004",
+      "universe_rank": 3,
+      "cohort_collection": "Synthetic Collection A",
+      "cohort_rarity": "Restricted",
+      "cohort_stattrak": false,
+      "acquisition_status": "EMPTY_PAGE",
+      "failure_reason": null,
+      "failure_detail_code": null,
+      "listing_count": 0,
+      "listings": []
+    },
+    {
+      "goods_id": "synthetic-goods-005",
+      "universe_rank": 4,
+      "cohort_collection": "Synthetic Collection B",
+      "cohort_rarity": "Restricted",
+      "cohort_stattrak": false,
+      "acquisition_status": "EMPTY_PAGE",
+      "failure_reason": null,
+      "failure_detail_code": null,
+      "listing_count": 0,
+      "listings": []
+    },
+    {
+      "goods_id": "synthetic-goods-006",
+      "universe_rank": 5,
+      "cohort_collection": "Synthetic Collection B",
+      "cohort_rarity": "Restricted",
+      "cohort_stattrak": false,
+      "acquisition_status": "EMPTY_PAGE",
+      "failure_reason": null,
+      "failure_detail_code": null,
+      "listing_count": 0,
+      "listings": []
+    },
+    {
+      "goods_id": "synthetic-goods-007",
+      "universe_rank": 6,
+      "cohort_collection": "Synthetic Collection B",
+      "cohort_rarity": "Restricted",
+      "cohort_stattrak": false,
+      "acquisition_status": "EMPTY_PAGE",
+      "failure_reason": null,
+      "failure_detail_code": null,
+      "listing_count": 0,
+      "listings": []
+    },
+    {
+      "goods_id": "synthetic-goods-008",
+      "universe_rank": 7,
+      "cohort_collection": "Synthetic Collection C",
+      "cohort_rarity": "Restricted",
+      "cohort_stattrak": false,
+      "acquisition_status": "EMPTY_PAGE",
+      "failure_reason": null,
+      "failure_detail_code": null,
+      "listing_count": 0,
+      "listings": []
+    },
+    {
+      "goods_id": "synthetic-goods-009",
+      "universe_rank": 8,
+      "cohort_collection": "Synthetic Collection C",
+      "cohort_rarity": "Restricted",
+      "cohort_stattrak": false,
+      "acquisition_status": "EMPTY_PAGE",
+      "failure_reason": null,
+      "failure_detail_code": null,
+      "listing_count": 0,
+      "listings": []
+    },
+    {
+      "goods_id": "synthetic-goods-010",
+      "universe_rank": 9,
+      "cohort_collection": "Synthetic Collection C",
+      "cohort_rarity": "Restricted",
+      "cohort_stattrak": false,
+      "acquisition_status": "EMPTY_PAGE",
+      "failure_reason": null,
+      "failure_detail_code": null,
+      "listing_count": 0,
+      "listings": []
+    }
+  ]
+}

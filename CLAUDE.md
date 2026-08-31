@@ -66,25 +66,26 @@
 6. 检查是否把未确认的 BUFF API 细节错误写死进代码。
 
 ## 当前阶段指针
-- 阶段：`PHASE_15B_POLICY_FREEZE_COMPLETE`（policy/docs only；分支 `feature/valuation-budget-calibration`；无 production numeric policy change）。
-- Phase 15B decision：`NO_PRODUCTION_DEFAULT_CHANGE_PENDING_REPRESENTATIVE_SNAPSHOT`；production default 保持 `5`；`HARD_MAX_60_REVIEW_DEFERRED`；hard max 保持 `60`。Phase 15A designed replay quantiles/threshold shares 是 structural coverage evidence，不是 production-run probability distribution。
-- Phase 15B artifact：`research/valuation_budget_calibration/POLICY_DECISION.md`；下一 numeric policy gate 需要 separately authorized representative read-only listing-snapshot calibration。
-- Phase 15A evidence：`research/valuation_budget_calibration/` 使用规范化 pinned identity/metadata snapshots，经 current COHORT_DEPTH universe builder + real scanner composition/recipe solver/trade-up output construction，固定 default enumeration `2 / 256`；192 个 deterministic replay observations；结构 census 439 records；报告 `results.json` / `REPORT.md`；没有生产 budget/default/hard-max/CLI/atomic semantics 变化。
+- 阶段：`PHASE_15C1_DESIGN_FREEZE_COMPLETE`（representative listing-snapshot calibration protocol design only；分支 `feature/representative-snapshot-calibration`；Phase 15C-2 NOT STARTED / NOT AUTHORIZED）。
+- Phase 15C-1 protocol：balanced eight productive rarity/mode strata；每 observation 重建 current 10-goods COHORT_DEPTH / target 3 / Souvenir include universe；14 UTC days / 112 planned attempts / minimum 96 COMPLETE / 10 per stratum / 12 UTC dates；immutable normalized JSON + append-only manifest；live datasets 默认不进 Git。
+- Interface boundary：current anonymous page-1/default-sort path + existing identity/intrinsic/metadata bindings 足够支持 narrow current-scanner frame；full-market/order-book/pagination-complete claim 仍为 `PHASE15C1_LIVE_COLLECTION_INTERFACE_GAP`。
+- Phase 15C-1 artifacts：`specs/2026-08-30-representative-listing-snapshot-calibration-design-freeze/` trilogy，`research/valuation_budget_calibration/SNAPSHOT_PROTOCOL.md` 与 synthetic-only `snapshot_schema_v1.example.json`；没有 live data/network/scheduler/production/test/script 变化。
+- Phase 15B decision remains controlling：`NO_PRODUCTION_DEFAULT_CHANGE_PENDING_REPRESENTATIVE_SNAPSHOT`；production default 保持 `5`；`HARD_MAX_60_REVIEW_DEFERRED`；hard max 保持 `60`。Phase 15A designed replay quantiles/threshold shares 是 structural coverage evidence，不是 production-run probability distribution。
+- Canonical main after Phase 15A/15B PR #6：`7a73cc026f93bbed9d9c089c96e6565a6c43c68d`，tree `bae6f6db88b52ec08db279cab60a2498bab08a36`；main CI run `33350081125` / job `quality` SUCCESS。
 - Phase 15A checkpoint：`df621d4de162080293553874f7b374a58bc4e6be`（`measure scanner valuation output cardinality`）；branch CI run `33325598811` / job `quality` SUCCESS。
-- Phase 15A/15B production diff：empty；仅 research harness/artifacts、focused calibration tests 和最小 docs/policy checkpoint。
 - Post-Phase-13T handoff baseline：`bb09068`（`sync AI context after Phase 13T`）。
 - Pre-R0-C DEV tip (historical)：`4c2f1ef`（`sync docs after minimum CI validation`）。
 - Post-R0-C canonical main：`9cfaf36`（`sync docs after R0-C repository consolidation`），parents `{24ece858, 3aa44e93}`，tree `7a39d28`。作为祖先节点保留；当前 canonical main 已迁移。
 - Post-R0-C docs checkpoint：`b13201b`（`sync docs after R0-C repository consolidation` docs PR，PR #2）。
 - Phase 14 canonical integration main：`P4 = 26c69bae9e482452f56f380277d8b10fefa29d52`，parents `{24c95c029f583d5cc0b0a67986e48c06d0ef7957, 47227b33cd088a0961320254dd6c0de75e3564bb}`，tree `39a82914fa53fd414d141fbb87cbf197c1ff2c19`；PR #4 merged；main CI run `33320657978` SUCCESS。
-- 当前 canonical main（Phase 14 docs checkpoint PR #5 merged）：`215c91c46a6d95de793649a87bccceb3a24a42d3`，parents `{26c69bae9e482452f56f380277d8b10fefa29d52, fc5144f2b27815eff167995314156c8288276aa2}`，tree `ca11f054978b4133e1ea95b51ba70b3bda419e5b`；main CI run `33321890478` SUCCESS。
+- Phase 14 docs checkpoint main（historical ancestor after PR #5）：`215c91c46a6d95de793649a87bccceb3a24a42d3`，parents `{26c69bae9e482452f56f380277d8b10fefa29d52, fc5144f2b27815eff167995314156c8288276aa2}`，tree `ca11f054978b4133e1ea95b51ba70b3bda419e5b`；main CI run `33321890478` SUCCESS。
 - 当前 Git HEAD 必须通过仓库实时验证（`git rev-parse HEAD` / `git status --short`），不在此处硬编码。
 - 当前 bounded multi-recipe 校验：`tests/test_multi_recipe_scanner_scale_validation.py`。
 - Minimum CI 已建立并远端验证：`.github/workflows/ci.yml`（Python 3.12；`ruff check .`；`mypy app`；`pytest`）；CI workflow blob 自 R0-A 起保持 `02d0ce81...`。
 - 权威交接文档：`docs/ai-context/DEVELOPMENT_HANDOFF.md`。
 - R0-A / R0-B / R0-C / R0-C docs checkpoint / R0-D：COMPLETE。R0-D 由 PR #3 完成 docs checkpoint 合并与 CI green（run 33240760167）验证。
 - Phase 14：CANONICAL MAIN INTEGRATION COMPLETE — Phase 14A / 14A-R1 / 14B / 14C / 14D 通过 PR #4 合并到 main。Phase 14 集成包括：run-scoped exact-name reuse；NEW LIVE request-budget accounting；FRESH_ONLY Phase 12D scanner cache reads；strict BUFF cached selection；default one-shot CLI cache composition（inmemory default，可选 Redis）；无 scanner write-after-live、无 refresh/scheduler/TTL env config。
-- Phase 15B：POLICY FREEZE COMPLETE；default `5` 与 hard max `60` 均 unchanged；代表性 read-only snapshot calibration 未单独授权，任何 numeric policy implementation 仍 NOT AUTHORIZED。
+- Phase 15C-1：DESIGN FREEZE COMPLETE；Phase 15C-2 collector/replay implementation、live collection 与任何 numeric policy change 均 NOT STARTED / NOT AUTHORIZED。
 
 ## 禁止事项
 - 自动购买

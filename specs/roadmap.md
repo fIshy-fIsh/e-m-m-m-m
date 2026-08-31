@@ -3,21 +3,22 @@
 ## Current Position
 
 ```text
-Current phase:                            PHASE_15B_POLICY_FREEZE_COMPLETE
+Current phase:                            PHASE_15C1_DESIGN_FREEZE_COMPLETE
 
 Current capability:                       read-only bounded multi-recipe one-shot scanner
-                                          plus offline exact-output-name calibration
-                                          evidence and no-change budget policy freeze
+                                          plus offline calibration evidence,
+                                          no-change budget policy freeze, and
+                                          frozen representative snapshot protocol
 
-Active development line:                  feature/valuation-budget-calibration
-                                          (research/tests/docs/policy only)
+Active development line:                  feature/representative-snapshot-calibration
+                                          (design/spec/research protocol only)
 
-Latest Phase 15 checkpoints:              Phase 15A df621d4
-                                          measure scanner valuation output cardinality
-                                          CI run 33325598811 SUCCESS
-                                          Phase 15B policy freeze:
-                                          default 5 unchanged / hard max 60 unchanged
-                                          representative snapshot gate required
+Latest Phase 15 checkpoints:              Phase 15A df621d4 / CI 33325598811 SUCCESS
+                                          Phase 15B policy: 5 / 60 unchanged
+                                          Phase 15A/15B merged via PR #6 at
+                                          main 7a73cc0 / CI 33350081125 SUCCESS
+                                          Phase 15C-1 protocol design frozen;
+                                          Phase 15C-2 NOT AUTHORIZED
 
 Post-Phase-13T documentation /
 handoff baseline:                         bb09068
@@ -92,8 +93,13 @@ Phase 15B — Valuation Budget
 Policy decision / freeze:               COMPLETE
                                         default 5 unchanged
                                         hard max 60 unchanged
-                                        representative snapshot required
-                                        before numeric policy change
+
+Phase 15C-1 — Representative listing
+snapshot calibration design freeze:    COMPLETE
+                                        balanced eight-stratum protocol
+                                        14 days / 112 attempts
+                                        immutable normalized JSON + manifest
+                                        Phase 15C-2 NOT AUTHORIZED
 
 Live repository HEAD / branch / tree:     MUST be verified from Git at task entry;
                                         do not infer current HEAD from this document
@@ -548,8 +554,8 @@ Phase 14 integration condition: Phase 14A / 14A-R1 / 14B / 14C / 14D merged on `
 
 ## Next Functional Work
 
-**Phase 14A / 14A-R1 / 14B / 14C are COMPLETE.**
-**Phase 14D is COMPLETE (PR #4 merged). Valuation Budget Calibration remains NOT STARTED / NOT AUTHORIZED.**
+**Phase 14A / 14A-R1 / 14B / 14C / 14D are COMPLETE and canonically integrated.**
+**Phase 15A / 15B are COMPLETE and merged via PR #6. Phase 15C-1 design freeze is COMPLETE on `feature/representative-snapshot-calibration`; Phase 15C-2 is NOT STARTED / NOT AUTHORIZED.**
 
 ### Completed — Phase 14D One-shot CLI cache composition + final validation
 
@@ -717,6 +723,49 @@ next numeric policy gate:
 artifact:
   research/valuation_budget_calibration/POLICY_DECISION.md
   D-VALUATION-BUDGET-POLICY-001
+```
+
+### Completed — Phase 15C-1 Representative Listing Snapshot Calibration Design Freeze
+
+```text
+status:
+  COMPLETE on feature/representative-snapshot-calibration
+  design/specification only; no live collection
+
+sampling frame:
+  one observation = one full pre-valuation snapshot attempt for one rebuilt
+    current 10-goods cohort-depth universe in one productive stratum
+  balanced deterministic rotation across eight productive rarity/mode strata
+  current anonymous page-1/default-sort observable population only
+
+candidate time plan:
+  14 UTC days / 112 planned attempts / one attempt every 3 hours
+  minimum 96 COMPLETE / 10 per stratum / 12 distinct UTC dates
+  deterministic bounded jitter; missed slots recorded, never replaced
+
+storage:
+  minimal normalized immutable JSON per observation
+  append-only manifest with SHA-256
+  raw payload prohibited by default
+  actual live datasets outside Git unless separately approved
+
+interfaces:
+  current universe builder + anonymous listing path + exact identity,
+    canonical intrinsic, and pinned metadata bindings are sufficient for
+    the narrow current-scanner frame
+  PHASE15C1_LIVE_COLLECTION_INTERFACE_GAP applies to any full-market,
+    complete-order-book, or pagination-complete claim
+
+artifacts:
+  specs/2026-08-30-representative-listing-snapshot-calibration-design-freeze/
+  research/valuation_budget_calibration/SNAPSHOT_PROTOCOL.md
+  research/valuation_budget_calibration/snapshot_schema_v1.example.json
+  D-VALUATION-BUDGET-SNAPSHOT-PROTOCOL-001
+
+next:
+  Phase 15C-2 collector/replay implementation and live collection
+    NOT STARTED / NOT AUTHORIZED
+  default 5 and hard max 60 unchanged
 ```
 
 

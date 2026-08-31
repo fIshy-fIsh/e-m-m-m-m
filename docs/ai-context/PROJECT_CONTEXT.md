@@ -64,15 +64,14 @@ The bridge `market_hash_name ↔ BUFF goods_id` is the **provisional community c
 ## Git / Phase Baselines
 
 ```text
-Current phase:                              PHASE_15B_POLICY_FREEZE_COMPLETE
+Current phase:                              PHASE_15C1_DESIGN_FREEZE_COMPLETE
 
-Latest Phase 15 checkpoints:                Phase 15A df621d4
-                                            192 designed replays /
-                                            439 structural census records /
-                                            CI run 33325598811 SUCCESS
-                                            Phase 15B: default 5 unchanged,
-                                            hard max 60 unchanged,
-                                            representative snapshot gate required
+Latest Phase 15 checkpoints:                Phase 15A df621d4 / CI 33325598811 SUCCESS
+                                            Phase 15B default 5 / hard max 60 unchanged
+                                            Phase 15A/15B PR #6 merged at
+                                            main 7a73cc0 / CI 33350081125 SUCCESS
+                                            Phase 15C-1 snapshot protocol frozen;
+                                            Phase 15C-2 NOT AUTHORIZED
 
 Post-Phase-13T AI-context synchronization
 baseline:                                    bb09068
@@ -94,7 +93,7 @@ Post-R0-C docs checkpoint:                 b13201b
                                             (full SHA b13201bdff4f2323a82d4da3560add25365e5695)
                                             (PR #2 `Sync documentation after R0-C consolidation`)
 
-Current canonical main (P3):               24c95c029f583d5cc0b0a67986e48c06d0ef7957
+R0-D canonical main (historical P3):       24c95c029f583d5cc0b0a67986e48c06d0ef7957
                                             parents: {328269112f229faf3fce4cf0be4b9c7875582b65,
                                                        6964cc4ff25cd4ad72fe65f92f40a5ce70a4a268}
                                             tree:   608d3e473072afb0d97aadf46ea0be8b1f55ca26
@@ -166,7 +165,7 @@ Live repository HEAD / branch / working tree:
 - **R0-C — Main History Consolidation:** **COMPLETE**. PR #1 (`Reconcile main history with current project lineage`) merged using `Create a merge commit`. Final canonical `main` tip is `9cfaf36db028661075a495587ac32e51256fffe8` with parents `{24ece8582d1b3cb1b72322afc15de94b652a8bcc, 3aa44e9364268308d0fbb4c0532f4a910f4f85e8}`; tree `7a39d28f2654cdf3b4eb98c8123227de64db5e34`; CI workflow blob `02d0ce81d3704d9bc9c513df9b474855ffeae703`. DEV tip `4c2f1ef6cd850985e71f041601ae58489abe947b` is an ancestor. Final-main push CI: workflow `CI`, run `33173529766`, conclusion `success`.
 - **R0-D — Branch / Repository Cleanup:** **COMPLETE**. PR #3 (`R0-D completion documentation checkpoint`) merged using `Create a merge commit`. Final canonical `main` tip is `24c95c029f583d5cc0b0a67986e48c06d0ef7957` (P3) with parents `{328269112f229faf3fce4cf0be4b9c7875582b65 (P2), 6964cc4ff25cd4ad72fe65f92f40a5ce70a4a268 (R0-D3 docs commit)}`; tree `608d3e473072afb0d97aadf46ea0be8b1f55ca26`; CI workflow blob `02d0ce81d3704d9bc9c513df9b474855ffeae703` preserved unchanged since R0-A. Final-main push CI: workflow `CI`, run `33240760167`, event `push`, branch `main`, head SHA `24c95c0…`, conclusion `success`. Cleanup execution summary is captured in the dedicated block above (305 worktrees + 305 generated branches + 5 named local branches + 4 named remote branches removed; `v1-dry-run-baseline` preserved; no unique history lost).
 
-- **Phase:** `PHASE15B_POLICY_FREEZE_COMPLETE`. Phase 15A offline measurement remains authoritative structural/designed-replay evidence (`192` observations, `439` census records, fixed `2 / 256`; checkpoint `df621d4`, CI run `33325598811` SUCCESS). Phase 15B freezes a no-change policy: `NO_PRODUCTION_DEFAULT_CHANGE_PENDING_REPRESENTATIVE_SNAPSHOT` (default remains `5`) and `HARD_MAX_60_REVIEW_DEFERRED` (hard max remains `60`). Designed replay shares are not production probabilities. Artifact: `research/valuation_budget_calibration/POLICY_DECISION.md`. No production, test, script, workflow, CLI, budget, or atomic-semantics change; representative read-only listing-snapshot calibration is required before any numeric policy change.
+- **Phase:** `PHASE15C1_DESIGN_FREEZE_COMPLETE`. Phase 15C-1 freezes a representative read-only snapshot protocol without implementing or running collection. The protocol balances eight productive rarity/mode strata; rebuilds the exact current 10-goods `COHORT_DEPTH` universe per observation; proposes 14 UTC days / 112 attempts with minimum 96 COMPLETE, 10 per stratum, and 12 UTC dates; retains one immutable normalized JSON plus an append-only hashed manifest; and keeps live datasets outside Git by default. Current page-1/default-sort anonymous path plus existing exact identity/intrinsic/metadata bindings supports the narrow current-scanner frame; full-market/order-book/pagination-complete claims remain `PHASE15C1_LIVE_COLLECTION_INTERFACE_GAP`. Default `5` and hard max `60` remain unchanged. Phase 15C-2 is NOT STARTED / NOT AUTHORIZED.
 - **Phase 14 canonical baseline:** Phase 14A / 14A-R1 / 14B / 14C / 14D merged onto canonical main via PR #4. Phase 14 docs checkpoint PR #5 merged at main `215c91c46a6d95de793649a87bccceb3a24a42d3`; main push CI run `33321890478` SUCCESS.
 - **Latest completed phases:**
   - **Phase 14C — Phase12D FRESH_ONLY cache READ integration** — optional scanner-owned `ScannerCachedBuffPriceResolver` injection; the wrapper internally fixes the existing raw resolver to `select_scanner_cached_buff_price`, so generic cross-platform selection cannot enter the public scanner composition path. Each fresh run session performs deterministic memo → sequential FRESH_ONLY cache → live classification. New cached selector delegates strict authority to `select_buff_output_price`. Selected outcomes independently require `lookup.state == FRESH`; strict selection failures retain their stable reason across same-run memo reuse; MISS/EXPIRED/POLICY_BLOCKED become NEW LIVE; typed backend/codec/adapter/resolver errors propagate. Cache-derived memo survives atomic blocks, unresolved blocked names are re-read, Stage B performs live-only resolution and no persistent writes. Snapshot TTL policy remains writer-owned; CLI composition and scanner write-after-live remain unimplemented. `D-CACHE-001` remains Active until Phase 14D runtime composition. Full validation: `3413 passed, 23 skipped, 1 warning`; ruff/mypy pass.
@@ -197,6 +196,6 @@ Live repository HEAD / branch / working tree:
 - **Run-level exact-name valuation and cache-read status:** **IMPLEMENTED at scanner service/session boundary** (Phase 14B + 14C). Each `run_once()` gets a fresh memo. Optional injected Phase12D resolver reads only FRESH data and reruns strict BUFF selection; cache failures/misses follow the frozen classifications. `max_valuation_requests_per_run` counts NEW LIVE demand after memo/cache. `D-CACHE-001` remains Active because default `run_live_scan_once.py` composition is still **NOT IMPLEMENTED** (Phase 14D). Scanner write-after-live remains **NOT IMPLEMENTED**.
 - **Auto-universe scanner status:** **STRUCTURAL ALLOCATION IMPLEMENTED / COHORT-DEPTH LIVE VERIFIED** (Phase 13S; Phase 13R preserved). The pure offline planner now separates exact catalog eligibility from explicit allocation. `BREADTH` remains the default and preserves Phase 13R collection round-robin ordering. Opt-in `COHORT_DEPTH` ranks collection-local allocation cohorts `(collection_name, input rarity, StatTrak)` by descending eligible catalog capacity then lexical key, allocates a configurable target of three cohorts by capacity-aware fair rounds (`10 -> 4/3/3`), and deterministically interleaves normal/Souvenir identities within each cohort. The legal recipe bucket remains broader `(rarity, StatTrak)`; collections may mix and Souvenir is not a cohort-key field under the May-2026 rule. Catalog capacity is not liquidity or live availability. No price/EV/ROI/risk/network dependence exists in planning. Hard cap remains 10; preview remains no-network; manual mode is unchanged when auto options are omitted.
 - **Metadata status:** pinned local ByMykel catalog snapshot (`data/metadata/skin_metadata_v1.json`, commit `8a785962...`, MIT, raw SHA-256 `7aeb9582...`); exact-name local O(1) resolver, zero runtime metadata network I/O.
-- **Working tree:** Phase 15A checkpoint `df621d4` is pushed on `feature/valuation-budget-calibration`; Phase 15B adds only policy/current-state documentation before its own checkpoint. The only unrelated working-tree entries are the two protected untracked research JSONs, which remain untouched. Canonical `main` remains `215c91c46a6d95de793649a87bccceb3a24a42d3`. Verify live via Git.
+- **Working tree:** Phase 15A/15B are merged through PR #6 at canonical main `7a73cc026f93bbed9d9c089c96e6565a6c43c68d`. Phase 15C-1 lives on `feature/representative-snapshot-calibration` and changes only design/spec/protocol/example/current-state docs. The only unrelated working-tree entries remain the two protected untracked research JSONs. Verify live via Git.
 
 > Prefer `git status` and `git log --oneline -n 20` over this snapshot.
