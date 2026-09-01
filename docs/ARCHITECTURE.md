@@ -236,7 +236,8 @@ pinned CS2 metadata snapshot + pinned BUFF community identity snapshot
        next_rarity, represented collections, eligible exact outputs,
        per-output probability contribution, output StatTrak mode
   -> static float feasibility                       (16C, offline)
-       required_max_avg_adjusted(T); range feasibility != executability
+       exact interval-union / Minkowski reachability;
+       reachable finish/wear evidence; possibility != executability
   -> SteamDT batch pre-screen                       (16C, mocked transport)
        POST /open/cs2/v1/price/batch; strict BUFF selector;
        case-sensitive platform == "BUFF"; positive finite sellPrice;
@@ -435,4 +436,42 @@ exact market_hash_names
   -> isolated pre-screen quote/missing/failure diagnostics
 ```
 
-These modules have zero production scanner callers. Final valuation remains the existing single-endpoint strict-BUFF path with unchanged cache/session/budget semantics.
+## Phase 16D Offline Economics, Ranking, and Targeted Plan
+
+```text
+immutable Phase 16C strict-BUFF price book (no transport)
+  + exact per-name input identity/adjusted-float evidence
+  + RecipeFamilyGeometry exact Fraction probabilities
+  + exact StaticFloatFeasibilityResult reachable finish/wear names
+    -> optimistic/base/conservative approximate economics
+       inputs: min / Decimal median / max by represented collection
+       outputs: max / Decimal median / min by reachable names per finish
+       explicit Decimal sell fee; estimated ROI is exact Fraction
+       required component missing -> fail closed
+       alternative quote missing -> complete with diagnostic
+       no joint-realizability or executability claim
+    -> deterministic lexicographic streaming Top-2
+       base ROI, base profit, conservative ROI, conservative profit,
+       known sellCount sum descending; request count then hash ascending
+       no weighted score; no timestamp key; no static threshold margin
+    -> exact targeted input candidates
+       price, adjusted lower bound, sellCount, name, goods_id order
+    -> deterministic TargetedBuffScanPlan
+       family slot targets 10 / 6+4 / 4+3+3;
+       shortfall redistribution among represented collections only;
+       <=10 unique exact names and goods_ids
+    -> TargetedBuffScanDecision
+       at most two ranked keys; exactly zero or one active plan;
+       fallback only before first future BUFF request
+```
+
+SteamDT `update_time: int | str | None` remains opaque diagnostic
+evidence. Provider timestamp format/semantics are unconfirmed, so it
+is never parsed, chronologically compared, called freshness proof, or
+used for ranking (`D-PRESCREEN-TIMESTAMP-NONAUTHORITY-001`).
+
+Phase 16D has zero production scanner callers and performs no BUFF or
+SteamDT request. Production remains goods-first. Final valuation,
+`OpportunityMetrics`, `RiskFilterConfig`, Phase 14 cache/session/budget
+semantics, default 5, hard max 60, enumeration 2/256, and
+`D-TRADEUP-WEAR-ROW-MIGRATION-001` remain unchanged.

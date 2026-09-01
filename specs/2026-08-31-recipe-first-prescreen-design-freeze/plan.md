@@ -141,7 +141,7 @@ against the protected-core boundary.
 
 ## 4. Stage 16D — Coarse economics + ranking + TargetedBuffScanPlan
 
-Status: NOT STARTED / awaiting separate authorization.
+Status: COMPLETE (`PHASE_16D_ECONOMICS_RANKING_TARGETED_PLAN_COMPLETE`).
 
 Scope:
 

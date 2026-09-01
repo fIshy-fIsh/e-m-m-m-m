@@ -101,42 +101,39 @@ for the implementation stages:
 - `sellCount` / `updateTime` retained as diagnostics only.
 - mock-transport asserts zero live HTTP during tests.
 
-### 4.4 Coarse economics (Stage 16D)
+### 4.4 Coarse economics (Stage 16D — implemented)
 
-`tests/test_recipe_family_economics.py`:
+`tests/test_recipe_family_prescreen_economics.py`:
 
-- optimistic / base / conservative scenario consistency,
-- missing-price penalty path,
-- DTO separation from
-  `app.services.ev_service.OpportunityMetrics`.
+- exact optimistic / base / conservative min/median/max rules,
+- exact Decimal fee and Fraction probability/ROI math,
+- required-component missing failure versus alternative missing diagnostics,
+- output-wear alternatives do not alter structural probability,
+- explicit no-joint-realizability assumption,
+- no timestamp parsing or chronological ranking.
 
-### 4.5 Deterministic ranking (Stage 16D)
+### 4.5 Deterministic ranking (Stage 16D — implemented)
 
 `tests/test_recipe_family_ranking.py`:
 
-- gates enforced: structurally_feasible, batch_pre_screen
-  SUCCESS, no missing-price penalty, supporting wear band,
-  request-count bound,
-- lexicographic sort stability,
-- tie-break by `family_hash`,
-- exclusion reason codes:
-  `STRUCTURALLY_INFEASIBLE`,
-  `BATCH_PRE_SCREEN_FAILED`, `MISSING_PRICE_PENALTY`,
-  `NO_SUPPORTING_WEAR_BAND`,
-  `REQUEST_COUNT_OVER_BUDGET`, `UNRESOLVED_IDENTITY`,
-- Top-N bound `TOP_RANKED_FAMILIES = 2`.
+- exact gates and stable exclusion reason counters,
+- seven-key lexicographic order with no weighted score,
+- family-hash final tie-break,
+- generator and chunked feed determinism,
+- streaming Top-2 retains at most two ranked objects.
 
-### 4.6 TargetedBuffScanPlanner (Stage 16D)
+### 4.6 TargetedBuffScanPlanner (Stage 16D — implemented)
 
-`tests/test_targeted_buff_scan_planner.py`:
+`tests/test_targeted_buff_scan_plan.py`:
 
-- `MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10` enforcement,
-- exactly-one-active-family per run,
-- family-switching-after-live-start forbidden,
-- unresolved identity diagnostics,
-- goods_id mapping correctness via
-  `app.services.market_universe_builder`,
-- collection role correctness.
+- exact candidate ordering and identity composition,
+- deterministic allocations 10, 6/4, and 4/3/3,
+- deterministic capacity-shortfall redistribution,
+- every represented collection covered,
+- exact-name/goods-ID collision failure,
+- normal/Souvenir and StatTrak boundaries,
+- at most one active family and pre-live-only fallback,
+- hard request cap 10.
 
 ### 4.7 Family-constrained concrete search (Stage 16E)
 

@@ -465,3 +465,15 @@ Isolated modules with zero current production callers:
 - `app.services.steamdt_batch_prescreen`
 
 They provide exact interval-union/Minkowski reachability, finish-to-wear-to-exact-name static evidence, and strict BUFF-only batch quote evidence. Production scanner remains goods-first; final valuation remains single strict BUFF; no cache/risk/EV integration exists in 16C.
+
+---
+
+## Phase 16D Offline Decision Layer Implemented (2026-09-01)
+
+Isolated modules with zero current production callers:
+- `app.services.prescreen_price_book`
+- `app.services.recipe_family_prescreen_economics`
+- `app.services.recipe_family_ranking`
+- `app.services.targeted_buff_scan_plan`
+
+`static_float_feasibility` additively exposes exact per-name pinned input identity and adjusted-interval evidence without changing reachability semantics. The decision layer uses precomputed strict-BUFF quotes only; no transport exists inside economics/ranking. Three min/median/max scenarios use Decimal money, exact Fraction finish probabilities/ROI, and explicit sell fee. Ranking is gate-based, seven-key lexicographic, streaming Top-2, and has no timestamp or threshold-margin key. Targeted plans cover every represented collection with <=10 unique exact names/goods IDs and exactly zero or one active family. Production scanner/CLI, final provider, cache/session, EV/risk, defaults, enumeration, and wear-row migration remain unchanged.

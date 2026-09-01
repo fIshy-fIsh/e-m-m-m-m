@@ -16,9 +16,11 @@ from app.services.metadata_models import SkinMetadata
 from app.services.recipe_family import build_recipe_family
 from app.services.recipe_family_geometry import compute_recipe_family_geometry
 from app.services.static_float_feasibility import (
+    InputIdentityFloatEvidence,
     ReachableOutputWear,
     StaticFloatFeasibilityError,
     StaticFloatFeasibilityStatus,
+    build_input_identity_float_evidence,
     compute_static_float_feasibility,
     query_target_wear,
 )
@@ -254,6 +256,51 @@ def test_unresolved_output_wear_fails_closed(
     assert query_target_wear(
         result, finish_key="missing", wear_name="Factory New"
     ) is None
+
+
+def test_input_identity_float_evidence_is_exact_and_family_scoped(
+    pinned_context: tuple[
+        list[SkinMetadata],
+        BuffCommunityIdentityResolver,
+        StructuralOutputFinishIndex,
+    ]
+) -> None:
+    skins, identity, _finish_index = pinned_context
+    evidence = build_input_identity_float_evidence(
+        skins=tuple(skins),
+        identity_resolver=identity,
+        input_rarity="Restricted",
+        stattrak_mode=StatTrakMode.NORMAL,
+        represented_collections=("The Horizon Collection",),
+    )
+    assert evidence
+    assert all(type(item) is InputIdentityFloatEvidence for item in evidence)
+    assert all(
+        item.collection_name == "The Horizon Collection" for item in evidence
+    )
+    assert all(item.stattrak is False for item in evidence)
+    pinned_mapping = dict(identity.identities)
+    assert all(
+        pinned_mapping[item.market_hash_name] == item.goods_id for item in evidence
+    )
+    assert all(not item.adjusted_intervals.is_empty for item in evidence)
+
+
+def test_input_identity_float_evidence_preserves_souvenir_provenance(
+    pinned_context: tuple[
+        list[SkinMetadata],
+        BuffCommunityIdentityResolver,
+        StructuralOutputFinishIndex,
+    ]
+) -> None:
+    skins, identity, _finish_index = pinned_context
+    evidence = build_input_identity_float_evidence(
+        skins=tuple(skins),
+        identity_resolver=identity,
+        input_rarity="Restricted",
+        stattrak_mode=StatTrakMode.NORMAL,
+    )
+    assert any(item.souvenir for item in evidence)
 
 
 def test_static_feasibility_status_enum_values() -> None:

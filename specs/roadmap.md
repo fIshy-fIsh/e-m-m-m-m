@@ -983,5 +983,49 @@ production boundary:
   wear-row migration deferred
 
 next:
-  Phase 16D — Coarse Economics + Deterministic Ranking + TargetedBuffScanPlan
+  Phase 16D — COMPLETE (see checkpoint below)
+```
+
+## Phase 16D — Coarse Economics + Deterministic Ranking + Targeted BUFF Scan Plan
+
+```text
+status: COMPLETE
+branch: feature/recipe-first-economics-ranking
+base: b1e4d773 (Phase 16C)
+
+implemented:
+  prescreen_price_book.py
+    immutable exact-name strict-BUFF quote evidence; no transport/raw payload;
+    update_time remains opaque diagnostic only
+  static_float_feasibility.py (small additive evidence seam)
+    exact per-name pinned market_hash_name/goods_id/collection/stratum/
+    souvenir/StatTrak/adjusted-interval evidence
+  recipe_family_prescreen_economics.py
+    optimistic/base/conservative input min/median/max and reachable-output
+    max/median/min scenarios; exact Fraction geometry and ROI; Decimal money;
+    explicit sell fee; required missing fail-closed; alternative missing diagnostic
+  recipe_family_ranking.py
+    deterministic gate + seven-key lexicographic streaming Top-2;
+    no timestamp key, no weighted score, no static threshold-margin scalar,
+    no full family materialization/global hash set
+  targeted_buff_scan_plan.py
+    exact candidate ordering; family-count slot allocation and represented-only
+    shortfall redistribution; <=10 unique names/goods_ids; one active family;
+    fallback only before future live work
+
+reconciliations:
+  D-PRESCREEN-TIMESTAMP-NONAUTHORITY-001
+  SteamDT update_time int|string|None is opaque diagnostics, not chronology/freshness/ranking
+  Phase 16C exact interval-union/reachable finish-wear evidence is a gate and
+  structured evidence, not static_float_margin_vs_threshold
+
+production boundary:
+  offline/pre-production only; no BUFF or SteamDT requests;
+  no production scanner/CLI wiring; goods-first scanner unchanged;
+  final valuation/cache/session/EV/risk unchanged;
+  defaults 5/60 and enumeration 2/256 unchanged;
+  D-TRADEUP-WEAR-ROW-MIGRATION-001 unchanged/deferred
+
+next:
+  Phase 16E — Family-Constrained Concrete Search + Opt-In Recipe-First Orchestrator Integration
 ```

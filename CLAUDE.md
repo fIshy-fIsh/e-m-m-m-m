@@ -66,7 +66,9 @@
 6. 检查是否把未确认的 BUFF API 细节错误写死进代码。
 
 ## 当前阶段指针
-- 阶段：`PHASE_16C_STATIC_FLOAT_BATCH_PRESCREEN_COMPLETE`（offline/pre-production primitives implemented；分支 `feature/recipe-first-float-prescreen` from Phase 16B `dd7c03a1`；Phase 16D NOT STARTED / NOT AUTHORIZED）。
+- 阶段：`PHASE_16D_ECONOMICS_RANKING_TARGETED_PLAN_COMPLETE`（offline/pre-production decision layer implemented；分支 `feature/recipe-first-economics-ranking` from Phase 16C `b1e4d773`；Phase 16E NOT STARTED / NOT AUTHORIZED）。
+- Phase 16D implemented：immutable exact-name strict-BUFF price book；exact per-input pinned identity/goods_id/adjusted-float evidence；Decimal/Fraction optimistic/base/conservative economics with explicit fee；deterministic seven-key streaming Top-2；exact candidate order and <=10 targeted slot allocation；one active family / pre-live fallback only；zero production callers / zero live HTTP。
+- Phase 16D reconciliation：SteamDT `update_time: int | str | None` remains opaque diagnostics only（NOT parsed/chronologically compared/ranked/freshness proof；`D-PRESCREEN-TIMESTAMP-NONAUTHORITY-001`）；Phase 16C exact interval-union/reachable finish-wear evidence is gate + structured evidence，NOT `static_float_margin_vs_threshold` scalar。
 - Phase 16C implemented：exact `FloatIntervalUnion`/Minkowski static reachability over pinned identity-resolved input wear intervals；output finish -> exact float intervals -> canonical wear -> fail-closed exact pinned non-Souvenir market name；strict SteamDT batch pre-screen exact dedupe / sequential chunks 10 / existing parser + strict BUFF selector；34 focused tests、full 3516 passed；zero production callers / zero live HTTP。
 - Final valuation remains existing single strict-BUFF path；defaults 5/60、enumeration 2/256、cache/session/risk/EV、`D-TRADEUP-WEAR-ROW-MIGRATION-001` unchanged。
 - Phase 16B implemented：immutable `StructuralOutputFinishIndex`、`RecipeFamily` exact eligibility/identity、analytic counts、lazy deterministic generation、`RecipeFamilyGeometry` exact Fraction finish-level probability；authoritative C=`38/44/86/44/76/44/63/44`, K<=3 total `9,972,412`; 45 focused tests, full 3482 passed；zero current production callers。

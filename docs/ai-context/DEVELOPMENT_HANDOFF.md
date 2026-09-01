@@ -847,4 +847,23 @@ Pinned float audit: exact identity rows by stratum `1408/1312/2337/1318/1603/957
 
 Production boundary: no scanner/CLI/final valuation/cache/risk/EV caller imports Phase 16C modules; no live BUFF or SteamDT; defaults 5/60 and enumeration 2/256 unchanged; wear-row migration deferred.
 
-Next: Phase 16D — Coarse Economics + Deterministic Ranking + TargetedBuffScanPlan (separately authorized).
+---
+
+## Phase 16D — Coarse Economics + Ranking + Targeted Plan (2026-09-01)
+
+Status: `PHASE_16D_ECONOMICS_RANKING_TARGETED_PLAN_COMPLETE` on `feature/recipe-first-economics-ranking`, based on Phase 16C commit `b1e4d773`.
+
+Implemented:
+- immutable exact-name `PreScreenPriceBook` over normalized Phase 16C strict-BUFF quotes; no transport/raw payload;
+- exact per-name pinned input identity/`goods_id`/collection/stratum/StatTrak/Souvenir/adjusted-interval evidence;
+- `RecipeFamilyPreScreenEconomics` optimistic/base/conservative min/median/max scenarios with Decimal money, Fraction geometry/ROI, explicit fee, required-versus-alternative missing semantics, and explicit no-joint-realizability assumption;
+- gate-based deterministic seven-key lexicographic streaming Top-2 with bounded retained ranked state; no weighted score, timestamp key, threshold-margin key, full-universe list, or global hash set;
+- exact targeted candidate order and deterministic family slot allocations (10, 6/4, 4/3/3), represented-collection-only capacity redistribution, <=10 unique exact names/goods IDs;
+- `TargetedBuffScanDecision` with at most two ranked keys and exactly zero or one active plan; fallback only before first future live BUFF request;
+- pinned-snapshot offline chain from family/geometry/static feasibility through fake price book/economics/rank/plan/decision.
+
+Reconciled decisions: SteamDT `update_time: int | str | None` remains opaque diagnostics and is never parsed/ordered/ranked; Phase 16C exact reachability is gate/structured evidence rather than one `static_float_margin_vs_threshold` scalar.
+
+Production boundary: no production scanner/CLI wiring and zero live BUFF/SteamDT. Goods-first scanner, final single strict-BUFF provider, `OpportunityMetrics`, `RiskFilterConfig`, Phase 14 session/cache/budget, defaults 5/60, enumeration 2/256, and `D-TRADEUP-WEAR-ROW-MIGRATION-001` remain unchanged.
+
+Next: Phase 16E — Family-Constrained Concrete Search + Opt-In Recipe-First Orchestrator Integration (separately authorized).

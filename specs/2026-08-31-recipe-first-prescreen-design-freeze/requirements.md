@@ -170,7 +170,15 @@ contracts above:
   missing or unusable BUFF record fails the family closed).
 - Pre-screen NEVER uses `biddingPrice`, NEVER substitutes a
   second platform, NEVER picks the lowest price across platforms.
-- `sellCount` and `updateTime` are retained as diagnostics only.
+- SteamDT `sellCount` and `updateTime` are retained as diagnostics only.
+  `updateTime` has normalized type `int | str | None`; its timestamp
+  format and semantics remain unconfirmed, so it MUST NOT be parsed,
+  chronologically compared, called freshness proof, or used as a
+  Phase 16D ranking key.
+- Phase 16C exact interval-union and reachable finish/wear evidence
+  is the static feasibility authority. Phase 16D uses it as a gate
+  and structured evidence; it MUST NOT regress to a universal
+  `static_float_margin_vs_threshold` scalar.
 - No pre-screen call may exceed `batch-size = 10` until official
   SteamDT documentation confirms a larger limit.
 - RecipeFamily enumeration order is deterministic

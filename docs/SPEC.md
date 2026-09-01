@@ -547,4 +547,33 @@ The new architecture preserves:
 - production default `5`, hard max `60` unchanged;
 - no invented BUFF / SteamDT details.
 
+### 17.11 Phase 16D implementation checkpoint
+
+Phase 16D implements a pure immutable price-book boundary, exact
+per-input pinned identity/adjusted-float evidence, three approximate
+economics scenarios, deterministic streaming Top-2 ranking, bounded
+targeted plan construction, and a one-active-family offline decision.
+
+The scenario rules are input min/median/max and reachable-output
+max/median/min. All money is `Decimal`, structural probability is the
+Phase 16B exact `Fraction`, estimated ROI is exact `Fraction`, and
+sell fee is explicit. Required component gaps fail closed while
+missing alternatives remain diagnostic.
+
+Ranking has no weighted score. It orders base ROI/profit,
+conservative ROI/profit, and known sellCount descending, followed by
+request count and family hash ascending. SteamDT `update_time` remains
+opaque diagnostics because its format/semantics are unconfirmed; it
+is not parsed or used for chronology, freshness, or ranking. Exact
+Phase 16C reachability is a gate/structured evidence and is not
+reduced to `static_float_margin_vs_threshold`.
+
+Targeted planning uses exact identity only, covers every represented
+collection, rejects duplicate names/goods IDs, allocates family-count
+slots with represented-collection-only shortfall redistribution, and
+produces at most 10 requests. Top-2 still means exactly zero or one
+active family. Phase 16D performs no network and has no production
+scanner/CLI caller. Final valuation and wear-row migration status are
+unchanged.
+
 Full architectural contract and offline evidence: `specs/2026-08-31-recipe-first-prescreen-design-freeze/{requirements,design,plan,validation}.md`.

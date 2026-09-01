@@ -418,40 +418,29 @@ What is NOT structural:
 - actual listing prices (depends on concrete live BUFF sell
   orders).
 
-## 6. Static float feasibility (offline math; no listing float)
+## 6. Static float feasibility (implemented by Phase 16C)
 
-For one RecipeFamily with output `(output_min, output_max)` and
-desired output float threshold `T`:
-
-```text
-adjusted_i     = (actual_float_i - input_min_i) / (input_max_i - input_min_i)
-avg_adjusted   = mean(adjusted_i)
-output_float   = avg_adjusted * (output_max - output_min) + output_min
-```
-
-Inverse reasoning for `output_float <= T`:
+Phase 16C supersedes the earlier single-threshold sketch with exact
+structured reachability:
 
 ```text
-required_max_avg_adjusted = (T - output_min) / (output_max - output_min)
+exact pinned input identity + intrinsic range + canonical wear
+  -> exact actual-float interval
+  -> exact adjusted FloatIntervalUnion per collection
+  -> gap-preserving n-fold Minkowski sum by family count
+  -> reachable_avg_adjusted FloatIntervalUnion
+  -> each StructuralOutputFinish output-float interval union
+  -> reachable canonical wear intersections
+  -> exact pinned non-Souvenir market_hash_name
 ```
 
-Frozen pre-screen result DTO:
-
-```python
-@dataclass(frozen=True, kw_only=True)
-class StaticFloatFeasibilityResult:
-    family_hash: str
-    structurally_feasible: bool
-    required_max_avg_adjusted: Fraction | None
-    threshold: Decimal
-    output_min: Decimal
-    output_max: Decimal
-    supporting_input_wear_bands: tuple[tuple[str, Decimal, Decimal], ...]
-    reason_codes: tuple[str, ...]
-```
-
-Critical caveat: range feasibility != proof BUFF has executable
-listings. No fabricated listing-float distribution.
+`StaticFloatFeasibilityResult.status == FEASIBLE` is the Phase 16D
+ranking gate. Its reachable interval unions and finish/wear outcomes
+are structured evidence. There is no universal
+`static_float_margin_vs_threshold` scalar and Phase 16D MUST NOT
+invent one. Static possibility still does not prove live listing
+quantity, concrete listing floats, joint realizability, or
+executability.
 
 ## 7. SteamDT batch pre-screen boundary
 
@@ -491,128 +480,82 @@ MUST NOT issue one batch call per family; the dedupe and chunk
 plan operate over the union of names across the active run
 batch.
 
-## 8. Coarse economics DTO (frozen, NOT implemented in 16A)
+## 8. Coarse economics DTO (implemented by Phase 16D)
 
-```python
-@dataclass(frozen=True, kw_only=True)
-class RecipeFamilyPreScreenEconomics:
-    family_hash: str
-    scenario_label: str              # optimistic | base | conservative
-    estimated_input_cost_cny: Decimal | None
-    estimated_gross_output_ev_cny: Decimal | None
-    estimated_net_ev_after_sell_fee_cny: Decimal | None
-    estimated_profit_cny: Decimal | None
-    estimated_roi: Fraction | None
-    assumptions: tuple[str, ...]
-    data_timestamp: datetime | None
-    missing_price_count: int
-    evidence: tuple[str, ...]
-    reason_codes: tuple[str, ...]
-```
+Phase 16D consumes one immutable exact-name price book built from
+already-normalized Phase 16C strict-BUFF quotes. It performs no
+transport inside family economics or ranking. The three scenarios
+use numeric price distributions only; SteamDT `update_time` remains
+opaque diagnostic evidence because its timestamp format and semantics
+are unconfirmed.
 
-Scenario rules:
+- Input representative price per represented collection:
+  optimistic=min, base=Decimal median, conservative=max.
+- Output representative price per structural finish, restricted to
+  statically reachable wear names:
+  optimistic=max, base=Decimal median, conservative=min.
+- Every represented input collection and every structural output
+  finish needs at least one strict quote. Missing alternatives are
+  diagnostic when required component coverage remains complete.
+- The selected per-finish reachable-wear envelopes do not prove one
+  common `avg_adjusted_float` jointly realizes every selected wear.
+  Phase 16E concrete float calculation remains authority.
+- Exact finish probabilities are `Fraction`; price arithmetic is
+  `Decimal`; estimated ROI is exact `Fraction`; sell fee is an
+  explicit validated `Decimal` config.
+- Pre-screen never claims executability, never passes
+  `RiskFilterConfig`, and never reuses `OpportunityMetrics`.
 
-- optimistic: cheapest plausible input cost (lowest observed BUFF
-  sellPrice per required identity); highest observed BUFF
-  sellPrice for outputs (or base if absent).
-- base: most-recent observed BUFF sellPrice for inputs and
-  outputs.
-- conservative: highest observed BUFF sellPrice for inputs;
-  lowest observed BUFF sellPrice for outputs.
+## 9. Deterministic ranking (implemented by Phase 16D)
 
-Pre-screen MUST NEVER:
+Rankable candidates pass the exact static-feasibility, all-three-
+scenario complete-economics, exact input candidate coverage, batch
+pre-screen, identity, and buildable targeted-plan gates.
 
-- claim executability,
-- pass the existing `RiskFilterConfig`,
-- reuse `OpportunityMetrics` for approximate values.
+No weighted score is used. The lexicographic order is:
 
-## 9. Deterministic ranking
+1. base estimated ROI descending;
+2. base estimated profit descending;
+3. conservative estimated ROI descending;
+4. conservative estimated profit descending;
+5. known strict-quote sellCount sum descending;
+6. targeted hard request count ascending;
+7. family hash ascending.
 
-Default = static lexicographic by gates and explicit keys; no
-weighted score until evidence justifies weights.
+`update_time` is not parsed, compared, called freshness proof, or used
+as a ranking key. Exact reachable interval evidence is a gate and
+structured evidence, not reduced to a threshold-margin key.
 
-Gates:
+Top-N is a streaming bounded `TOP_RANKED_FAMILIES = 2` project
+setting. The ranker retains at most N ranked objects and bounded
+reason counters; it does not list or sort the 9,972,412-family
+universe and does not maintain a global family-hash set.
 
-1. `structurally_feasible == True`
-2. `batch_pre_screen outcome == SUCCESS`
-3. no missing-price penalty
-4. >= 1 supporting wear band exists
-5. `family_request_count <= MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10`
+## 10. TargetedBuffScanPlan (implemented by Phase 16D)
 
-Lexicographic sort key (descending):
+Phase 16D composes exact pinned identity + non-empty adjusted-float
+interval evidence + strict-BUFF pre-screen quote into immutable input
+candidates. Candidate order within a collection is:
 
-1. `estimated_roi_scenario_base`
-2. `estimated_profit_scenario_base`
-3. `static_float_margin_vs_threshold`
-4. batch `sellCount` aggregate evidence (sum over family)
-5. `data_timestamp` (newest first)
-6. `family_hash` (deterministic tie-break)
+1. sell price ascending;
+2. reachable adjusted-float lower bound ascending;
+3. known sellCount descending (`None` last);
+4. exact market name;
+5. goods ID.
 
-Top-N bound: `TOP_RANKED_FAMILIES = 2` (PROJECT bound).
+The planner initially assigns collection slots equal to family counts
+(e.g. 10, 6/4, or 4/3/3), selects distinct exact candidates, and
+redistributes capacity shortfalls only among represented collections
+by family count descending then collection name ascending. Every
+represented collection receives at least one item. It never pads an
+unrelated collection, never accepts duplicate exact names or goods
+IDs, and returns at most
+`MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10` items.
 
-Frozen exclusion reason codes:
-
-- `STRUCTURALLY_INFEASIBLE`
-- `BATCH_PRE_SCREEN_FAILED`
-- `MISSING_PRICE_PENALTY`
-- `NO_SUPPORTING_WEAR_BAND`
-- `REQUEST_COUNT_OVER_BUDGET`
-- `UNRESOLVED_IDENTITY`
-
-## 10. TargetedBuffScanPlan (frozen contract)
-
-```python
-@dataclass(frozen=True, kw_only=True)
-class TargetedBuffScanPlan:
-    family_hash: str
-    requested_input_market_hash_names: tuple[str, ...]
-    mapped_goods_ids: tuple[str, ...]
-    unresolved_identity_count: int
-    collection_role: Mapping[str, str]     # collection_name -> primary|secondary|tertiary
-    stattrak_mode: StatTrakMode
-    static_float_relevance: StaticFloatFeasibilityResult
-    priority: int                          # lexicographic rank position
-    hard_request_count: int
-    diagnostics: tuple[str, ...]
-```
-
-Contract:
-
-- `requested_input_market_hash_names` is the canonical exact-name
-  set the family needs; each must resolve via the pinned BUFF
-  identity catalog.
-- `mapped_goods_ids` is the bounded subset for anonymous
-  page-1/default-sort fetch. The total across the active
-  `TargetedBuffScanPlan` for ONE run is bounded by
-  `MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10`.
-- Exactly ONE family is active for one live targeted BUFF scan
-  per run. Top-2 ranking does NOT multiply the live BUFF request
-  budget.
-- Family #2 is fallback only BEFORE live acquisition starts; if
-  family #1 fails completely during OFFLINE targeted planning,
-  family #2 may become active. Once any BUFF page request starts,
-  family switching in that run is forbidden.
-- Total BUFF page requests per run is
-  `<= MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10`.
-- `unresolved_identity_count > 0` -> plan diagnostic; family
-  still proceedable but with diagnostic counters raised.
-- First-page/default-sort only; no pagination expansion in 16A.
-- `MarketUniverseBuilder` retained for fallback structural
-  planning, exact eligibility, and goods_id mapping diagnostics.
-  NOT the primary discovery brain.
-
-Conceptual `TargetedBuffScanDecision` (NOT implemented in 16A):
-
-```python
-@dataclass(frozen=True, kw_only=True)
-class TargetedBuffScanDecision:
-    ranked_family_keys: tuple[str, ...]   # max 2
-    active_family_key: str | None
-    active_plan: TargetedBuffScanPlan | None
-    fallback_family_key: str | None
-    hard_request_cap: int                # exactly 10 in V1
-    diagnostics: tuple[str, ...]
-```
+`TargetedBuffScanDecision` stores at most two ranked family keys but
+exactly zero or one active plan. Rank #2 is fallback only when rank #1
+is unbuildable before live work. Phase 16D issues no request. Phase
+16E must forbid switching after the first BUFF request starts.
 
 ## 11. Family-constrained concrete search (reuses solver)
 

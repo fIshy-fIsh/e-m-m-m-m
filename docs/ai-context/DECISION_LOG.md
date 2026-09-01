@@ -1032,3 +1032,32 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 - **Date:** 2026-09-01
 - **Decision:** Batch pre-screen quotes are ranking/pruning evidence only. They never create `LiveOpportunity`, invoke `RiskFilterConfig`, or claim exact EV/ROI. Production final valuation remains the existing single-endpoint strict-BUFF path with unchanged scanner session/cache/budget semantics.
 - **Status:** Active invariant. `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains deferred.
+
+---
+
+## D-PRESCREEN-TIMESTAMP-NONAUTHORITY-001 — SteamDT update_time is opaque diagnostics
+
+- **Date:** 2026-09-01
+- **Decision:** Normalized SteamDT `update_time` remains `int | str | None`. Provider timestamp format, unit, and chronology semantics are not confirmed. Phase 16D preserves it only in quote diagnostics; it never parses unknown values into datetime, compares integer/string representations chronologically, ranks by newest value, or calls it freshness proof.
+- **Status:** Active Phase 16D authority.
+- **Reason:** Guessing chronology would fabricate provider semantics and could make deterministic ranking depend on incomparable representations.
+
+## D-PRESCREEN-ECONOMICS-IMPLEMENTATION-001 — Three approximate strict-BUFF scenario economics
+
+- **Date:** 2026-09-01
+- **Decision:** Phase 16D economics consumes a reusable immutable exact-name price book over already-normalized Phase 16C strict-BUFF quotes. Input unit prices are min/Decimal-median/max by represented collection for optimistic/base/conservative. Reachable output prices are max/Decimal-median/min per structural finish. Money and explicit sell fee use `Decimal`; Phase 16B finish probabilities and estimated ROI use exact `Fraction`. Every represented input collection and structural output finish needs at least one quote; missing alternatives remain diagnostic. Per-finish reachable-wear envelopes explicitly do not prove joint realizability or executability.
+- **Status:** Complete offline/pre-production implementation; separate from `OpportunityMetrics` and `RiskFilterConfig`.
+- **Boundary:** No transport, raw payload, live quantity, final valuation, or `LiveOpportunity` authority.
+
+## D-PRESCREEN-RANKING-IMPLEMENTATION-001 — Lexicographic streaming Top-2
+
+- **Date:** 2026-09-01
+- **Decision:** Phase 16D ranking gates on exact static feasibility, complete all-three-scenario economics, batch success, identity validity, and a buildable <=10 request plan. Rank order is base ROI, base profit, conservative ROI, conservative profit, and known sellCount sum descending, then request count and family hash ascending. It uses no weighted score, timestamp, or `static_float_margin_vs_threshold`. Streaming state retains at most `TOP_RANKED_FAMILIES = 2` ranked objects plus bounded counters and never lists/sorts the 9,972,412 universe or maintains a global family-hash set.
+- **Status:** Complete offline/pre-production implementation.
+
+## D-TARGETED-BUFF-PLANNER-IMPLEMENTATION-001 — Exact bounded one-family targeted plan
+
+- **Date:** 2026-09-01
+- **Decision:** Phase 16D composes exact pinned input identity/float evidence with strict-BUFF quotes. Candidate order is price, adjusted-float lower bound, known sellCount, exact name, goods ID. Slot targets begin at family collection counts; shortfalls redistribute only among represented collections by family count descending then collection name. Every represented collection is covered; exact name/goods-ID collisions fail closed; plans contain <=10 unique goods IDs. The decision stores at most Top-2 family keys but exactly zero or one active plan; fallback is allowed only before first future BUFF request.
+- **Status:** Complete offline/pre-production implementation. No BUFF request issued; Phase 16E must enforce no switch after live work begins.
+- **Boundary:** `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains active/deferred and production remains goods-first.

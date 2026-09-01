@@ -33,11 +33,13 @@ from app.services.structural_output_finish import (
 from app.utils.wear import WEAR_RANGES
 
 __all__ = (
+    "InputIdentityFloatEvidence",
     "ReachableOutputWear",
     "StaticFloatFeasibilityError",
     "StaticFloatFeasibilityResult",
     "StaticFloatFeasibilityStatus",
     "build_input_adjusted_interval_unions",
+    "build_input_identity_float_evidence",
     "compute_static_float_feasibility",
     "query_target_wear",
 )
@@ -54,6 +56,44 @@ class StaticFloatFeasibilityStatus(StrEnum):
 
 class StaticFloatFeasibilityError(ValueError):
     """A static float feasibility input violated the strict contract."""
+
+
+@dataclass(frozen=True, kw_only=True, repr=False)
+class InputIdentityFloatEvidence:
+    """Exact pinned input identity with its static adjusted-float interval."""
+
+    market_hash_name: str
+    goods_id: str
+    collection_name: str
+    input_rarity: str
+    stattrak: bool
+    souvenir: bool
+    adjusted_intervals: FloatIntervalUnion
+
+    def __post_init__(self) -> None:
+        exact_fields = (
+            ("market_hash_name", self.market_hash_name),
+            ("goods_id", self.goods_id),
+            ("collection_name", self.collection_name),
+            ("input_rarity", self.input_rarity),
+        )
+        for field, value in exact_fields:
+            if type(value) is not str or not value or value != value.strip():
+                raise StaticFloatFeasibilityError(
+                    f"{field} must be an exact non-empty string"
+                )
+        if type(self.stattrak) is not bool or type(self.souvenir) is not bool:
+            raise StaticFloatFeasibilityError(
+                "stattrak and souvenir must be booleans"
+            )
+        if type(self.adjusted_intervals) is not FloatIntervalUnion:
+            raise StaticFloatFeasibilityError(
+                "adjusted_intervals must be FloatIntervalUnion"
+            )
+        if self.adjusted_intervals.is_empty:
+            raise StaticFloatFeasibilityError(
+                "adjusted_intervals cannot be empty"
+            )
 
 
 @dataclass(frozen=True, kw_only=True, repr=False)
@@ -166,6 +206,85 @@ def _to_adjusted(
     )
 
 
+def build_input_identity_float_evidence(
+    *,
+    skins: tuple[SkinMetadata, ...],
+    identity_resolver: BuffCommunityIdentityResolver,
+    input_rarity: str,
+    stattrak_mode: StatTrakMode,
+    represented_collections: tuple[str, ...] | None = None,
+) -> tuple[InputIdentityFloatEvidence, ...]:
+    """Expose Phase 16C's per-name input interval evidence immutably.
+
+    This uses the same exact identity, stratum, wear intersection, and
+    actual-to-adjusted transform as family static feasibility. It adds no
+    price or live quantity claim.
+    """
+
+    if type(identity_resolver) is not BuffCommunityIdentityResolver:
+        raise StaticFloatFeasibilityError(
+            "identity_resolver must be BuffCommunityIdentityResolver"
+        )
+    if type(stattrak_mode) is not StatTrakMode:
+        raise StaticFloatFeasibilityError("invalid StatTrak mode")
+    represented: frozenset[str] | None = None
+    if represented_collections is not None:
+        if type(represented_collections) is not tuple or any(
+            type(value) is not str or not value or value != value.strip()
+            for value in represented_collections
+        ):
+            raise StaticFloatFeasibilityError(
+                "represented_collections must be tuple[exact str, ...]"
+            )
+        if len(set(represented_collections)) != len(represented_collections):
+            raise StaticFloatFeasibilityError(
+                "represented_collections must not contain duplicates"
+            )
+        represented = frozenset(represented_collections)
+
+    goods_by_name = dict(identity_resolver.identities)
+    if len(goods_by_name) != len(identity_resolver.identities):
+        raise StaticFloatFeasibilityError("pinned identity contains duplicate names")
+    expected_stattrak = stattrak_mode is StatTrakMode.STATTRAK
+    by_name: dict[str, InputIdentityFloatEvidence] = {}
+    for skin in skins:
+        if type(skin) is not SkinMetadata:
+            raise StaticFloatFeasibilityError("skins must contain SkinMetadata")
+        collection_name = skin.collection_name
+        if collection_name is None or skin.rarity != input_rarity:
+            continue
+        if represented is not None and collection_name not in represented:
+            continue
+        if skin.stattrak is not expected_stattrak:
+            continue
+        goods_id = goods_by_name.get(skin.market_hash_name)
+        if goods_id is None:
+            continue
+        actual = _actual_interval_for_skin(skin)
+        if actual is None:
+            continue
+        evidence = InputIdentityFloatEvidence(
+            market_hash_name=skin.market_hash_name,
+            goods_id=goods_id,
+            collection_name=collection_name,
+            input_rarity=input_rarity,
+            stattrak=bool(skin.stattrak),
+            souvenir=bool(skin.souvenir),
+            adjusted_intervals=_to_adjusted(
+                actual,
+                min_float=skin.min_float,
+                max_float=skin.max_float,
+            ),
+        )
+        existing = by_name.get(evidence.market_hash_name)
+        if existing is not None:
+            raise StaticFloatFeasibilityError(
+                "duplicate exact input identity float evidence"
+            )
+        by_name[evidence.market_hash_name] = evidence
+    return tuple(by_name[name] for name in sorted(by_name))
+
+
 def build_input_adjusted_interval_unions(
     *,
     skins: tuple[SkinMetadata, ...],
@@ -179,33 +298,17 @@ def build_input_adjusted_interval_unions(
     non-StatTrak rows. StatTrak mode admits StatTrak rows only.
     """
 
-    if type(identity_resolver) is not BuffCommunityIdentityResolver:
-        raise StaticFloatFeasibilityError(
-            "identity_resolver must be BuffCommunityIdentityResolver"
-        )
-    if type(stattrak_mode) is not StatTrakMode:
-        raise StaticFloatFeasibilityError("invalid StatTrak mode")
-    exact_names = frozenset(name for name, _goods_id in identity_resolver.identities)
-    expected_stattrak = stattrak_mode is StatTrakMode.STATTRAK
+    evidence = build_input_identity_float_evidence(
+        skins=skins,
+        identity_resolver=identity_resolver,
+        input_rarity=input_rarity,
+        stattrak_mode=stattrak_mode,
+    )
     pieces: dict[str, list[FloatInterval]] = {}
-    for skin in skins:
-        if type(skin) is not SkinMetadata:
-            raise StaticFloatFeasibilityError("skins must contain SkinMetadata")
-        if skin.collection_name is None or skin.rarity != input_rarity:
-            continue
-        if skin.stattrak is not expected_stattrak:
-            continue
-        if skin.market_hash_name not in exact_names:
-            continue
-        actual = _actual_interval_for_skin(skin)
-        if actual is None:
-            continue
-        adjusted = _to_adjusted(
-            actual,
-            min_float=skin.min_float,
-            max_float=skin.max_float,
+    for item in evidence:
+        pieces.setdefault(item.collection_name, []).extend(
+            item.adjusted_intervals.intervals
         )
-        pieces.setdefault(skin.collection_name, []).extend(adjusted.intervals)
     return {
         collection_name: FloatIntervalUnion(intervals=tuple(intervals))
         for collection_name, intervals in sorted(pieces.items())

@@ -262,4 +262,10 @@ Authoritative Phase 16B pinned counts under exact identity + valid next-rarity o
 
 ## Phase 16C Static Float + Batch Pre-Screen Complete (2026-09-01)
 
-`PHASE_16C_STATIC_FLOAT_BATCH_PRESCREEN_COMPLETE` on `feature/recipe-first-float-prescreen`: exact interval-union/Minkowski static reachability and strict SteamDT batch BUFF pre-screen implemented as isolated pre-production primitives. Full suite 3516 passed / 23 skipped / 1 warning. Production final valuation/scanner/cache/budget and `D-TRADEUP-WEAR-ROW-MIGRATION-001` unchanged. Next: separately authorized Phase 16D.
+`PHASE_16C_STATIC_FLOAT_BATCH_PRESCREEN_COMPLETE` on `feature/recipe-first-float-prescreen`: exact interval-union/Minkowski static reachability and strict SteamDT batch BUFF pre-screen implemented as isolated pre-production primitives. Full suite 3516 passed / 23 skipped / 1 warning. Production final valuation/scanner/cache/budget and `D-TRADEUP-WEAR-ROW-MIGRATION-001` unchanged.
+
+---
+
+## Phase 16D Economics + Ranking + Targeted Plan Complete (2026-09-01)
+
+`PHASE_16D_ECONOMICS_RANKING_TARGETED_PLAN_COMPLETE` on `feature/recipe-first-economics-ranking`: immutable strict-BUFF price evidence; exact per-input identity/float evidence; Decimal/Fraction optimistic/base/conservative economics; deterministic seven-key streaming Top-2; and exact <=10 targeted goods plan with one active family. `update_time` is opaque diagnostics, never chronological ranking authority. Exact static reachability is a gate/structured evidence, not a threshold-margin scalar. Offline/pre-production only; scanner remains goods-first; final valuation and `D-TRADEUP-WEAR-ROW-MIGRATION-001` unchanged. Next: separately authorized Phase 16E.
