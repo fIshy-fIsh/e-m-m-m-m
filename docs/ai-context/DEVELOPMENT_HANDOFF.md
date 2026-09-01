@@ -685,3 +685,107 @@ Geometry, OFFLINE ONLY, production diff empty. 16B MUST implement:
 10. tests proving no eager all-state materialization assumption.
 
 Phase 16B requires separate authorization.
+
+---
+
+## Phase 16A-R2 — Output Identity / Wear Geometry Coherence Correction (2026-08-31)
+
+### Offline metadata audit summary
+
+- Pinned snapshot:
+  `data/metadata/skin_metadata_v1.json` (sha256
+  `55e4d446a5343e1932f24b9069090431f87b0c750d2cb4c091947ec2411dc421`,
+  accepted 16868).
+- Candidate 6-tuple finish key
+  `(collection_name, rarity, stattrak, name, weapon, paint_index)`
+  is collision-free: 16868 wear rows -> 2148 distinct finish keys.
+- 3 finishes have a single canonical non-Souvenir wear row;
+  2145 finishes have multiple canonical non-Souvenir wear rows
+  (1791 have all 5 wear bands).
+- `min_float` and `max_float` are consistent across all
+  variants of one finish (zero mismatch rows).
+- Canonical non-Souvenir wear rows form a deterministic
+  `(wear_name, exact_market_hash_name)` map per finish.
+- Souvenir wear rows share `wear_name` labels with non-Souvenir
+  rows but carry a different `market_hash_name` prefix
+  (`"Souvenir " ...`); they MUST NOT appear in the canonical
+  non-Souvenir output wear map.
+
+### Wear-row vs unique-finish counts
+
+```text
+Consumer Grade / normal -> wear_rows=1962 unique_finishes=200
+Industrial Grade / normal -> wear_rows=1900 unique_finishes=204
+Mil-Spec  / normal -> wear_rows=4154 unique_finishes=446
+Mil-Spec  / stattrak -> wear_rows=1318 unique_finishes=279
+Restricted / normal -> wear_rows=2884 unique_finishes=311
+Restricted / stattrak -> wear_rows= 957 unique_finishes=205
+Classified / normal -> wear_rows=1696 unique_finishes=183
+Classified / stattrak -> wear_rows= 602 unique_finishes=130
+```
+
+### Production wear-row cardinality audit finding
+
+Confirmed: the current production
+`tradeup_engine.calculate_tradeup_results` operates on
+`OutputCandidate.market_hash_name` and treats each wear-qualified
+row as a separate probability bucket
+(`per_output_probability = per_input_weight / len(output_candidates)`).
+This is the wear-row cardinality bug. Recorded as
+`D-TRADEUP-WEAR-ROW-MIGRATION-001`. No production code change
+in 16A-R2.
+
+### Frozen output identities
+
+- `StructuralOutputFinish` (finish-level).
+- Exact market valuation identity (canonical non-Souvenir
+  `market_hash_name` resolved fail-closed from pinned finish +
+  wear metadata after output float is determined).
+
+### RecipeFamily change
+
+`represented_outputs: tuple[str, ...]` is replaced with
+`represented_output_finishes: tuple[StructuralOutputFinish, ...]`
+(finish-level). The exact wear-qualified output `market_hash_name`
+is NOT known at RecipeFamily generation time.
+
+### Probability primitive
+
+`per-finish probability = (collection_count / 10) / unique_finish_count_in_collection`.
+Probability sum over `represented_output_finishes` MUST equal 1.
+No silent reuse of the production wear-row cardinality.
+
+### Decisions appended
+
+- `D-RECIPE-FIRST-OUTPUT-IDENTITY-001` — Structural output
+  identity is finish-level.
+- `D-RECIPE-FIRST-PROBABILITY-001` — Structural probability
+  denominators count unique eligible output finishes.
+- `D-OUTPUT-WEAR-MAPPING-001` — Exact output valuation name is
+  resolved fail-closed from pinned finish + wear metadata.
+- `D-TRADEUP-WEAR-ROW-MIGRATION-001` — Production wear-row
+  cardinality migration concern documented.
+
+### Revised Phase 16B handoff
+
+Phase 16B is the next authorized implementation phase. Required
+scope:
+
+1. structural `RecipeFamily` identity WITHOUT a Souvenir axis;
+2. exact sum-to-10 invariant;
+3. K<=3 project bound;
+4. canonical deterministic ordering / hashing;
+5. analytic family counts;
+6. lazy deterministic generation by stratum;
+8. duplicate suppression by canonical identity;
+9. `StructuralOutputFinish` index + finish-key uniqueness
+   (6-tuple), wear-map uniqueness (canonical non-Souvenir
+   only), min/max consistency;
+10. family structural output geometry using UNIQUE FINISH counts
+    and the frozen probability primitive;
+11. tests proving no eager all-state materialization, no
+    wear-row cardinality leakage, and probability sum == 1;
+12. NO production refactor of `tradeup_engine.py`. The fix
+    belongs to a later subphase under explicit regression gates.
+
+Phase 16B requires separate authorization.

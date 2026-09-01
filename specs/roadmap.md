@@ -170,6 +170,47 @@ lazy enumeration:
   MUST support lazy deterministic iteration by stratum and analytic
   counting without materializing all family objects.
 
+output identity (phase 16A-R2):
+  StructuralOutputFinish (finish-level) is the structural output
+  identity used for collection output pool membership, trade-up
+  structural probability, family geometry, and finish-level
+  duplicate suppression. The frozen 6-tuple key
+  (collection_name, rarity, stattrak, name, weapon, paint_index)
+  is collision-free against the pinned snapshot
+  (16868 wear rows -> 2148 distinct finish keys). The canonical
+  non-Souvenir wear rows form a deterministic
+  (wear_name, exact_market_hash_name) map per finish. Exact market
+  valuation identity is the canonical non-Souvenir
+  market_hash_name resolved fail-closed from pinned finish + wear
+  metadata after output float is determined. Zero / multiple
+  mappings for the same finish + wear combination FAIL CLOSED.
+  RecipeFamily.represented_outputs is replaced with
+  represented_output_finishes (finish-level).
+
+structural probability primitive:
+  Per-finish probability = (collection_count / 10) /
+  unique_finish_count_in_collection. Probability sum over
+  represented_output_finishes MUST equal 1. No silent reuse of
+  the current production wear-row cardinality from
+  tradeup_engine.calculate_tradeup_results. Phase 16B MUST
+  introduce the finish-level primitive offline only. A production
+  refactor of tradeup_engine.py is separately gated under
+  D-TRADEUP-WEAR-ROW-MIGRATION-001.
+
+implementation stages (NOT in 16A; freeze only):
+  16B  RecipeFamily + Structural Finish Index + Lazy Generator +
+       Finish-Level Geometry (offline only)
+  16C  Static float feasibility + SteamDT batch pre-screen
+       adapter / resolver (offline tests; NO live BUFF)
+  16D  Coarse economics + ranking + TargetedBuffScanPlan
+       (offline integration; one active family per run;
+        family-switching-after-live forbidden)
+  16E  Family-constrained concrete solver integration +
+       orchestrator composition behind explicit opt-in
+       (production default OFF)
+  16F  ONE bounded live read-only validation
+       (separately authorized)
+
 phase 15C-3 defer:
   Phase 15C-1 protocol, Phase 15C-2 tooling, Phase 15C-2B smoke
     remain preserved on feature/representative-snapshot-calibration
@@ -181,11 +222,13 @@ phase 15C-3 defer:
     remains 60.
 
 implementation stages (NOT in 16A; freeze only):
-  16B  RecipeFamily domain + deterministic generator +
-       structural geometry
+  16B  RecipeFamily + Structural Finish Index + Lazy Generator +
+       Finish-Level Geometry (offline only)
   16C  Static float feasibility + SteamDT batch pre-screen
        adapter / resolver
   16D  Coarse economics + ranking + TargetedBuffScanPlan
+       (offline integration; one active family per run;
+        family-switching-after-live forbidden)
   16E  Family-constrained concrete solver integration +
        orchestrator composition behind explicit opt-in
   16F  ONE bounded live read-only validation

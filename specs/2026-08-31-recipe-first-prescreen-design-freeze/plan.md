@@ -11,7 +11,7 @@ This plan records the staged implementation sequence for the
 NEW production path that Phase 16A freezes, plus the
 re-validation of Phase 15C-3 under that new path.
 
-## 2. Stage 16B — RecipeFamily domain + deterministic generator + structural geometry
+## 2. Stage 16B — RecipeFamily + Structural Finish Index + Lazy Generator + Finish-Level Geometry
 
 Status: NOT STARTED / awaiting separate authorization.
 
@@ -22,6 +22,10 @@ Scope:
   `family_key` derivation.
 - Souvenir is NOT a structural family identity axis. StatTrak
   mode IS.
+- Introduce `StructuralOutputFinish` DTO with deterministic
+  `finish_key` derived from the 6-tuple
+  `(collection_name, rarity, stattrak, name, weapon, paint_index)`
+  (collision-free against the pinned snapshot per R2 audit).
 - Introduce `RecipeFamilyGenerator`:
   - inputs: pinned CS2 metadata snapshot + pinned BUFF community
     identity snapshot + `StatTrakMode`;
@@ -39,13 +43,33 @@ Scope:
   `output_rarity`.
 - Reuse `app.services.scanner_recipe_composition.is_current_standard_trade_up_output_eligible`
   for canonical output non-Souvenir eligibility.
-- Reuse existing probability authority; do not fork.
+- Structural probability geometry operates on UNIQUE FINISH
+  COUNTS, not wear-qualified market rows. The structural
+  probability primitive counts unique canonical non-Souvenir
+  output finishes per family collection and aggregates to
+  `per-finish probability = (collection_count / 10) / unique_finish_count_in_collection`.
+  No duplicate probability math; no silent reuse of
+  wear-row cardinality from
+  `app.services.tradeup_engine.calculate_tradeup_results`.
 - OFFLINE ONLY. No I/O. No network. Pure functions.
 - `MemoryError` propagation per `D-MEMORY-001`.
 - No global eager cache of all families.
+- **No production refactor of `tradeup_engine.py` in 16B.**
+  The wear-row migration is separately gated under
+  `D-TRADEUP-WEAR-ROW-MIGRATION-001` and belongs to a later
+  subphase with explicit regression gates.
 
 Validation:
 
+- `tests/test_structural_output_finish.py`:
+  - 6-tuple finish key uniqueness against the pinned snapshot
+    (16868 wear rows -> 2148 unique finish keys);
+  - wear-map uniqueness per finish for canonical non-Souvenir
+    rows only;
+  - min/max float consistency across variants of one finish;
+  - Souvenir wear rows excluded from the canonical non-Souvenir
+    `wear_market_names`;
+  - fail-closed semantics for zero / multiple wear mappings.
 - `tests/test_recipe_family_domain.py`:
   - structural invariants (sum == 10; distinct collections bound;
     canonical non-Souvenir output rule; no Souvenir axis on
@@ -53,7 +77,9 @@ Validation:
   - canonical serialization roundtrip / hashing determinism,
   - duplicate suppression by canonical identity,
   - deterministic enumeration order,
-  - hash chain stability across reruns.
+  - hash chain stability across reruns,
+  - `represented_output_finishes` membership is finish-level
+    (NOT wear-row-level).
 - `tests/test_recipe_family_generator.py`:
   - analytic count per stratum matches
     `sum_{k=1..K} C(C, k) * C(9, k-1)` for K = 1, 2, 3,
@@ -62,7 +88,10 @@ Validation:
   - per-stratum iteration,
   - duplicate suppression across the full lazy stream,
   - `MemoryError` propagation,
-  - offline iteration bounds honored when supplied.
+  - offline iteration bounds honored when supplied,
+  - structural probability per finish matches
+    `(collection_count / 10) / unique_finish_count_in_collection`,
+  - probability sum over `represented_output_finishes` equals 1.
 
 Gate: full offline suite, ruff, mypy app, git diff --check
 against the protected-core boundary.
@@ -173,7 +202,7 @@ Scope:
   - prove homogeneous `stattrak` + right `souvenir` projection,
   - duplicate listing identity fail-closed,
   - output `TradeupResult.output_market_hash_name` is among
-    `family.represented_outputs`.
+    `family.represented_output_finishes` (finish-level membership).
 - Reuse `RunScopedValuationSession.prepare_output_prices` /
   `resolve_prepared` (Phase 14B) inside the existing atomic
   NEW-LIVE cap.

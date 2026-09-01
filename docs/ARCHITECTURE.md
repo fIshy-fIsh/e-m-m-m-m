@@ -330,6 +330,45 @@ family DTOs simultaneously.
 - Final executable valuation of concrete candidates remains the
   existing strict `SteamDTBuffPriceProvider` path.
 
+### Output identity boundary (Phase 16A-R2)
+
+Two distinct output identities are frozen:
+
+- `StructuralOutputFinish` (finish-level). Used for collection
+  output pool membership, trade-up structural probability,
+  family geometry, and finish-level duplicate suppression. The
+  frozen 6-tuple key
+  `(collection_name, rarity, stattrak, name, weapon, paint_index)`
+  is collision-free against the pinned snapshot
+  (16868 wear rows -> 2148 distinct finish keys). The canonical
+  non-Souvenir wear rows form a deterministic
+  `(wear_name, exact_market_hash_name)` map per finish. Souvenir
+  wear rows are concrete-input provenance and never appear in the
+  canonical non-Souvenir output wear map.
+- Exact market valuation identity (canonical non-Souvenir
+  `market_hash_name` for a finish + concrete output_float).
+  Resolved only after wear is known. Resolution is fail-closed:
+  zero / multiple mappings for the same finish + wear
+  combination -> `FAIL_CLOSED`. No fuzzy / name guessing. No
+  guessing of missing wear variants.
+
+Structural probability operates on UNIQUE FINISH COUNTS, not
+wear-qualified market rows:
+`(collection_count / 10) / unique_finish_count_in_collection`.
+The probability sum over `represented_output_finishes` MUST
+equal 1.
+
+### Migration concern: production wear-row cardinality
+
+The current production `tradeup_engine.calculate_tradeup_results`
+operates on `OutputCandidate.market_hash_name` (per wear-qualified
+row). This is the wear-row cardinality bug documented under
+`D-TRADEUP-WEAR-ROW-MIGRATION-001`. Phase 16B MUST NOT silently
+reuse the wear-row cardinality. A future narrow protected-core
+refactor under that decision MUST add the finish-level primitive
+AND keep `calculate_tradeup_results` semantically identical for
+legacy callers; production math remains unchanged in 16B.
+
 ### Phase 15C-3 defer
 
 Phase 15C-1 protocol, Phase 15C-2 tooling, and Phase 15C-2B

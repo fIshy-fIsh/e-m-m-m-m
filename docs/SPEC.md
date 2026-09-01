@@ -470,11 +470,51 @@ candidates remains the existing strict `SteamDTBuffPriceProvider`
 path with Phase 14B run-scoped exact-name reuse and Phase 14C
 FRESH_ONLY cache reads unchanged.
 
-### 17.7 Implementation stages (NOT in 16A; freeze only)
+### 17.6 Output identity boundary (Phase 16A-R2)
+
+Two distinct output identities are frozen:
+
+- `StructuralOutputFinish` (finish-level). Used for collection
+  output pool membership, trade-up structural probability,
+  family geometry, and finish-level duplicate suppression. The
+  frozen 6-tuple key
+  `(collection_name, rarity, stattrak, name, weapon, paint_index)`
+  is collision-free against the pinned snapshot
+  (16868 wear rows -> 2148 distinct finish keys). The canonical
+  non-Souvenir wear rows form a deterministic
+  `(wear_name, exact_market_hash_name)` map per finish. Souvenir
+  wear rows are concrete-input provenance and never appear in the
+  canonical non-Souvenir output wear map.
+- Exact market valuation identity (canonical non-Souvenir
+  `market_hash_name` for a finish + concrete output_float).
+  Resolved only after wear is known. Resolution is fail-closed:
+  zero / multiple mappings for the same finish + wear
+  combination -> `FAIL_CLOSED`. No fuzzy / name guessing. No
+  guessing of missing wear variants.
+
+Structural probability operates on UNIQUE FINISH COUNTS, not
+wear-qualified market rows:
+`(collection_count / 10) / unique_finish_count_in_collection`.
+The probability sum over `represented_output_finishes` MUST
+equal 1.
+
+### 17.7 Migration concern
+
+`tradeup_engine.calculate_tradeup_results` currently operates on
+`OutputCandidate.market_hash_name` (per wear-qualified row).
+This is the wear-row cardinality bug documented under
+`D-TRADEUP-WEAR-ROW-MIGRATION-001`. Phase 16B MUST NOT silently
+reuse the wear-row cardinality. A future narrow protected-core
+refactor under that decision MUST add the finish-level primitive
+AND keep `calculate_tradeup_results` semantically identical for
+legacy callers; production math remains unchanged in 16B.
+
+### 17.8 Implementation stages (NOT in 16A; freeze only)
 
 ```text
-16B  RecipeFamily domain + deterministic generator + structural geometry
-     (lazy iteration, analytic counts, Souvenir NOT on family identity)
+16B  RecipeFamily + Structural Finish Index + Lazy Generator +
+     Finish-Level Geometry (lazy iteration, analytic counts,
+     Souvenir NOT on family identity, finish-level probability)
 16C  Static float feasibility + SteamDT batch pre-screen adapter / resolver
 16D  Coarse economics + ranking + TargetedBuffScanPlan
      (one active family per run; family-switching-after-live forbidden)
@@ -483,7 +523,7 @@ FRESH_ONLY cache reads unchanged.
 16F  ONE bounded live read-only validation (separately authorized)
 ```
 
-### 17.8 Phase 15C-3 defer
+### 17.9 Phase 15C-3 defer
 
 Phase 15C-1 protocol, Phase 15C-2 tooling, and Phase 15C-2B
 smoke remain preserved on `feature/representative-snapshot-calibration`.
@@ -492,7 +532,7 @@ DEFERRED until recipe-first production discovery is implemented
 and bounded-live validated. Production default remains `5`;
 hard max remains `60`.
 
-### 17.9 Safety / contract preservation
+### 17.10 Safety / contract preservation
 
 The new architecture preserves:
 

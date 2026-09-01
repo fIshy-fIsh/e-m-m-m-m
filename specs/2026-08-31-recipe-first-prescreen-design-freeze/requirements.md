@@ -125,6 +125,18 @@ contracts above:
   `stattrak_mode` (StatTrak mode IS a material family dimension).
 - `RecipeFamily` canonical non-Souvenir output rule (May-2026
   standard rule).
+- **Output structural identity is finish-level, not
+  wear-row-level.** The pinned metadata snapshot expands one
+  underlying CS2 finish into multiple wear-qualified
+  `market_hash_name` rows (typically 5 normal wear bands per
+  finish; some finishes are incomplete). Trade-up structural
+  probability is a probability over output FINISHES, not over
+  wear-qualified market rows.
+- **Concrete output wear is NOT known at RecipeFamily generation
+  time.** The exact wear-qualified `market_hash_name` for an
+  output is resolved only after a wear scenario or a concrete
+  output float is supplied (fail-closed from pinned
+  finish + wear metadata). No fuzzy / name guessing.
 - **Souvenir is NOT a RecipeFamily structural identity axis.**
   Normal and Souvenir inputs may coexist under the current
   standard contract; concrete selected inputs retain true Souvenir

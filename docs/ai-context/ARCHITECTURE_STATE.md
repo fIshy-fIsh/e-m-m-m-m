@@ -399,3 +399,47 @@ Reused unchanged:
 
 Production defaults and constraints preserved unchanged from
 the prior Phase 16A pointer.
+
+---
+
+## Phase 16A-R2 Output Identity / Wear Geometry (2026-08-31)
+
+Two distinct output identities are frozen:
+
+1. **StructuralOutputFinish** (finish-level). Used for collection
+   output pool membership, trade-up structural probability,
+   family geometry, and finish-level duplicate suppression. The
+   frozen 6-tuple key
+   `(collection_name, rarity, stattrak, name, weapon, paint_index)`
+   is collision-free against the pinned snapshot (16868 wear rows
+   -> 2148 distinct finish keys; 3 single-wear finishes, 2145
+   multi-wear finishes of which 1791 have all 5 wear bands).
+   `min_float` and `max_float` are consistent across all variants
+   of one finish. The canonical non-Souvenir wear rows form a
+   deterministic `(wear_name, exact_market_hash_name)` map per
+   finish. Souvenir wear rows are concrete-input provenance and
+   never appear in the canonical non-Souvenir output wear map.
+2. **Exact market valuation identity** (canonical non-Souvenir
+   `market_hash_name` for a finish + concrete output_float).
+   Resolved only after wear is known. Resolution is fail-closed:
+   zero / multiple mappings for the same finish + wear
+   combination -> `FAIL_CLOSED`. No fuzzy / name guessing.
+
+Structural probability operates on UNIQUE FINISH COUNTS, not
+wear-qualified market rows:
+`(collection_count / 10) / unique_finish_count_in_collection`.
+The probability sum over `represented_output_finishes` MUST
+equal 1.
+
+`RecipeFamily` replaces `represented_outputs` with
+`represented_output_finishes` (finish-level). The exact wear-qualified
+output `market_hash_name` is NOT known at RecipeFamily generation
+time.
+
+The current production `tradeup_engine.calculate_tradeup_results`
+treats each wear-qualified `OutputCandidate.market_hash_name` row
+as a separate probability bucket. This wear-row cardinality bug
+is recorded as `D-TRADEUP-WEAR-ROW-MIGRATION-001`. Phase 16B
+MUST NOT silently reuse the wear-row cardinality; production math
+remains unchanged in 16B. The fix is a separately gated narrow
+protected-core refactor.

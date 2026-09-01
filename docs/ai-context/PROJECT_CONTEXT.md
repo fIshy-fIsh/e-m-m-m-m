@@ -231,3 +231,17 @@ Live repository HEAD / branch / working tree:
   - `PRESCREEN_BATCH_CHUNK_SIZE = 10` (internal project transport chunk; NOT a confirmed SteamDT limit)
 - **Decisions appended:** `D-RECIPE-FIRST-SOUVENIR-IDENTITY-001`, `D-TARGETED-BUFF-BUDGET-001`, `D-RECIPE-FIRST-ENUMERATION-001`.
 - **Next authorized phase:** Phase 16B RecipeFamily domain + lazy deterministic generator + structural geometry (OFFLINE ONLY, production diff empty).
+
+---
+
+## Phase 16A-R2 Output Identity / Wear Geometry Coherence Correction (2026-08-31)
+
+- **Phase pointer:** `PHASE_16A_R2_OUTPUT_IDENTITY_GEOMETRY_CORRECTED` on `feature/recipe-first-prescreen-design` from CURRENT `origin/main`.
+- **Scope:** docs/spec/AI-context only. No production code change. No PR/merge.
+- **Audit finding:** The pinned metadata snapshot expands one underlying CS2 finish into typically 5 canonical non-Souvenir wear-qualified `market_hash_name` rows. The 6-tuple `(collection_name, rarity, stattrak, name, weapon, paint_index)` is collision-free against the pinned snapshot: 16868 wear rows -> 2148 distinct finish keys. 3 finishes have a single canonical non-Souvenir wear row; 2145 have multiple (1791 have all 5 wear bands). `min_float` / `max_float` are consistent across all variants of one finish. The current production `tradeup_engine.calculate_tradeup_results` operates on `OutputCandidate.market_hash_name` and treats each wear row as a separate probability bucket. This is recorded as `D-TRADEUP-WEAR-ROW-MIGRATION-001`.
+- **Three corrections applied:**
+  1. Two distinct output identities are frozen: `StructuralOutputFinish` (finish-level, used for collection output pool membership, trade-up structural probability, family geometry, and finish-level duplicate suppression) and exact market valuation identity (canonical non-Souvenir `market_hash_name` resolved fail-closed from pinned finish + wear metadata after output float is determined).
+  2. `RecipeFamily.represented_outputs` is replaced with `represented_output_finishes` (finish-level). The structural probability primitive counts unique eligible output finishes per family collection and aggregates to `per-finish probability = (collection_count / 10) / unique_finish_count_in_collection`. The probability sum over `represented_output_finishes` MUST equal 1.
+  3. The 6-tuple finish key is frozen as collision-free. The wear map (canonical non-Souvenir only) is deterministic per finish. Souvenir wear rows never appear in the canonical non-Souvenir output wear map.
+- **Decisions appended:** `D-RECIPE-FIRST-OUTPUT-IDENTITY-001`, `D-RECIPE-FIRST-PROBABILITY-001`, `D-OUTPUT-WEAR-MAPPING-001`, `D-TRADEUP-WEAR-ROW-MIGRATION-001`.
+- **Next authorized phase:** Phase 16B RecipeFamily + Structural Finish Index + Lazy Generator + Finish-Level Geometry (OFFLINE ONLY, production diff empty, no production refactor of `tradeup_engine.py`).

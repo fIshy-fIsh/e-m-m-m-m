@@ -36,6 +36,14 @@ Production authority (read-only reuse; no rewrite):
     (`skin.souvenir is False and skin.stattrak == result_stattrak`).
 - `app/services/tradeup_engine.py`, `app/utils/float_math.py`
   - Canonical trade-up math; no fork.
+  - **Production math currently operates on wear-qualified
+    `market_hash_name` rows as separate probability buckets.**
+    Phase 16B MUST NOT silently reuse this wear-row cardinality
+    for structural output geometry. The future recipe-first
+    structural probability primitive MUST count unique eligible
+    output finishes (not wear rows). Production refactor of
+    `tradeup_engine.py` is separately gated under
+    `D-TRADEUP-WEAR-ROW-MIGRATION-001`.
 - `app/services/scanner_orchestrator.py`
   - `LiveScannerOrchestrator.HARD_MAX_GOODS_IDS = 10`,
     `HARD_MAX_VALUATION_REQUESTS_PER_RUN = 60`. Default 5.
@@ -99,7 +107,9 @@ class RecipeFamily:
     #   each count > 0
     #   sum == 10
     #   distinct collections <= MAX_DISTINCT_COLLECTIONS_PER_FAMILY = 3
-    represented_outputs: tuple[str, ...]     # canonical exact output names
+    represented_output_finishes: tuple[StructuralOutputFinish, ...]
+    #   unique FINISH identities (one per structural outcome)
+    #   NOT per wear-qualified market_hash_name
     output_rarity: str                       # next(input_rarity)
     output_stattrak: bool                    # == stattrak_mode
     structural_probability_denominator: int  # > 0
@@ -137,6 +147,128 @@ Invariants:
   iteration that yields one family at a time; theoretical
   family-space counts are analytic evidence, not eager-
   materialization authorization.
+
+## 3.1 StructuralOutputFinish (frozen)
+
+```python
+@dataclass(frozen=True, kw_only=True)
+class StructuralOutputFinish:
+    finish_key: str                                  # canonical SHA-256 hex
+    collection_name: str
+    rarity: str
+    stattrak: bool
+    base_name: str                                  # skin.name
+    weapon: str | None
+    paint_index: int | None
+    min_float: float
+    max_float: float
+    wear_market_names: tuple[tuple[str, str], ...]
+    #   ordered (wear_name, exact_market_hash_name)
+    #   canonical non-Souvenir wear rows only
+```
+
+### 3.1.1 Finish-key uniqueness (offline evidence)
+
+Pinned snapshot:
+`data/metadata/skin_metadata_v1.json` (sha256
+`55e4d446...`, accepted 16868). Candidate 6-tuple key
+
+```text
+(collection_name, rarity, stattrak, name, weapon, paint_index)
+```
+
+is sufficient and collision-free: it maps the 16868 wear-qualified
+rows to **2148 distinct finish keys**. The 2148 finishes break
+down as:
+
+- 3 finishes with a single canonical non-Souvenir wear row,
+- 2145 finishes with multiple canonical non-Souvenir wear rows
+  (1791 have all 5 wear bands; the remaining 357 have 1, 2, 3,
+  or 4 wear bands).
+
+`min_float` and `max_float` are consistent across all wear
+variants of the same finish (no inconsistency observed in the
+pinned snapshot).
+
+The exact `(wear_name, exact_market_hash_name)` map per finish
+is well-defined for canonical non-Souvenir wear bands only. The
+Souvenir wear bands share `wear_name` labels with the
+non-Souvenir wear bands but carry a different
+`market_hash_name` prefix (`"Souvenir " ...`); they MUST NOT
+contribute to `wear_market_names` for the canonical non-Souvenir
+output pool.
+
+### 3.1.2 Wear-row vs unique-finish counts (offline)
+
+Aggregate per `(input_rarity, output rarity, statrak)`):
+
+```text
+Consumer Grade / normal -> wear_rows=1962 unique_finishes=200
+Industrial Grade / normal -> wear_rows=1900 unique_finishes=204
+Mil-Spec  / normal -> wear_rows=4154 unique_finishes=446
+Mil-Spec  / stattrak -> wear_rows=1318 unique_finishes=279
+Restricted / normal -> wear_rows=2884 unique_finishes=311
+Restricted / stattrak -> wear_rows= 957 unique_finishes=205
+Classified / normal -> wear_rows=1696 unique_finishes=183
+Classified / stattrak -> wear_rows= 602 unique_finishes=130
+```
+
+For every productive stratum, the number of wear-qualified rows
+is greater than the number of unique output finishes (typically
+roughly 4x to 9x). Structural probability MUST count unique
+finishes, not wear rows.
+
+## 3.2 Output identity boundaries
+
+Two distinct output identities are frozen:
+
+A. **Structural output identity** (`StructuralOutputFinish`).
+   Used for:
+   - collection output pool membership,
+   - trade-up structural probability,
+   - family geometry,
+   - duplicate suppression at the finish level.
+
+B. **Exact market valuation identity** (the canonical
+   non-Souvenir `market_hash_name` for a finish + concrete
+   output_float). Used only when a specific output wear is known.
+
+Future chain:
+
+```text
+RecipeFamily
+  -> represented_output_finishes (unique finish identities)
+  -> StaticFloatFeasibility / scenario avg_adjusted_float
+  -> output_float for each structural finish
+  -> wear band from output_float
+  -> exact wear-qualified canonical non-Souvenir market_hash_name
+  -> SteamDT pre-screen scenario price
+```
+
+For a CONCRETE live recipe:
+
+```text
+10 exact InputItems
+  -> canonical average adjusted float
+  -> each structural output finish
+  -> exact output_float
+  -> exact wear
+  -> exact pinned canonical non-Souvenir market_hash_name
+  -> strict final SteamDT-BUFF valuation
+```
+
+Resolution semantics:
+
+- zero wear-qualified `market_hash_name` mappings for the
+  finish+wear combination -> FAIL_CLOSED `unresolved_output_wear`;
+- multiple `market_hash_name` mappings for the same finish+wear
+  combination -> FAIL_CLOSED `output_wear_collision`;
+- no fuzzy / hand-constructed names if the pinned catalog can
+  provide the exact name;
+- no guessing of missing wear variants;
+- canonical non-Souvenir rows only; Souvenir rows are concrete-
+  input provenance and never appear in
+  `wear_market_names` for the canonical non-Souvenir output pool.
 
 ## 4. Family enumeration / bounds analysis
 
@@ -229,37 +361,62 @@ For one RecipeFamily:
 
 - `output_rarity = next(input_rarity)` (from
   `app.services.metadata_service.get_next_rarity`).
-- `represented_outputs` is the set of canonical non-Souvenir
-  output skin records whose `(collection_name, rarity)` matches
-  one of the family collections and the next input rarity, and
-  whose `stattrak == (stattrak_mode == stattrak)`. Source:
-  pinned metadata snapshot only.
+- `represented_output_finishes` is the **finish-level** set of
+  canonical non-Souvenir output finishes whose
+  `(collection_name, rarity)` matches one of the family
+  collections and the next input rarity, and whose
+  `stattrak == (stattrak_mode == stattrak)`. Source: pinned
+  metadata snapshot only. The set contains unique FINISH
+  identities, NOT per wear-qualified `market_hash_name`.
+  (Concrete output wear is NOT known at RecipeFamily generation
+  time; it is resolved only after a wear scenario or a concrete
+  output float is supplied.)
 - `output_stattrak = (stattrak_mode == stattrak)`.
-- `structural_probability_denominator` is the canonical
-  recipe-solver denominator given the family input distribution;
-  the per-output probability contribution equals
-  `1 / structural_probability_denominator` for the single-cohort
-  case (per-output contributions are exact-fraction in the
-  multi-cohort case via the protected solver probability
-  authority).
-- All structural probabilities MUST come from the existing
-  probability authority in
-  `app/services/recipe_solver.py` /
-  `app/services/scanner_recipe_composition.py`. No duplicate
-  probability math.
+- Structural probability denominator for one collection c with
+  `collection_counts[c] = n` inputs and `unique_finish_count_in_c`
+  eligible unique finishes (canonical non-Souvenir output):
+
+  ```text
+  per-input weight              = 1 / 10
+  per-input weight on output c  = n / 10
+  per-finish probability on c   = (n / 10) / unique_finish_count_in_c
+  ```
+
+  The family-level denominator equals the LCM (or exact rational
+  common denominator) across all per-collection finish
+  probabilities; the probability sum over all
+  `represented_output_finishes` MUST equal exactly 1.
+- All structural probabilities MUST come from a future
+  finish-level structural probability primitive that operates
+  on `(input collection counts, unique output finish counts)`.
+  No duplicate probability math.
+- The current production `tradeup_engine.calculate_tradeup_results`
+  operates on `OutputCandidate.market_hash_name` (per wear-qualified
+  row). This is the wear-row cardinality bug documented under
+  `D-TRADEUP-WEAR-ROW-MIGRATION-001`. Phase 16B MUST NOT silently
+  reuse the wear-row cardinality. A future narrow protected-core
+  refactor under that decision MUST add the finish-level primitive
+  AND keep `calculate_tradeup_results` semantically identical for
+  legacy callers; production math remains unchanged in 16B.
 
 What is structural (independent of concrete input identity /
 float / price):
 
 - next rarity,
 - represented collections,
-- eligible exact outputs,
-- per-output probability contribution,
+- eligible unique output finishes (canonical non-Souvenir
+  finish identities, NOT wear-qualified market rows),
+- per-finish structural probability contribution
+  (`collection_count / 10 / unique_finish_count_in_collection`),
 - output StatTrak mode.
 
 What is NOT structural:
 
 - actual float distribution (depends on concrete input floats),
+- concrete output wear (depends on concrete output float,
+  resolved later from the finish wear map),
+- exact wear-qualified output `market_hash_name` (depends on
+  concrete output float; resolved later fail-closed),
 - actual listing prices (depends on concrete live BUFF sell
   orders).
 
@@ -476,7 +633,7 @@ After targeted BUFF fetch:
      `souvenir` projection;
    - duplicate listing identity fails closed;
    - output `TradeupResult.output_market_hash_name` is among
-     `family.represented_outputs`.
+     `family.represented_output_finishes` (finish-level membership).
 4. Reuse `RunScopedValuationSession.prepare_output_prices` and
    `ScannerCachedBuffPriceResolver` (Phase 14C FRESH_ONLY reads)
    inside the same atomic NEW-LIVE cap.

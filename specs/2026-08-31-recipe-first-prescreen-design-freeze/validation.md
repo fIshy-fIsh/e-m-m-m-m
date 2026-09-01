@@ -181,6 +181,24 @@ Across all stages:
   `OpportunityMetrics`.
 - Phase 14B atomic NEW-LIVE cap admission honored.
 - Phase 14C FRESH_ONLY cache read semantics preserved.
+- **`RecipeFamily.represented_output_finishes` is finish-level.**
+  No wear-qualified `market_hash_name` is treated as an
+  independent structural outcome.
+- **Structural probability denominators count unique eligible
+  output finishes**, not wear-qualified market rows.
+  `per-finish probability = (collection_count / 10) / unique_finish_count_in_collection`.
+  The probability sum over `represented_output_finishes` MUST
+  equal 1.
+- **Exact output wear-qualified `market_hash_name` is resolved
+  fail-closed** from pinned finish + wear metadata after output
+  float is determined. No fuzzy / name guessing. Souvenir rows
+  are excluded from the canonical non-Souvenir wear map.
+- `StructuralOutputFinish.finish_key` is collision-free against
+  the pinned metadata snapshot. The current offline evidence is
+  16868 wear rows -> 2148 distinct finish keys.
+- Wear map uniqueness: per finish, exactly one canonical
+  non-Souvenir `market_hash_name` per wear band. Zero / multiple
+  mappings fail closed.
 
 ## 6. Deterministic replay
 

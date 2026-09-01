@@ -938,3 +938,52 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 - **Alternatives considered:** eagerly materialize all families into a global cache; eager top-K via sort-then-slice.
 - **Why rejected:** both violate `MemoryError` propagation and the project's run-scoped resource discipline.
 - **Future revisit:** only if a separately authorized re-scope proves lazy streaming is structurally insufficient.
+
+---
+
+## D-RECIPE-FIRST-OUTPUT-IDENTITY-001 — Structural trade-up output identity is finish-level
+
+- **Date:** 2026-08-31 (Phase 16A-R2 correction)
+- **Decision:** Trade-up structural output identity is finish-level, NOT wear-row-level. The pinned metadata snapshot expands one underlying CS2 finish into multiple wear-qualified `market_hash_name` rows (typically 5 normal wear bands per finish; some finishes are incomplete). Trade-up structural probability is a probability over output FINISHES, not over wear-qualified market rows. Concrete output wear is NOT known at RecipeFamily generation time; the exact wear-qualified `market_hash_name` is resolved fail-closed from pinned finish + wear metadata after output float is determined.
+- **Status:** Active correction. Design-freeze only; no production code change.
+- **Reason:** A wear-row cardinality silently overcounts structural probability and inflates the number of "different" output candidates; wear is a concrete-float-derived outcome, not a structural one.
+- **Alternatives considered:** keep `represented_outputs` as wear-qualified tuples; collapse per-finish wear to a single canonical name.
+- **Why rejected:** both lose the finish-level structural identity required for probability independence from wear-row count.
+- **Future revisit:** only if a separately authorized contract change makes wear-row probability material.
+
+## D-RECIPE-FIRST-PROBABILITY-001 — Structural probability denominators count unique eligible output finishes
+
+- **Date:** 2026-08-31 (Phase 16A-R2 correction)
+- **Decision:** Structural probability denominators count unique eligible output finishes (canonical non-Souvenir finish identities), not wear-qualified `market_hash_name` rows. The per-finish probability contribution equals `(collection_count / 10) / unique_finish_count_in_collection`. The probability sum over `represented_output_finishes` MUST equal 1. Phase 16B MUST introduce a finish-level structural probability primitive; the current production `tradeup_engine.calculate_tradeup_results` operates on wear-qualified rows and is separately refactored under `D-TRADEUP-WEAR-ROW-MIGRATION-001`.
+- **Status:** Active correction. Design-freeze only; no production code change.
+- **Reason:** Production must remain structurally sound under the recipe-first discovery architecture; wear-row cardinality must not leak into structural probability.
+- **Alternatives considered:** silent reuse of the existing per-input weight math; per-wear-row probability.
+- **Why rejected:** both depend on wear-row cardinality and break structural soundness.
+- **Future revisit:** only if a separately authorized representative campaign under the recipe-first production path proves a different probability primitive is justified.
+
+## D-OUTPUT-WEAR-MAPPING-001 — Exact output valuation name is resolved fail-closed from pinned finish + wear metadata
+
+- **Date:** 2026-08-31 (Phase 16A-R2 correction)
+- **Decision:** Exact output valuation `market_hash_name` is resolved fail-closed from pinned finish + wear metadata after output float is determined. Zero wear-qualified `market_hash_name` mappings for the finish+wear combination -> FAIL_CLOSED `unresolved_output_wear`. Multiple `market_hash_name` mappings for the same finish+wear combination -> FAIL_CLOSED `output_wear_collision`. No fuzzy / hand-constructed names if the pinned catalog can provide the exact name. No guessing of missing wear variants. Canonical non-Souvenir rows only; Souvenir wear rows are concrete-input provenance and never appear in the canonical non-Souvenir output wear map.
+- **Status:** Active correction. Design-freeze only; no production code change.
+- **Reason:** Resolved wear-qualified names must be deterministic and reproducible; fuzzy construction would silently invent BUFF / SteamDT lookup targets.
+- **Alternatives considered:** fuzzy / substring matching; pre-computed wear-name maps; rely on the existing `app.utils.wear.get_wear_name`.
+- **Why rejected:** each violates fail-closed determinism or silently invents lookup targets.
+- **Future revisit:** only if a separately authorized contract change redefines wear resolution semantics.
+
+## D-TRADEUP-WEAR-ROW-MIGRATION-001 — Production `tradeup_engine` wear-row cardinality migration
+
+- **Date:** 2026-08-31 (Phase 16A-R2 audit finding)
+- **Decision:** Recorded as a NAMED MIGRATION CONCERN. The current production `tradeup_engine.calculate_tradeup_results` operates on `OutputCandidate.market_hash_name` and treats each wear-qualified `market_hash_name` row as a separate probability bucket (`per_output_probability = per_input_weight / len(output_candidates)`). The Phase 16A-R2 audit confirms that the pinned snapshot expands one structural finish into typically 5 wear-qualified rows; structural probability must count unique finishes, not wear rows. Phase 16B MUST NOT silently reuse the wear-row cardinality. The fix MUST be a narrow protected-core refactor that:
+  1. introduces a finish-level structural probability primitive;
+  2. keeps `calculate_tradeup_results` semantically identical for legacy callers until a separate migration switches the call path;
+  3. preserves the existing single-bucket invariant `sum(probability) == 1`;
+  4. is regression-tested against the existing trade-up math for representative concrete recipes;
+  5. does NOT change production math in Phase 16B.
+
+  The refactor MUST be a separate gated subphase (16E or dedicated). Phase 16B's role is to introduce the new primitive offline only.
+- **Status:** Migration concern documented; no production code change in 16A-R2.
+- **Reason:** Documenting the current behavior preserves traceability. Premature production refactor without a separately gated regression suite would break Phase 14 / 15 contracts.
+- **Alternatives considered:** silently fix production math; defer the migration entirely.
+- **Why rejected:** silent fix is forbidden by the V1 no-fork- / protected-core discipline; deferring entirely would leave an undocumented mismatch for the recipe-first path.
+- **Future revisit:** under a separately authorized migration subphase, with explicit regression gates.
