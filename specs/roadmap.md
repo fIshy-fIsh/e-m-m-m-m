@@ -920,3 +920,31 @@ git log main               (canonical main; historical branches
                            docs/r0c-completion-checkpoint were removed in R0-D
                            and are reachable as ancestors of main)
 ```
+## Phase 16B — RecipeFamily + Structural Finish Index + Lazy Generator + Finish-Level Geometry
+
+```text
+status: COMPLETE
+branch: feature/recipe-first-family-geometry
+base design: 9b4d5b84
+R3 evidence: C=38/44/86/44/76/44/63/44; K<=3 total=9,972,412
+
+implemented:
+  immutable StructuralOutputFinish index + strict wear map
+  immutable RecipeFamily identity + exact eligibility
+  analytic counts + true lazy deterministic generation
+  exact Fraction finish-level geometry; probability sum exactly 1
+
+validation:
+  focused Phase 16B: 45 passed
+  ruff PASS; mypy app PASS (88 files)
+  full pytest 3482 passed / 23 skipped / 1 warning
+
+production boundary:
+  zero current production callers; goods-first scanner unchanged;
+  default 5 / hard max 60 / enumeration 2/256 unchanged;
+  D-TRADEUP-WEAR-ROW-MIGRATION-001 unchanged / deferred
+
+next:
+  Phase 16C — Static Float Feasibility + SteamDT Batch Pre-Screen Boundary
+  separately authorized; offline/mocked transport; no live BUFF
+```

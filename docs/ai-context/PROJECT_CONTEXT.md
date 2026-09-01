@@ -251,3 +251,9 @@ Live repository HEAD / branch / working tree:
 ## Phase 16A-R3 Eligibility Evidence Reconciliation (2026-09-01)
 
 Authoritative Phase 16B pinned counts under exact identity + valid next-rarity output-finish gates: C=`38/44/86/44/76/44/63/44`; K<=3 family counts=`310061/485342/3717221/485342/2556526/485342/1447236/485342`; total=`9,972,412`. Earlier metadata-only counts and the written 13,947,034 total are superseded historical evidence. No production code change.
+
+---
+
+## Phase 16B Structural Core Complete (2026-09-01)
+
+`PHASE_16B_RECIPE_FAMILY_GEOMETRY_COMPLETE` on `feature/recipe-first-family-geometry`. Offline-only `StructuralOutputFinishIndex`, `RecipeFamily`, exact eligibility, analytic counts, lazy deterministic generation, and finish-level exact-Fraction geometry implemented. Pinned evidence: 16868 wear rows, 2148 finishes, C=`38/44/86/44/76/44/63/44`, K<=3 total `9,972,412`. Production scanner and wear-row migration unchanged. Next: separately authorized Phase 16C.

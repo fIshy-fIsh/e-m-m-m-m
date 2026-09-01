@@ -392,3 +392,26 @@ The new architecture preserves:
   metadata-zero reuse / no probability renormalization;
 - production default `5`, hard max `60` unchanged;
 - no invented BUFF / SteamDT details.
+## Phase 16B Offline Structural Core
+
+Implemented isolated modules (zero current production callers):
+
+```text
+StructuralOutputFinishIndex
+  -> 6-tuple canonical SHA-256 finish identity
+  -> strict WEAR_RANGES terminal suffix parser
+  -> canonical non-Souvenir exact wear map
+  -> fail-closed finish+wear market_hash_name lookup
+
+RecipeFamilyGenerator
+  -> exact pinned input identity + valid next-rarity finish eligibility
+  -> analytic counts
+  -> lazy deterministic k / combination / positive-composition iteration
+
+RecipeFamilyGeometry
+  -> unique finish outcomes
+  -> exact Fraction P(finish)=(collection_count/10)/N_c
+  -> exact sum 1; independent of wear-row count
+```
+
+Production remains goods-first and unchanged. `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains deferred.

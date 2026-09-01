@@ -998,3 +998,16 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 - **Superseded historical evidence:** Phase 16A’s earlier C values `38/46/91/44/91/45/78/44` were metadata-row-only collection counts and did not apply the exact-input-identity + valid-output-finish gates. Their listed line-item family counts sum to 13,943,034, not the written 13,947,034 (a separate 4,000 arithmetic error). Both old totals are explicitly superseded for Phase 16B implementation evidence, while preserved as historical design evidence.
 - **Reason:** Implementation must preserve the exact eligibility contract; relaxing the gates to preserve metadata-only counts would admit structurally unresolvable input collections or collections without a valid next-rarity output finish.
 - **Future revisit:** only when a pinned metadata/identity snapshot changes under a separately authorized catalog update; recompute the same gates, do not reuse stale numeric counts.
+
+---
+
+## D-RECIPE-FIRST-16B-IMPLEMENTATION-001 — RecipeFamily structural geometry implementation complete
+
+- **Date:** 2026-09-01
+- **Decision:** Implemented the Phase 16B offline structural core on `feature/recipe-first-family-geometry`: immutable `StructuralOutputFinishIndex`, immutable `RecipeFamily`, analytic family counting, lazy deterministic family generation, and finish-level structural probability geometry. New modules are isolated and have zero current production runtime callers. Existing `tradeup_engine.py`, scanner, CLI, SteamDT, BUFF, cache, scheduler, and production defaults remain unchanged.
+- **Status:** Complete. Phase 16C separately gated.
+- **Probability:** exact `Fraction`; `(collection_count / 10) / unique_finish_count_in_collection`; exact sum 1; independent of wear-row count.
+- **Pinned evidence:** 16868 wear rows; 2148 structural finishes; authoritative eligible collection counts `38/44/86/44/76/44/63/44`; K<=3 family total `9,972,412`.
+- **Migration boundary:** `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains active / deferred. No production refactor in 16B.
+- **Validation:** 45 focused tests; Ruff PASS; mypy app PASS (88 files); full pytest 3482 passed / 23 skipped / 1 warning.
+- **Future revisit:** Phase 16C — Static Float Feasibility + SteamDT Batch Pre-Screen Boundary (separately authorized; offline/mocked transport; no live BUFF).

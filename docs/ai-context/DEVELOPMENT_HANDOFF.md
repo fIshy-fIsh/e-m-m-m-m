@@ -813,3 +813,19 @@ TOTAL K<=3 = 9,972,412
 Superseded historical Phase 16A evidence: metadata-only C values `38/46/91/44/91/45/78/44`; their listed line items sum to 13,943,034, not the written 13,947,034. Preserved for historical traceability only.
 
 Decision: `D-RECIPE-FIRST-EVIDENCE-RECONCILIATION-001`.
+
+---
+
+## Phase 16B — RecipeFamily + Structural Finish Index + Lazy Generator + Finish-Level Geometry (2026-09-01)
+
+Status: `PHASE_16B_RECIPE_FAMILY_GEOMETRY_COMPLETE` on `feature/recipe-first-family-geometry`, based on design checkpoint `9b4d5b84` plus docs-only R3 evidence checkpoint.
+
+Implemented:
+- `app/services/structural_output_finish.py`: immutable finish DTO/index; 6-tuple canonical SHA-256 identity; strict canonical wear parser using `WEAR_RANGES`; canonical non-Souvenir wear map; fail-closed exact finish+wear lookup; deterministic iteration and collection/rareness/mode lookup.
+- `app/services/recipe_family.py`: immutable structural identity; exact sum 10 / K<=3 / no Souvenir axis / StatTrak mode; canonical SHA-256 family hash + 24-hex key; exact eligibility gates; analytic counts; true lazy deterministic generation.
+- `app/services/recipe_family_geometry.py`: immutable finish-level outcomes; exact `Fraction` probabilities; exact sum 1; wear-row-count independence.
+- 45 focused tests across three files. Full pytest 3482 passed / 23 skipped / 1 warning; Ruff PASS; mypy app PASS (88 files); git diff --check PASS.
+
+Production boundary: no current production caller imports the new modules. Scanner remains goods-first. Default 5 / hard max 60 / enumeration 2 / 256 unchanged. `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains unchanged / deferred. No BUFF / SteamDT / Discord / Redis / DB / scheduler / campaign work.
+
+Next: Phase 16C — Static Float Feasibility + SteamDT Batch Pre-Screen Boundary (separately authorized).

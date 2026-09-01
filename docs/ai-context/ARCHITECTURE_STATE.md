@@ -443,3 +443,14 @@ is recorded as `D-TRADEUP-WEAR-ROW-MIGRATION-001`. Phase 16B
 MUST NOT silently reuse the wear-row cardinality; production math
 remains unchanged in 16B. The fix is a separately gated narrow
 protected-core refactor.
+
+---
+
+## Phase 16B Offline Structural Core Implemented (2026-09-01)
+
+Isolated modules with zero current production callers:
+- `app.services.structural_output_finish`
+- `app.services.recipe_family`
+- `app.services.recipe_family_geometry`
+
+They provide immutable finish indexing, strict exact wear mapping, RecipeFamily identity/eligibility/counting/lazy generation, and finish-level exact-Fraction geometry. Production path, `tradeup_engine.py`, CLI, scanner, providers, cache, and defaults remain unchanged.
