@@ -164,7 +164,7 @@ Souvenir identity boundary:
   acquisition-policy field, not as family identity.
 
 lazy enumeration:
-  The K=3 theoretical family-state counts (~14M across eight
+  The K=3 theoretical family-state count (9,972,412 across eight
   productive strata) are analytic evidence for the project limit,
   NOT an eager-materialization requirement. RecipeFamilyGenerator
   MUST support lazy deterministic iteration by stratum and analytic

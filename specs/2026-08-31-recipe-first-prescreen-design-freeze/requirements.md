@@ -226,8 +226,9 @@ contracts above:
   produce stable, testable bytes.
 - RecipeFamily enumeration MUST support a lazy deterministic
   iterator/generator that yields families one at a time without
-  eagerly materializing the full state space (~14M theoretical
-  states across 8 productive strata at K=3). Theoretical
+  eagerly materializing the full state space (9,972,412 theoretical
+  states across the eight productive strata at K=3 under the
+  authoritative Phase 16B eligibility gates). Theoretical
   family-space counts are analytic evidence, not eager-
   materialization authorization.
 - Ranking MUST support streaming / top-K evaluation without

@@ -284,40 +284,38 @@ Pinned snapshots used:
   - sha256 `e3aab46d570869e0b6866eac44b26bca7492ea7c2c54669e74b2b4feeec506ac`
   - `accepted = 34402`, `rejected = 15`, `source = 34417`
 
-Eligible inputs (productive rarities, normal and stattrak, souve
-nir excluded; collection_name non-empty):
+Authoritative Phase 16B eligibility (exact pinned input identity + at
+least one unique canonical non-Souvenir next-rarity output finish):
 
 ```text
-stratum                  | normal inputs | distinct collections | stattrak inputs | distinct collections
-Consumer Grade           |            981 |                   38 |               0 |                   0
-Industrial Grade         |            950 |                   46 |               0 |                   0
-Mil-Spec Grade           |          2,077 |                   91 |           1,318 |                  44
-Restricted               |          1,442 |                   91 |             957 |                  45
-Classified               |            848 |                   78 |             602 |                  44
+stratum                    | eligible collections | K<=3 families
+Consumer Grade / normal    |                   38 |       310,061
+Industrial Grade / normal  |                   44 |       485,342
+Mil-Spec Grade / normal    |                   86 |     3,717,221
+Mil-Spec Grade / stattrak  |                   44 |       485,342
+Restricted / normal        |                   76 |     2,556,526
+Restricted / stattrak      |                   44 |       485,342
+Classified / normal        |                   63 |     1,447,236
+Classified / stattrak      |                   44 |       485,342
+TOTAL                      |                      |     9,972,412
 ```
 
-### 4.2 State count formula
+Eligibility gates:
 
-```text
-count_families(C, K) = sum_{k=1..K} C(C, k) * C(9, k-1)
-```
+1. productive input rarity;
+2. at least one exact input `market_hash_name` resolvable by the
+   pinned BUFF identity catalog;
+3. mode-compatible input row (normal mode admits normal and
+   Souvenir non-StatTrak rows without splitting family identity;
+   StatTrak mode admits StatTrak rows);
+4. at least one unique canonical non-Souvenir next-rarity
+   structural output finish matching StatTrak mode.
 
-State count table by `MAX_DISTINCT_COLLECTIONS_PER_FAMILY = K`:
-
-```text
-stratum                  | C |    K=1 |       K=2 |         K=3
-Consumer Grade / normal  | 38 |     38 |     6,365 |     310,061
-Industrial Grade / normal| 46 |     46 |     9,361 |     555,841
-Mil-Spec Grade / normal  | 91 |     91 |    36,946 |   4,410,406
-Mil-Spec Grade / stattrak| 44 |     44 |     8,558 |     485,342
-Restricted / normal      | 91 |     91 |    36,946 |   4,410,406
-Restricted / stattrak    | 45 |     45 |     8,955 |     519,795
-Classified / normal      | 78 |     78 |    27,105 |   2,765,841
-Classified / stattrak    | 44 |     44 |     8,558 |     485,342
-sum                      |   |    477 |   142,794 |  13,947,034
-```
-
-### 4.3 V1 bound choice
+Superseded historical Phase 16A metadata-only evidence (preserved
+for traceability): C values `38/46/91/44/91/45/78/44` and their
+listed family counts. Those line items sum to 13,943,034, not the
+written 13,947,034 (a separate 4,000 arithmetic error). Neither old
+total is authoritative for Phase 16B.
 
 - `MAX_DISTINCT_COLLECTIONS_PER_FAMILY = 3` (PROJECT bound, NOT
   external API limit).
@@ -329,14 +327,14 @@ sum                      |   |    477 |   142,794 |  13,947,034
     10 picks.
   - K=1 collapses to single-collection families and loses
     cross-collection structure the production already supports.
-  - K=2 yields ~143k total family states and misses the
-    cohort-depth-3 structure.
-  - K=3 ~14M total family states is a theoretical deterministic
-    structural state space; it is NOT a per-run or per-stratum
-    eager-materialization requirement. It is analytic evidence for
-    the project bound. The generator MUST support lazy
-    deterministic iteration by stratum and analytic counting
-    without materializing all 14M family objects.
+  - Under the corrected Phase 16B eligibility gates, total
+    theoretical counts are K=1: 439, K<=2: 116,944, and K<=3:
+    9,972,412.
+  - K=3’s 9,972,412 states are a theoretical deterministic
+    structural state space; they are NOT a per-run or per-stratum
+    eager-materialization requirement. The generator MUST support
+    lazy deterministic iteration by stratum and analytic counting
+    without materializing the full family space.
 - `TOP_RANKED_FAMILIES = 2` (PROJECT bound).
   - Reason: under the existing `HARD_MAX_GOODS_IDS = 10` and
     `HARD_MAX_VALUATION_REQUESTS_PER_RUN = 60`, two families

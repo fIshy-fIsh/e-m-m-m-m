@@ -789,3 +789,27 @@ scope:
     belongs to a later subphase under explicit regression gates.
 
 Phase 16B requires separate authorization.
+
+---
+
+## Phase 16A-R3 — RecipeFamily Eligibility Evidence Reconciliation (2026-09-01)
+
+Docs-only correction before Phase 16B implementation. The exact Phase 16B structural eligibility gates remain unchanged: productive input rarity, exact pinned input identity, mode-compatible input row, and at least one unique canonical non-Souvenir next-rarity output finish matching StatTrak mode.
+
+Corrected authoritative pinned counts:
+
+```text
+Consumer normal    C=38  K<=3=310061
+Industrial normal  C=44  K<=3=485342
+Mil-Spec normal    C=86  K<=3=3717221
+Mil-Spec StatTrak  C=44  K<=3=485342
+Restricted normal  C=76  K<=3=2556526
+Restricted StatTrak C=44 K<=3=485342
+Classified normal  C=63  K<=3=1447236
+Classified StatTrak C=44 K<=3=485342
+TOTAL K<=3 = 9,972,412
+```
+
+Superseded historical Phase 16A evidence: metadata-only C values `38/46/91/44/91/45/78/44`; their listed line items sum to 13,943,034, not the written 13,947,034. Preserved for historical traceability only.
+
+Decision: `D-RECIPE-FIRST-EVIDENCE-RECONCILIATION-001`.

@@ -987,3 +987,14 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 - **Alternatives considered:** silently fix production math; defer the migration entirely.
 - **Why rejected:** silent fix is forbidden by the V1 no-fork- / protected-core discipline; deferring entirely would leave an undocumented mismatch for the recipe-first path.
 - **Future revisit:** under a separately authorized migration subphase, with explicit regression gates.
+
+---
+
+## D-RECIPE-FIRST-EVIDENCE-RECONCILIATION-001 — Phase 16A family-count evidence corrected to the Phase 16B eligibility contract
+
+- **Date:** 2026-09-01 (Phase 16A-R3 evidence reconciliation)
+- **Decision:** The authoritative recipe-family collection counts and analytic K<=3 family counts are now computed under the actual Phase 16B structural eligibility contract: (1) productive input rarity; (2) at least one exact input `market_hash_name` resolvable by the pinned BUFF identity catalog; (3) mode-compatible input row (normal mode admits normal and Souvenir non-StatTrak rows without splitting identity; StatTrak mode admits StatTrak rows); and (4) at least one unique canonical non-Souvenir next-rarity structural output finish matching StatTrak mode. Corrected pinned counts: Consumer normal C=38 / 310061; Industrial normal C=44 / 485342; Mil-Spec normal C=86 / 3717221; Mil-Spec StatTrak C=44 / 485342; Restricted normal C=76 / 2556526; Restricted StatTrak C=44 / 485342; Classified normal C=63 / 1447236; Classified StatTrak C=44 / 485342. Corrected total K<=3 family count = 9,972,412.
+- **Status:** Active evidence authority. Docs-only correction; no production code change.
+- **Superseded historical evidence:** Phase 16A’s earlier C values `38/46/91/44/91/45/78/44` were metadata-row-only collection counts and did not apply the exact-input-identity + valid-output-finish gates. Their listed line-item family counts sum to 13,943,034, not the written 13,947,034 (a separate 4,000 arithmetic error). Both old totals are explicitly superseded for Phase 16B implementation evidence, while preserved as historical design evidence.
+- **Reason:** Implementation must preserve the exact eligibility contract; relaxing the gates to preserve metadata-only counts would admit structurally unresolvable input collections or collections without a valid next-rarity output finish.
+- **Future revisit:** only when a pinned metadata/identity snapshot changes under a separately authorized catalog update; recompute the same gates, do not reuse stale numeric counts.

@@ -34,7 +34,8 @@ Scope:
     per stratum WITHOUT materializing all family objects. The
     generator MUST support per-stratum iteration. The generator
     MUST NOT eagerly materialize the full state space
-    (~14M theoretical states at K=3).
+    (9,972,412 theoretical states at K=3 under the authoritative
+    Phase 16B eligibility gates).
   - The generator MAY accept an optional caller-supplied OFFLINE
     iteration bound for tests/benchmarks only; production
     semantics require lazy iteration.
@@ -84,7 +85,7 @@ Validation:
   - analytic count per stratum matches
     `sum_{k=1..K} C(C, k) * C(9, k-1)` for K = 1, 2, 3,
   - lazy iteration yields families one at a time without
-    materializing all ~14M states,
+    materializing all 9,972,412 states,
   - per-stratum iteration,
   - duplicate suppression across the full lazy stream,
   - `MemoryError` propagation,

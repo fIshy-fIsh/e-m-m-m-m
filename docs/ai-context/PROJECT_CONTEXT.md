@@ -245,3 +245,9 @@ Live repository HEAD / branch / working tree:
   3. The 6-tuple finish key is frozen as collision-free. The wear map (canonical non-Souvenir only) is deterministic per finish. Souvenir wear rows never appear in the canonical non-Souvenir output wear map.
 - **Decisions appended:** `D-RECIPE-FIRST-OUTPUT-IDENTITY-001`, `D-RECIPE-FIRST-PROBABILITY-001`, `D-OUTPUT-WEAR-MAPPING-001`, `D-TRADEUP-WEAR-ROW-MIGRATION-001`.
 - **Next authorized phase:** Phase 16B RecipeFamily + Structural Finish Index + Lazy Generator + Finish-Level Geometry (OFFLINE ONLY, production diff empty, no production refactor of `tradeup_engine.py`).
+
+---
+
+## Phase 16A-R3 Eligibility Evidence Reconciliation (2026-09-01)
+
+Authoritative Phase 16B pinned counts under exact identity + valid next-rarity output-finish gates: C=`38/44/86/44/76/44/63/44`; K<=3 family counts=`310061/485342/3717221/485342/2556526/485342/1447236/485342`; total=`9,972,412`. Earlier metadata-only counts and the written 13,947,034 total are superseded historical evidence. No production code change.
