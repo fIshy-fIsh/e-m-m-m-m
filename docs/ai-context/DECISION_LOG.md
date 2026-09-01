@@ -1011,3 +1011,24 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 - **Migration boundary:** `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains active / deferred. No production refactor in 16B.
 - **Validation:** 45 focused tests; Ruff PASS; mypy app PASS (88 files); full pytest 3482 passed / 23 skipped / 1 warning.
 - **Future revisit:** Phase 16C — Static Float Feasibility + SteamDT Batch Pre-Screen Boundary (separately authorized; offline/mocked transport; no live BUFF).
+
+---
+
+## D-STATIC-FLOAT-IMPLEMENTATION-001 — Exact static float feasibility implemented
+
+- **Date:** 2026-09-01
+- **Decision:** Phase 16C implements exact normalized interval-union and Minkowski reachability over pinned identity-resolved input wear intervals. Input actual intervals are the exact intersection of intrinsic min/max and the canonical wear band, then monotonically transformed into adjusted space. Family composition uses exact n-fold interval-union Minkowski sums and divides by 10. Output finish intervals are affinely mapped, intersected with canonical wear bands, and resolved fail-closed to exact pinned canonical non-Souvenir names.
+- **Status:** Complete offline primitive. No production caller or live market claim.
+- **Boundary:** Theoretical feasibility is not live listing availability, quantity, executability, price, profit, or ROI.
+
+## D-PRESCREEN-BATCH-IMPLEMENTATION-001 — Strict SteamDT batch BUFF pre-screen implemented
+
+- **Date:** 2026-09-01
+- **Decision:** Phase 16C batch pre-screen validates exact names, deduplicates first-seen order, chunks at internal project size 10, executes sequentially, reuses the existing batch transport/parser, and reruns the existing strict BUFF sell-only selector over selector-before platform candidates. Lowercase BUFF, missing/zero/non-finite sell, bid-only, other-platform, and duplicate BUFF records fail closed. No raw payload retained.
+- **Status:** Complete offline/mocked boundary. `PRESCREEN_BATCH_CHUNK_SIZE = 10` is not a provider limit.
+
+## D-PRESCREEN-FINAL-SEPARATION-001 — Batch pre-screen never becomes final valuation authority
+
+- **Date:** 2026-09-01
+- **Decision:** Batch pre-screen quotes are ranking/pruning evidence only. They never create `LiveOpportunity`, invoke `RiskFilterConfig`, or claim exact EV/ROI. Production final valuation remains the existing single-endpoint strict-BUFF path with unchanged scanner session/cache/budget semantics.
+- **Status:** Active invariant. `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains deferred.

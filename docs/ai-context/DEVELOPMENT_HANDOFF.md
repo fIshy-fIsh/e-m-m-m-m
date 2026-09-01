@@ -829,3 +829,22 @@ Implemented:
 Production boundary: no current production caller imports the new modules. Scanner remains goods-first. Default 5 / hard max 60 / enumeration 2 / 256 unchanged. `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains unchanged / deferred. No BUFF / SteamDT / Discord / Redis / DB / scheduler / campaign work.
 
 Next: Phase 16C — Static Float Feasibility + SteamDT Batch Pre-Screen Boundary (separately authorized).
+
+---
+
+## Phase 16C — Static Float Feasibility + SteamDT Batch Pre-Screen Boundary (2026-09-01)
+
+Status: `PHASE_16C_STATIC_FLOAT_BATCH_PRESCREEN_COMPLETE` on `feature/recipe-first-float-prescreen`, based on Phase 16B commit `dd7c03a1`.
+
+Implemented:
+- `app/services/float_interval.py`: finite open/closed interval model; deterministic exact normalization; gap-preserving intersection; exact union Minkowski sum; affine transform; no epsilon.
+- `app/services/static_float_feasibility.py`: strict wear-suffix parsing via shared Phase 16B helper; exact identity-resolved input interval unions; n-fold collection composition; exact family average reachability; output finish/wear intersections; fail-closed exact pinned output names; target-wear query.
+- `app/services/steamdt_batch_prescreen.py`: exact-name request normalization; first-seen dedupe; fixed chunks of 10; sequential existing batch transport/parser reuse; strict BUFF selector reuse; stable missing/failure/transport diagnostics; no raw result payload.
+- Additive Phase 16B helpers: public strict canonical wear parser; canonical metadata next-rarity reuse in family geometry.
+- 34 focused Phase 16C tests; full suite 3516 passed / 23 skipped / 1 warning; Ruff and mypy pass (91 files); git diff check pass.
+
+Pinned float audit: exact identity rows by stratum `1408/1312/2337/1318/1603/957/926/602`; per-collection normalized adjusted interval unions median=1 and max=1 in every stratum; deterministic sample family reachable average interval count=1; sample reachable wears range from FN/MW/FT through all five bands depending on output finish range.
+
+Production boundary: no scanner/CLI/final valuation/cache/risk/EV caller imports Phase 16C modules; no live BUFF or SteamDT; defaults 5/60 and enumeration 2/256 unchanged; wear-row migration deferred.
+
+Next: Phase 16D — Coarse Economics + Deterministic Ranking + TargetedBuffScanPlan (separately authorized).

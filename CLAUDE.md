@@ -66,7 +66,9 @@
 6. 检查是否把未确认的 BUFF API 细节错误写死进代码。
 
 ## 当前阶段指针
-- 阶段：`PHASE_16B_RECIPE_FAMILY_GEOMETRY_COMPLETE`（offline structural core implemented；分支 `feature/recipe-first-family-geometry` from design `9b4d5b84` + docs-only R3 evidence；Phase 16C NOT STARTED / NOT AUTHORIZED）。
+- 阶段：`PHASE_16C_STATIC_FLOAT_BATCH_PRESCREEN_COMPLETE`（offline/pre-production primitives implemented；分支 `feature/recipe-first-float-prescreen` from Phase 16B `dd7c03a1`；Phase 16D NOT STARTED / NOT AUTHORIZED）。
+- Phase 16C implemented：exact `FloatIntervalUnion`/Minkowski static reachability over pinned identity-resolved input wear intervals；output finish -> exact float intervals -> canonical wear -> fail-closed exact pinned non-Souvenir market name；strict SteamDT batch pre-screen exact dedupe / sequential chunks 10 / existing parser + strict BUFF selector；34 focused tests、full 3516 passed；zero production callers / zero live HTTP。
+- Final valuation remains existing single strict-BUFF path；defaults 5/60、enumeration 2/256、cache/session/risk/EV、`D-TRADEUP-WEAR-ROW-MIGRATION-001` unchanged。
 - Phase 16B implemented：immutable `StructuralOutputFinishIndex`、`RecipeFamily` exact eligibility/identity、analytic counts、lazy deterministic generation、`RecipeFamilyGeometry` exact Fraction finish-level probability；authoritative C=`38/44/86/44/76/44/63/44`, K<=3 total `9,972,412`; 45 focused tests, full 3482 passed；zero current production callers。
 - `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains UNCHANGED / DEFERRED；scanner remains goods-first；default 5 / hard max 60 / enumeration 2/256 unchanged。
 - Phase 16A-R1 corrections：Souvenir is NOT a `RecipeFamily` structural identity axis (StatTrak IS); Top-N ranking does NOT multiply live BUFF request budget (one active family per run, fallback only before any BUFF request starts, `<= MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10`); 9,972,412 K<=3 theoretical family states are analytic evidence, NOT an eager-materialization requirement (lazy deterministic generation, streaming top-K ranking, dedupe-before-batch).

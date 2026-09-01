@@ -415,3 +415,24 @@ RecipeFamilyGeometry
 ```
 
 Production remains goods-first and unchanged. `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains deferred.
+
+## Phase 16C Offline Static-Float and Batch Pre-Screen Primitives
+
+```text
+RecipeFamily + pinned exact identity/metadata
+  -> per-exact-input intrinsic ∩ canonical-wear actual interval
+  -> exact adjusted FloatIntervalUnion per collection
+  -> n-fold Minkowski sum by collection counts / 10
+  -> output finish affine float mapping
+  -> canonical wear intersection
+  -> fail-closed exact pinned non-Souvenir market_hash_name
+
+exact market_hash_names
+  -> first-seen exact dedupe
+  -> PRESCREEN_BATCH_CHUNK_SIZE=10 (project chunk, not provider limit)
+  -> sequential existing SteamDT batch transport/parser
+  -> existing select_buff_output_price strict BUFF selector
+  -> isolated pre-screen quote/missing/failure diagnostics
+```
+
+These modules have zero production scanner callers. Final valuation remains the existing single-endpoint strict-BUFF path with unchanged cache/session/budget semantics.

@@ -257,3 +257,9 @@ Authoritative Phase 16B pinned counts under exact identity + valid next-rarity o
 ## Phase 16B Structural Core Complete (2026-09-01)
 
 `PHASE_16B_RECIPE_FAMILY_GEOMETRY_COMPLETE` on `feature/recipe-first-family-geometry`. Offline-only `StructuralOutputFinishIndex`, `RecipeFamily`, exact eligibility, analytic counts, lazy deterministic generation, and finish-level exact-Fraction geometry implemented. Pinned evidence: 16868 wear rows, 2148 finishes, C=`38/44/86/44/76/44/63/44`, K<=3 total `9,972,412`. Production scanner and wear-row migration unchanged. Next: separately authorized Phase 16C.
+
+---
+
+## Phase 16C Static Float + Batch Pre-Screen Complete (2026-09-01)
+
+`PHASE_16C_STATIC_FLOAT_BATCH_PRESCREEN_COMPLETE` on `feature/recipe-first-float-prescreen`: exact interval-union/Minkowski static reachability and strict SteamDT batch BUFF pre-screen implemented as isolated pre-production primitives. Full suite 3516 passed / 23 skipped / 1 warning. Production final valuation/scanner/cache/budget and `D-TRADEUP-WEAR-ROW-MIGRATION-001` unchanged. Next: separately authorized Phase 16D.

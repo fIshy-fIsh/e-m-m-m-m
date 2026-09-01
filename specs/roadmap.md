@@ -948,3 +948,40 @@ next:
   Phase 16C — Static Float Feasibility + SteamDT Batch Pre-Screen Boundary
   separately authorized; offline/mocked transport; no live BUFF
 ```
+
+## Phase 16C — Static Float Feasibility + SteamDT Batch Pre-Screen Boundary
+
+```text
+status: COMPLETE
+branch: feature/recipe-first-float-prescreen
+base: dd7c03a1 (Phase 16B)
+
+implemented:
+  float_interval.py
+    exact finite open/closed interval unions, gap-preserving normalization,
+    exact Minkowski sum and affine transforms; no epsilon
+  static_float_feasibility.py
+    exact pinned identity-resolved input wear intervals,
+    adjusted interval unions, n-fold family composition,
+    finish output-float/wear reachability,
+    fail-closed exact pinned output market names, query API
+  steamdt_batch_prescreen.py
+    exact-name validation/dedupe, project chunks of 10,
+    sequential existing SteamDT batch transport/parser,
+    existing strict BUFF sell-only selector rerun over platform candidates,
+    deterministic quote/missing/failure diagnostics, no raw result payload
+
+validation:
+  focused Phase 16C: 34 passed
+  ruff PASS; mypy app PASS (91 files)
+  full pytest 3516 passed / 23 skipped / 1 warning
+
+production boundary:
+  no production caller; goods-first scanner unchanged;
+  final single strict-BUFF valuation unchanged;
+  defaults 5/60 and 2/256 unchanged;
+  wear-row migration deferred
+
+next:
+  Phase 16D — Coarse Economics + Deterministic Ranking + TargetedBuffScanPlan
+```

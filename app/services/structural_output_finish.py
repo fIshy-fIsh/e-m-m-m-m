@@ -40,6 +40,7 @@ __all__ = (
     "StructuralOutputFinishIndexError",
     "WearMarketMapping",
     "compute_finish_key",
+    "parse_canonical_wear_name",
 )
 
 _CANONICAL_WEAR_ORDER: Final[tuple[str, ...]] = (
@@ -485,26 +486,28 @@ def compute_finish_key(
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _extract_canonical_wear_name(market_hash_name: str) -> str | None:
-    """Extract one canonical wear display name from a market_hash_name.
+def parse_canonical_wear_name(market_hash_name: str) -> str | None:
+    """Extract an exact terminal canonical wear suffix.
 
-    The pinned snapshot stores wear as a terminal `(<wear name>)` suffix.
-    This function uses a STRICT exact-match check over the canonical wear
-    names. It does NOT fuzzy-match, casefold, or construct a replacement
-    name.
+    Returns the canonical wear display name, or `None` when zero
+    canonical suffixes match. The input identity is never trimmed,
+    case-folded, or reconstructed.
     """
 
-    if not isinstance(market_hash_name, str) or not market_hash_name:
+    if type(market_hash_name) is not str or not market_hash_name:
         return None
-    text = market_hash_name
-    if not text.endswith(")"):
-        return None
-    # Find exactly one terminal parenthesised suffix.
-    for display in _CANONICAL_WEAR_DISPLAY:
-        suffix = f" ({display})"
-        if text.endswith(suffix):
-            return display
-    return None
+    matches = tuple(
+        display
+        for display in _CANONICAL_WEAR_DISPLAY
+        if market_hash_name.endswith(f" ({display})")
+    )
+    return matches[0] if len(matches) == 1 else None
+
+
+def _extract_canonical_wear_name(market_hash_name: str) -> str | None:
+    """Backward-compatible private alias for the Phase 16B builder."""
+
+    return parse_canonical_wear_name(market_hash_name)
 
 
 def display_wear_name(token: str) -> str:

@@ -454,3 +454,14 @@ Isolated modules with zero current production callers:
 - `app.services.recipe_family_geometry`
 
 They provide immutable finish indexing, strict exact wear mapping, RecipeFamily identity/eligibility/counting/lazy generation, and finish-level exact-Fraction geometry. Production path, `tradeup_engine.py`, CLI, scanner, providers, cache, and defaults remain unchanged.
+
+---
+
+## Phase 16C Offline Pre-Screen Primitives Implemented (2026-09-01)
+
+Isolated modules with zero current production callers:
+- `app.services.float_interval`
+- `app.services.static_float_feasibility`
+- `app.services.steamdt_batch_prescreen`
+
+They provide exact interval-union/Minkowski reachability, finish-to-wear-to-exact-name static evidence, and strict BUFF-only batch quote evidence. Production scanner remains goods-first; final valuation remains single strict BUFF; no cache/risk/EV integration exists in 16C.

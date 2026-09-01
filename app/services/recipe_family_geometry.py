@@ -40,11 +40,11 @@ from collections.abc import Iterable as IterableABC
 from dataclasses import dataclass
 from fractions import Fraction
 
+from app.services.metadata_service import get_next_rarity
 from app.services.recipe_family import (
     INPUT_COUNT,
     RecipeFamily,
     StatTrakMode,
-    get_next_rarity,
 )
 from app.services.structural_output_finish import (
     StructuralOutputFinishIndex,
