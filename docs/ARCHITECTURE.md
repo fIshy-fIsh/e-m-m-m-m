@@ -227,9 +227,10 @@ opt-in.
 
 ```text
 pinned CS2 metadata snapshot + pinned BUFF community identity snapshot
-  -> RecipeFamilyGenerator                          (16B, offline)
+  -> RecipeFamilyGenerator                          (16B, offline; lazy iteration)
        input_rarity ∈ {Consumer, Industrial, Mil-Spec, Restricted, Classified}
-       stattrak_mode ∈ {normal, stattrak}
+       stattrak_mode ∈ {normal, stattrak}            (StatTrak IS structural family dimension)
+       Souvenir is NOT a RecipeFamily identity axis  (concrete input provenance only)
        MAX_DISTINCT_COLLECTIONS_PER_FAMILY = 3       (PROJECT bound)
   -> static structural / output geometry            (16B, offline)
        next_rarity, represented collections, eligible exact outputs,
@@ -241,18 +242,20 @@ pinned CS2 metadata snapshot + pinned BUFF community identity snapshot
        case-sensitive platform == "BUFF"; positive finite sellPrice;
        one BUFF record per name; missing/unusable BUFF -> FAIL_CLOSED;
        never biddingPrice; never second-platform; never lowest-across;
-       sellCount / updateTime retained as diagnostics only
+       sellCount / updateTime retained as diagnostics only;
+       PRE: dedupe exact market_hash_names across active run batch;
+       PRESCREEN_BATCH_CHUNK_SIZE = 10 per batch call (NOT a confirmed limit)
   -> RecipeFamilyPreScreenEconomics                 (16D, offline)
        optimistic / base / conservative scenarios;
        separate DTO from OpportunityMetrics;
        never claims executability; never passes RiskFilterConfig
   -> deterministic ranking / Top-N                  (16D, offline)
        gates + lexicographic ranking keys
-       TOP_RANKED_FAMILIES = 2                       (PROJECT bound)
+       TOP_RANKED_FAMILIES = 2                       (PROJECT bound; ranking signal only)
   -> TargetedBuffScanPlanner                        (16D, offline)
        per-family exact input market_hash_names,
        mapped goods_ids via pinned identity,
-       MAX_EXACT_GOODS_IDS_PER_PRESCREEN = 10       (PROJECT bound)
+       MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10    (PROJECT safety bound; one active family per run)
        MarketUniverseBuilder retained as fallback
        structural / eligibility / goods_id mapping utility
   -> existing BUFF anonymous listing ingestion      (16E, page-1/default-sort)
@@ -273,14 +276,48 @@ pinned CS2 metadata snapshot + pinned BUFF community identity snapshot
   -> opportunity report (LiveOpportunity)           (16E)
 ```
 
-### Phase 16A frozen V1 project bounds
+### Phase 16A-R1 frozen V1 project bounds
 
 ```text
 MAX_DISTINCT_COLLECTIONS_PER_FAMILY = 3       (not an external API limit)
-TOP_RANKED_FAMILIES                 = 2
-MAX_EXACT_GOODS_IDS_PER_PRESCREEN   = 10
-batch-size cap per pre-screen call  = 10       (not a confirmed SteamDT limit)
+TOP_RANKED_FAMILIES                 = 2       (ranking signal only; not a budget multiplier)
+MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10      (PROJECT safety bound; one active family per run)
+PRESCREEN_BATCH_CHUNK_SIZE         = 10       (internal project transport chunk; NOT a confirmed SteamDT limit)
 ```
+
+### Live BUFF request budget (run-level)
+
+The Top-N ranking is a ranking / fallback signal, not a live
+request multiplier. Exactly ONE family is active for one live
+targeted BUFF scan per run. Family #2 is allowed only as a
+fallback BEFORE any BUFF request starts. Once any BUFF page
+request starts, family switching in that run is forbidden. Total
+BUFF page requests per run is
+`<= MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10`. This is a PROJECT
+safety bound, NOT a BUFF external limit, and preserves
+`LiveScannerOrchestrator.HARD_MAX_GOODS_IDS = 10`.
+
+### Souvenir identity boundary
+
+Souvenir is NOT a `RecipeFamily` structural identity axis under
+the current standard contract. StatTrak mode IS a structural
+family dimension. Normal and Souvenir inputs may coexist;
+concrete selected inputs retain true Souvenir provenance through
+the existing temporary `souvenir=False` solver projection + exact
+rehydration seam. Outputs remain canonical non-Souvenir. If a
+future targeted scan needs a Souvenir acquisition policy, it
+lives as a planner/runtime acquisition-policy field, not as
+family identity.
+
+### Lazy enumeration
+
+The K=3 theoretical family-state counts (~14M across the eight
+productive strata) are analytic evidence for the project limit,
+NOT an eager-materialization requirement. `RecipeFamilyGenerator`
+MUST support lazy deterministic iteration by stratum and analytic
+counting without materializing all family objects. Ranking MUST
+support streaming / top-K evaluation without retaining all
+family DTOs simultaneously.
 
 ### Pre-screen vs final valuation separation
 

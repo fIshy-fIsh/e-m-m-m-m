@@ -105,7 +105,7 @@ TARGET (frozen next architecture):
     -> SteamDT batch pre-screen (POST /open/cs2/v1/price/batch)
     -> RecipeFamilyPreScreenEconomics (optimistic / base / conservative)
     -> deterministic ranking / Top-N (TOP_RANKED_FAMILIES = 2)
-    -> TargetedBuffScanPlanner (MAX_EXACT_GOODS_IDS_PER_PRESCREEN = 10)
+    -> TargetedBuffScanPlanner (MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10; one active family per run)
     -> existing BUFF anonymous listing ingestion (page-1/default-sort only)
     -> existing identity / intrinsic / enrichment (reused)
     -> family-constrained concrete recipe search (reuses 2 / 256 solver)
@@ -122,12 +122,27 @@ contracts above:
 - `RecipeFamily.collection_counts` sums exactly to 10.
 - `RecipeFamily` distinct collections <= `MAX_DISTINCT_COLLECTIONS_PER_FAMILY = 3` (PROJECT bound, not external API limit).
 - `RecipeFamily.output_stattrak` is homogeneous with the input
-  `stattrak_mode` (StatTrak mode is a material family dimension).
+  `stattrak_mode` (StatTrak mode IS a material family dimension).
 - `RecipeFamily` canonical non-Souvenir output rule (May-2026
-  standard rule; Souvenir is not a RecipeFamily identity dimension).
-- BUFF acquisition is bounded by
-  `MAX_EXACT_GOODS_IDS_PER_PRESCREEN = 10` per run
-  (preserves `LiveScannerOrchestrator.HARD_MAX_GOODS_IDS = 10`).
+  standard rule).
+- **Souvenir is NOT a RecipeFamily structural identity axis.**
+  Normal and Souvenir inputs may coexist under the current
+  standard contract; concrete selected inputs retain true Souvenir
+  provenance through the existing temporary `souvenir=False`
+  solver projection + exact rehydration seam. If a future targeted
+  scan needs a Souvenir acquisition policy, it lives as a separate
+  planner/runtime acquisition-policy field, not as family
+  identity.
+- Live BUFF acquisition is bounded by
+  `MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10` per run (PROJECT
+  safety bound, NOT a BUFF external limit).
+- Top-N ranking is a ranking / fallback signal, NOT a live request
+  multiplier: `TOP_RANKED_FAMILIES = 2`, but at most ONE family is
+  active for one live targeted BUFF scan per run, with family #2
+  allowed only as a fallback BEFORE any BUFF request starts. Once
+  any BUFF page request starts, family switching in that run is
+  forbidden. Total BUFF page requests per run is
+  `<= MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10`.
 - New LIVE exact-name demands remain inside the existing
   `HARD_MAX_VALUATION_REQUESTS_PER_RUN = 60` and existing default
   `5`. Phase 14B run-scoped exact-name reuse and Phase 14C
@@ -197,6 +212,16 @@ contracts above:
   inputs and identical SteamDT batch responses.
 - All hash / key / canonicalization functions are pure and
   produce stable, testable bytes.
+- RecipeFamily enumeration MUST support a lazy deterministic
+  iterator/generator that yields families one at a time without
+  eagerly materializing the full state space (~14M theoretical
+  states across 8 productive strata at K=3). Theoretical
+  family-space counts are analytic evidence, not eager-
+  materialization authorization.
+- Ranking MUST support streaming / top-K evaluation without
+  retaining all family DTOs simultaneously.
+- SteamDT pre-screen transport MUST deduplicate exact
+  `market_hash_name`s before issuing any batch call.
 
 ## 9. Failure behavior
 

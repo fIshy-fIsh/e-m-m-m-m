@@ -412,12 +412,44 @@ pinned CS2 metadata snapshot + pinned BUFF community identity snapshot
 
 ```text
 MAX_DISTINCT_COLLECTIONS_PER_FAMILY = 3       (not an external API limit)
-TOP_RANKED_FAMILIES                 = 2
-MAX_EXACT_GOODS_IDS_PER_PRESCREEN   = 10
-batch-size cap per pre-screen call  = 10       (not a confirmed SteamDT limit)
+TOP_RANKED_FAMILIES                 = 2       (ranking signal only; not a budget multiplier)
+MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10      (PROJECT safety bound; one active family per run)
+PRESCREEN_BATCH_CHUNK_SIZE         = 10       (internal project transport chunk; NOT a confirmed SteamDT limit)
 ```
 
-### 17.3 Pre-screen vs final valuation separation
+### 17.3 Live BUFF request budget (run-level)
+
+The Top-N ranking is a ranking / fallback signal, not a live
+request multiplier. Exactly ONE family is active for one live
+targeted BUFF scan per run. Family #2 is allowed only as a
+fallback BEFORE any BUFF request starts. Once any BUFF page
+request starts, family switching in that run is forbidden. Total
+BUFF page requests per run is
+`<= MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10`.
+
+### 17.4 Souvenir identity boundary
+
+Souvenir is NOT a `RecipeFamily` structural identity axis under
+the current standard contract. StatTrak mode IS a structural
+family dimension. Normal and Souvenir inputs may coexist;
+concrete selected inputs retain true Souvenir provenance through
+the existing temporary `souvenir=False` solver projection + exact
+rehydration seam. Outputs remain canonical non-Souvenir. If a
+future targeted scan needs a Souvenir acquisition policy, it
+lives as a planner/runtime acquisition-policy field, not as
+family identity.
+
+### 17.5 Lazy enumeration
+
+The K=3 theoretical family-state counts (~14M across the eight
+productive strata) are analytic evidence for the project limit,
+NOT an eager-materialization requirement. `RecipeFamilyGenerator`
+MUST support lazy deterministic iteration by stratum and analytic
+counting without materializing all family objects. Ranking MUST
+support streaming / top-K evaluation without retaining all
+family DTOs simultaneously.
+
+### 17.6 Pre-screen vs final valuation separation
 
 The SteamDT batch pre-screen uses the strict BUFF selector as
 approximate ranking / pruning evidence only:
@@ -438,18 +470,20 @@ candidates remains the existing strict `SteamDTBuffPriceProvider`
 path with Phase 14B run-scoped exact-name reuse and Phase 14C
 FRESH_ONLY cache reads unchanged.
 
-### 17.4 Implementation stages (NOT in 16A; freeze only)
+### 17.7 Implementation stages (NOT in 16A; freeze only)
 
 ```text
 16B  RecipeFamily domain + deterministic generator + structural geometry
+     (lazy iteration, analytic counts, Souvenir NOT on family identity)
 16C  Static float feasibility + SteamDT batch pre-screen adapter / resolver
 16D  Coarse economics + ranking + TargetedBuffScanPlan
+     (one active family per run; family-switching-after-live forbidden)
 16E  Family-constrained concrete solver integration + orchestrator composition
      behind explicit opt-in (production default OFF)
 16F  ONE bounded live read-only validation (separately authorized)
 ```
 
-### 17.5 Phase 15C-3 defer
+### 17.8 Phase 15C-3 defer
 
 Phase 15C-1 protocol, Phase 15C-2 tooling, and Phase 15C-2B
 smoke remain preserved on `feature/representative-snapshot-calibration`.
@@ -458,7 +492,7 @@ DEFERRED until recipe-first production discovery is implemented
 and bounded-live validated. Production default remains `5`;
 hard max remains `60`.
 
-### 17.6 Safety / contract preservation
+### 17.9 Safety / contract preservation
 
 The new architecture preserves:
 

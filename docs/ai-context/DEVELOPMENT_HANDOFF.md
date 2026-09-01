@@ -615,3 +615,73 @@ Phase 15A measured that the goods-first brain can reach `run_unique_output_names
 ### Next authorized phase
 
 Phase 16B (RecipeFamily domain + deterministic generator + structural geometry, OFFLINE ONLY) is the next stage, separately authorized.
+
+---
+
+## Phase 16A-R1 — Recipe-first Pre-screen Design Coherence Correction (2026-08-31)
+
+### What changed
+
+Docs/spec/AI-context only. No production code change. No PR/merge.
+
+Corrected the Phase 16A design freeze across these three ambiguities:
+
+1. Souvenir is NOT a `RecipeFamily` structural identity axis.
+   `RecipeFamily` no longer carries a `souvenir_inclusion` field.
+   StatTrak mode IS a structural family dimension. Normal and
+   Souvenir inputs may coexist; concrete selected inputs retain
+   true Souvenir provenance through the existing temporary
+   `souvenir=False` solver projection + exact rehydration seam.
+2. Top-N ranking does NOT multiply live BUFF request budget.
+   Exactly ONE family is active for one live targeted BUFF scan
+   per run. Family #2 is allowed only as a fallback BEFORE any
+   BUFF page request starts. Once any BUFF page request starts,
+   family switching in that run is forbidden. Total BUFF page
+   requests per run is
+   `<= MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10`.
+3. ~14M theoretical family-state counts at K=3 are analytic
+   evidence, NOT an eager-materialization requirement.
+   `RecipeFamilyGenerator` MUST support lazy deterministic
+   iteration by stratum, analytic counting without materializing
+   all family objects, and streaming / top-K ranking without
+   retaining all family DTOs simultaneously. SteamDT pre-screen
+   transport MUST deduplicate exact `market_hash_name`s before
+   issuing any batch call.
+
+### Frozen V1 project bounds (NOT external API limits)
+
+```text
+MAX_DISTINCT_COLLECTIONS_PER_FAMILY = 3
+TOP_RANKED_FAMILIES                 = 2       (ranking signal only)
+MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10      (PROJECT safety bound; one active family per run)
+PRESCREEN_BATCH_CHUNK_SIZE         = 10       (internal project transport chunk; NOT a confirmed SteamDT limit)
+```
+
+### Decisions appended
+
+- `D-RECIPE-FIRST-SOUVENIR-IDENTITY-001` — Souvenir is NOT a
+  RecipeFamily structural identity axis.
+- `D-TARGETED-BUFF-BUDGET-001` — Top-N ranking does not multiply
+  live BUFF request budget.
+- `D-RECIPE-FIRST-ENUMERATION-001` — RecipeFamily enumeration is
+  lazy; ~14M states are analytic evidence, not eager-materialization
+  authorization.
+
+### Next authorized phase
+
+Phase 16B — RecipeFamily Domain + Lazy Generator + Structural
+Geometry, OFFLINE ONLY, production diff empty. 16B MUST implement:
+
+1. structural RecipeFamily identity WITHOUT a Souvenir axis;
+2. exact sum-to-10 invariant;
+3. K<=3 project bound;
+4. canonical deterministic ordering / hashing;
+5. analytic family counts;
+6. lazy deterministic generation by stratum;
+7. duplicate suppression by canonical identity;
+8. family-level exact output geometry / probabilities;
+9. reuse / extraction of existing probability authority rather
+   than divergent math;
+10. tests proving no eager all-state materialization assumption.
+
+Phase 16B requires separate authorization.

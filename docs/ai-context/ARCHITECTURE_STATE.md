@@ -323,15 +323,15 @@ Reason: maintain verified readonly market-data boundaries. SteamDT and BUFF anon
 
 The Phase 16A design freeze (docs-only on `feature/recipe-first-prescreen-design`) introduces a recipe-first discovery architecture that REUSES the mature downstream calculation/safety stack but REPLACES the current goods-first discovery brain. No production code change in 16A; staged under 16B / 16C / 16D / 16E / 16F.
 
-New authoritative modules (frozen in 16A; implemented in later phases):
+New authoritative modules (frozen in 16A; corrected in 16A-R1; implemented in later phases):
 
-- `RecipeFamily` (frozen dataclass): `family_key`, `family_spec_version = 1`, `input_rarity`, `stattrak_mode`, `souvenir_inclusion`, `collection_counts` (sum == 10, distinct collections <= 3), `represented_outputs`, `output_rarity`, `output_stattrak`, `structural_probability_denominator`, `family_hash`.
-- `RecipeFamilyGenerator`: pure, deterministic, offline. Inputs: pinned metadata + pinned identity + StatTrak/Souvenir policy. Outputs: ordered `RecipeFamily` tuple.
+- `RecipeFamily` (frozen dataclass; no `souvenir_inclusion`): `family_key`, `family_spec_version = 1`, `input_rarity`, `stattrak_mode`, `collection_counts` (sum == 10, distinct collections <= 3), `represented_outputs`, `output_rarity`, `output_stattrak`, `structural_probability_denominator`, `family_hash`.
+- `RecipeFamilyGenerator`: pure, deterministic, offline, LAZY iterator/generator with analytic counts. Inputs: pinned metadata + pinned identity + `StatTrakMode` (Souvenir is not a structural family axis). Outputs: lazy stream of `RecipeFamily`.
 - `StaticFloatFeasibilityAnalyzer`: offline only; canonical float math reused.
-- `SteamDTBatchPreScreenAdapter`: mocked transport in tests; strict BUFF selector (case-sensitive `platform == "BUFF"`, positive finite `sellPrice`, single BUFF record per name); batch-size cap 10 per call.
+- `SteamDTBatchPreScreenAdapter`: mocked transport in tests; strict BUFF selector (case-sensitive `platform == "BUFF"`, positive finite `sellPrice`, single BUFF record per name); batch-size cap `PRESCREEN_BATCH_CHUNK_SIZE = 10` per call; deduplicates exact `market_hash_name`s before issuing any batch call.
 - `RecipeFamilyPreScreenEconomics`: optimistic / base / conservative scenarios; separate DTO from `OpportunityMetrics`.
-- `RecipeFamilyRanker`: gates + lexicographic ranking keys + `TOP_RANKED_FAMILIES = 2`.
-- `TargetedBuffScanPlanner`: `MAX_EXACT_GOODS_IDS_PER_PRESCREEN = 10`; `MarketUniverseBuilder` retained as fallback utility for goods_id mapping / eligibility / hard-request bounds / diagnostics.
+- `RecipeFamilyRanker`: gates + lexicographic ranking keys + `TOP_RANKED_FAMILIES = 2` (ranking signal only).
+- `TargetedBuffScanPlanner`: `MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10` (one active family per run; family #2 fallback only BEFORE any BUFF request starts); `MarketUniverseBuilder` retained as fallback utility for goods_id mapping / eligibility / hard-request bounds / diagnostics.
 
 Reused unchanged:
 
@@ -351,3 +351,51 @@ Reused unchanged:
 Out-of-scope historical compatibility (do NOT revive under Phase 16A or any later stage): `steamapis_*`, `live_metadata_catalog.py`, `live_pool_recipe_construction.py`, `steamapis_offer_session.py`, `steamapis_websocket_client.py`.
 
 Production defaults and constraints preserved: `max_valuation_requests_per_run` default `5`; hard max `60`; `HARD_MAX_GOODS_IDS = 10`; canonical non-Souvenir output rule; `MemoryError` propagation per `D-MEMORY-001`; no auto-buy / auto-login / cookie / captcha bypass / risk-control bypass / browser automation; no second-platform fallback / no biddingPrice substitution / no metadata-zero reuse / no probability renormalization; no invented BUFF / SteamDT details.
+
+---
+
+## Phase 16A-R1 Coherence Corrections (2026-08-31)
+
+Three material ambiguities in the Phase 16A design freeze are
+corrected without any production code change:
+
+1. `RecipeFamily` removes the `souvenir_inclusion` field.
+   Souvenir is NOT a structural family identity axis. StatTrak
+   mode IS. Normal and Souvenir inputs may coexist; concrete
+   selected inputs retain true Souvenir provenance through the
+   existing temporary `souvenir=False` solver projection + exact
+   rehydration seam. `souvenir_inclusion` does NOT enter
+   canonical RecipeFamily bytes, `family_hash`, the duplicate
+   key, or the structural enumeration key. If a future targeted
+   scan needs a Souvenir acquisition policy, it lives as a
+   separate planner/runtime acquisition-policy field, not as
+   family identity.
+2. The live BUFF request envelope is bounded per run, not per
+   family. `TOP_RANKED_FAMILIES = 2` is a ranking / fallback
+   signal; exactly ONE family is active for one live targeted
+   BUFF scan per run. Family #2 is allowed only as a fallback
+   BEFORE any BUFF page request starts. Once any BUFF page
+   request starts, family switching in that run is forbidden.
+   Total BUFF page requests per run is
+   `<= MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10`.
+3. RecipeFamily enumeration is lazy and analytic. The K=3
+   theoretical family-state counts (~14M total across the eight
+   productive strata) are analytic evidence for the project
+   bound, NOT an eager-materialization requirement.
+   `RecipeFamilyGenerator` MUST support lazy deterministic
+   iteration by stratum, analytic counting without materializing
+   all family objects, and streaming / top-K ranking without
+   retaining all family DTOs simultaneously.
+
+Reused unchanged:
+
+- All items from the prior Phase 16A list.
+- Existing probability authority
+  (`app.services.recipe_solver` /
+  `app.services.scanner_recipe_composition`) is reused via
+  extraction in 16B; no divergent math is introduced.
+- The existing temporary `souvenir=False` solver projection +
+  exact InputItem rehydration seam remains canonical.
+
+Production defaults and constraints preserved unchanged from
+the prior Phase 16A pointer.

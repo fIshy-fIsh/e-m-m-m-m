@@ -141,20 +141,34 @@ NEW:
 frozen V1 project bounds (NOT external API limits):
   MAX_DISTINCT_COLLECTIONS_PER_FAMILY = 3
   TOP_RANKED_FAMILIES                 = 2
-  MAX_EXACT_GOODS_IDS_PER_PRESCREEN   = 10
+  MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10
+  PRESCREEN_BATCH_CHUNK_SIZE         = 10  (internal project transport chunk;
+                                              NOT a confirmed SteamDT limit)
 
-pre-screen vs final valuation:
-  pre-screen uses SteamDT batch response as approximate ranking
-    / pruning evidence only; strict BUFF sellPrice selector,
-    case-sensitive platform == "BUFF", positive finite
-    sellPrice, single BUFF record per name; missing / unusable
-    BUFF record fails the family closed; never uses biddingPrice,
-    never substitutes a second platform, never picks lowest
-    across platforms; sellCount / updateTime retained as
-    diagnostics only.
-  final valuation remains the existing SteamDTBuffPriceProvider
-    strict path with Phase 14B run-scoped exact-name reuse and
-    Phase 14C FRESH_ONLY cache reads unchanged.
+live BUFF request budget (run-level):
+  Top-N is a ranking / fallback signal, NOT a live request multiplier.
+  Exactly ONE family is active for one live targeted BUFF scan per run.
+  Family #2 is allowed only as a fallback BEFORE any BUFF request starts.
+  Once any BUFF page request starts, family switching in that run is
+  forbidden. Total BUFF page requests per run is
+  <= MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10.
+
+Souvenir identity boundary:
+  Souvenir is NOT a RecipeFamily structural identity axis under the
+  current standard contract. StatTrak mode IS a structural family
+  dimension. Normal and Souvenir inputs may coexist; concrete inputs
+  retain true Souvenir provenance through the existing temporary
+  souvenir=False solver projection + exact rehydration seam. Outputs
+  remain canonical non-Souvenir. If a future targeted scan needs a
+  Souvenir acquisition policy, it lives as a planner/runtime
+  acquisition-policy field, not as family identity.
+
+lazy enumeration:
+  The K=3 theoretical family-state counts (~14M across eight
+  productive strata) are analytic evidence for the project limit,
+  NOT an eager-materialization requirement. RecipeFamilyGenerator
+  MUST support lazy deterministic iteration by stratum and analytic
+  counting without materializing all family objects.
 
 phase 15C-3 defer:
   Phase 15C-1 protocol, Phase 15C-2 tooling, Phase 15C-2B smoke

@@ -861,7 +861,8 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 - **Frozen V1 project bounds (NOT external API limits):**
   - `MAX_DISTINCT_COLLECTIONS_PER_FAMILY = 3`
   - `TOP_RANKED_FAMILIES = 2`
-  - `MAX_EXACT_GOODS_IDS_PER_PRESCREEN = 10`
+  - `MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10`
+  - `PRESCREEN_BATCH_CHUNK_SIZE = 10` (internal project transport chunk; NOT a confirmed SteamDT limit)
 - **Alternatives considered:** further optimize the goods-first scanner; widen the existing `HARD_MAX_VALUATION_REQUESTS_PER_RUN`; switch to a weighted ranking model up front.
 - **Why rejected:** goods-first optimization cannot change which families reach BUFF; raising the hard max expands the external-call safety envelope (Phase 15B `HARD_MAX_60_REVIEW_DEFERRED`); weighted ranking lacks offline evidence.
 - **Future revisit:** only if a separately authorized representative campaign under the new production path (Phase 16F and onward) yields contradicting offline evidence.
@@ -889,7 +890,7 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 ## D-TARGETED-BUFF-001 — Family-targeted BUFF acquisition; MarketUniverseBuilder retained as fallback utility
 
 - **Date:** 2026-08-31
-- **Decision:** BUFF acquisition becomes family-targeted and bounded by `MAX_EXACT_GOODS_IDS_PER_PRESCREEN = 10`. Exact pinned identity remains mandatory. `MarketUniverseBuilder` is retained as a fallback structural / eligibility / goods_id mapping utility but is NOT the new discovery brain.
+- **Decision:** BUFF acquisition becomes family-targeted and bounded by `MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10` (one active family per run; family #2 fallback only BEFORE any BUFF request starts). Exact pinned identity remains mandatory. `MarketUniverseBuilder` is retained as a fallback structural / eligibility / goods_id mapping utility but is NOT the new discovery brain.
 - **Status:** Active contract. Not implemented in 16A.
 - **Reason:** The recipe-first path needs exact identity for promising families only. The pre-screen is what selects the families; `MarketUniverseBuilder` remains useful for exact eligibility, goods_id mapping, hard-request bounds, and diagnostics.
 - **Alternatives considered:** delete `MarketUniverseBuilder`; replace it with a new goods-id mapping utility; let the recipe-first path reuse it as primary discovery.
@@ -905,3 +906,35 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 - **Alternatives considered:** run Phase 15C-3 under the goods-first path; run it in parallel with recipe-first implementation; cancel it.
 - **Why rejected:** goods-first sampling does not match the future production path; parallel sampling confounds attribution; cancellation loses calibration evidence.
 - **Future revisit:** after Phase 16F passes, re-scope the representative campaign under the recipe-first production path.
+
+---
+
+## D-RECIPE-FIRST-SOUVENIR-IDENTITY-001 — Souvenir is NOT a RecipeFamily structural identity axis
+
+- **Date:** 2026-08-31 (Phase 16A-R1 correction)
+- **Decision:** Under the current standard contract, Souvenir is NOT a `RecipeFamily` structural identity axis. StatTrak mode IS a structural family dimension. Normal and Souvenir inputs may coexist in the same family; concrete selected inputs retain true Souvenir provenance through the existing temporary `souvenir=False` solver projection + exact rehydration seam. Outputs remain canonical non-Souvenir. The previous Phase 16A draft that exposed `souvenir_inclusion` as a `RecipeFamily` field is corrected: it does not enter canonical RecipeFamily bytes, `family_hash`, the duplicate key, or the structural enumeration key. If a future targeted scan needs a Souvenir acquisition policy, it lives as a separate planner/runtime acquisition-policy field, not as family identity.
+- **Status:** Active correction. Design-freeze only; no production code change.
+- **Reason:** Souvenir is concrete-input provenance under the May-2026 standard contract, not a structural family axis. Exposing it as family identity would split otherwise identical structural families (e.g., a 6+4 Restricted/Classified collection partition with or without Souvenir inputs is structurally the same family) and break duplicate suppression.
+- **Alternatives considered:** keep `souvenir_inclusion` on `RecipeFamily`; fold Souvenir into StatTrak-mode orthogonality.
+- **Why rejected:** both would either split identical structural families or require a divergent probability model.
+- **Future revisit:** only if a separately authorized contract change makes Souvenir a structural recipe axis.
+
+## D-TARGETED-BUFF-BUDGET-001 — Top-N ranking does not multiply live BUFF request budget
+
+- **Date:** 2026-08-31 (Phase 16A-R1 correction)
+- **Decision:** `TOP_RANKED_FAMILIES = 2` is a ranking / fallback signal and does NOT multiply the live BUFF request budget. Exactly ONE family is active for one live targeted BUFF scan per run. Family #2 is allowed only as a fallback BEFORE any BUFF request starts. Once any BUFF page request starts, family switching in that run is forbidden. Total BUFF page requests per run is `<= MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10`. `MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN` is a PROJECT safety bound, NOT a BUFF external limit, and preserves `LiveScannerOrchestrator.HARD_MAX_GOODS_IDS = 10`. The previous Phase 16A draft that implied `TOP_RANKED_FAMILIES * 10 <= 20` BUFF requests per run is corrected.
+- **Status:** Active correction. Design-freeze only; no production code change.
+- **Reason:** Top-N is a ranking signal, not a budget multiplier. Two active families in one run would double the live BUFF envelope without any structural justification.
+- **Alternatives considered:** authorize two active families per run; authorize a run-wide `MAX_EXACT_GOODS_IDS_PER_PRESCREEN` aggregate across active families.
+- **Why rejected:** both expand the live BUFF envelope without safety justification.
+- **Future revisit:** only if a separately authorized representative campaign under the recipe-first production path proves a single active family is structurally insufficient.
+
+## D-RECIPE-FIRST-ENUMERATION-001 — RecipeFamily enumeration is lazy; ~14M states are analytic evidence, not eager-materialization authorization
+
+- **Date:** 2026-08-31 (Phase 16A-R1 correction)
+- **Decision:** RecipeFamily enumeration MUST support a lazy deterministic iterator/generator that yields families one at a time. `RecipeFamilyGenerator` MUST support analytic counting per stratum WITHOUT materializing all family objects. The K=3 theoretical family-state counts (~14M total across the eight productive strata) are analytic evidence for the project bound and are NOT an eager-materialization requirement. Ranking MUST support streaming / top-K evaluation without retaining all family DTOs simultaneously. SteamDT pre-screen transport MUST deduplicate exact `market_hash_name`s before issuing any batch call. No claim that ~14M SteamDT valuations or network operations are required.
+- **Status:** Active correction. Design-freeze only; no production code change.
+- **Reason:** The theoretical state space is evidence for the structural bound; production semantics MUST remain streaming and bounded per run.
+- **Alternatives considered:** eagerly materialize all families into a global cache; eager top-K via sort-then-slice.
+- **Why rejected:** both violate `MemoryError` propagation and the project's run-scoped resource discipline.
+- **Future revisit:** only if a separately authorized re-scope proves lazy streaming is structurally insufficient.

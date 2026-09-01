@@ -208,8 +208,26 @@ Live repository HEAD / branch / working tree:
 - **Scope:** docs/spec/AI-context only. No production code change. No PR/merge.
 - **Frozen target architecture:**
   `pinned CS2 metadata + pinned BUFF identity -> RecipeFamilyGenerator -> static structural/output geometry -> static float feasibility -> SteamDT batch pre-screen -> coarse/scenario economics -> deterministic ranking/Top-N -> TargetedBuffScanPlanner -> existing BUFF anonymous listing ingestion -> existing identity/intrinsic/enrichment -> family-constrained concrete recipe search -> existing strict final SteamDT-BUFF valuation -> existing EV/risk -> opportunity report`.
-- **Frozen V1 project bounds (NOT external API limits):** `MAX_DISTINCT_COLLECTIONS_PER_FAMILY = 3`, `TOP_RANKED_FAMILIES = 2`, `MAX_EXACT_GOODS_IDS_PER_PRESCREEN = 10`, batch-size cap per pre-screen call = 10 (not a confirmed SteamDT limit).
+- **Frozen V1 project bounds (NOT external API limits):** `MAX_DISTINCT_COLLECTIONS_PER_FAMILY = 3`, `TOP_RANKED_FAMILIES = 2`, `MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10`, `PRESCREEN_BATCH_CHUNK_SIZE = 10` (internal project transport chunk; NOT a confirmed SteamDT limit).
 - **Offline evidence:** `data/metadata/skin_metadata_v1.json` (sha256 `55e4d446a5343e1932f24b9069090431f87b0c750d2cb4c091947ec2411dc421`, accepted 16868) and `data/identity/buff_identity_v1.json` (sha256 `e3aab46d570869e0b6866eac44b26bca7492ea7c2c54669e74b2b4feeec506ac`, accepted 34402). State count formula `sum_{k=1..K} C(C, k) * C(9, k-1)` over the eight productive strata yields ~477 (K=1), ~143k (K=2), and ~14M (K=3) total family states.
 - **Implementation stages (NOT in 16A; freeze only):** 16B RecipeFamily domain; 16C static float feasibility + SteamDT batch pre-screen; 16D coarse economics + ranking + TargetedBuffScanPlan; 16E family-constrained concrete solver integration + orchestrator composition behind explicit opt-in (production default OFF); 16F ONE bounded live read-only validation.
 - **Phase 15C-3:** DEFERRED until recipe-first production discovery is implemented and bounded-live validated. Phase 15C-1/2/2B preserved on `feature/representative-snapshot-calibration` and referenced, not modified. Production default remains `5`; hard max remains `60`. Phase 15 evidence is NOT deleted or rewritten.
 - **Decisions:** `D-RECIPE-FIRST-001`, `D-PRESCREEN-VALUATION-001`, `D-PRESCREEN-FLOAT-001`, `D-TARGETED-BUFF-001`, `D-PHASE15C3-DEFER-001`.
+
+---
+
+## Phase 16A-R1 Recipe-first Pre-screen Design Coherence Correction (2026-08-31)
+
+- **Phase pointer:** `PHASE_16A_R1_DESIGN_COHERENCE_CORRECTED` on `feature/recipe-first-prescreen-design` from CURRENT `origin/main`.
+- **Scope:** docs/spec/AI-context only. No production code change. No PR/merge.
+- **Three material ambiguities corrected:**
+  1. Souvenir is NOT a `RecipeFamily` structural identity axis (StatTrak IS). Normal/Souvenir inputs may coexist; concrete provenance retained through the existing temporary `souvenir=False` solver projection + exact rehydration seam. `souvenir_inclusion` is removed from `RecipeFamily` fields, canonical bytes, `family_hash`, duplicate key, and enumeration key.
+  2. Top-N ranking does NOT multiply live BUFF request budget. Exactly ONE family is active for one live targeted BUFF scan per run. Family #2 is allowed only as a fallback BEFORE any BUFF page request starts. Once any BUFF page request starts, family switching in that run is forbidden. Total BUFF page requests per run is `<= MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10`.
+  3. ~14M K=3 theoretical family states are analytic evidence, NOT an eager-materialization requirement. `RecipeFamilyGenerator` MUST support lazy deterministic iteration by stratum, analytic counting without materializing all family objects, and streaming / top-K ranking without retaining all family DTOs simultaneously. SteamDT pre-screen transport MUST deduplicate exact `market_hash_name`s before issuing any batch call.
+- **Frozen V1 project bounds (NOT external API limits):**
+  - `MAX_DISTINCT_COLLECTIONS_PER_FAMILY = 3`
+  - `TOP_RANKED_FAMILIES = 2` (ranking signal only)
+  - `MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10` (PROJECT safety bound; one active family per run)
+  - `PRESCREEN_BATCH_CHUNK_SIZE = 10` (internal project transport chunk; NOT a confirmed SteamDT limit)
+- **Decisions appended:** `D-RECIPE-FIRST-SOUVENIR-IDENTITY-001`, `D-TARGETED-BUFF-BUDGET-001`, `D-RECIPE-FIRST-ENUMERATION-001`.
+- **Next authorized phase:** Phase 16B RecipeFamily domain + lazy deterministic generator + structural geometry (OFFLINE ONLY, production diff empty).

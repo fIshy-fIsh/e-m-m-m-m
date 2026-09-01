@@ -20,10 +20,20 @@ Scope:
 - Introduce `RecipeFamily` dataclass, frozen DTO, canonical
   serialization, deterministic SHA-256 `family_hash` /
   `family_key` derivation.
+- Souvenir is NOT a structural family identity axis. StatTrak
+  mode IS.
 - Introduce `RecipeFamilyGenerator`:
   - inputs: pinned CS2 metadata snapshot + pinned BUFF community
-    identity snapshot + `StatTrakMode` + `SouvenirInclusion`;
-  - output: deterministic ordered tuple of `RecipeFamily`.
+    identity snapshot + `StatTrakMode`;
+  - outputs: a LAZY deterministic iterator/generator of
+    `RecipeFamily`. The generator MUST support analytic counting
+    per stratum WITHOUT materializing all family objects. The
+    generator MUST support per-stratum iteration. The generator
+    MUST NOT eagerly materialize the full state space
+    (~14M theoretical states at K=3).
+  - The generator MAY accept an optional caller-supplied OFFLINE
+    iteration bound for tests/benchmarks only; production
+    semantics require lazy iteration.
 - Hard bound `MAX_DISTINCT_COLLECTIONS_PER_FAMILY = 3`.
 - Reuse `app.services.metadata_service.get_next_rarity` for
   `output_rarity`.
@@ -31,16 +41,28 @@ Scope:
   for canonical output non-Souvenir eligibility.
 - Reuse existing probability authority; do not fork.
 - OFFLINE ONLY. No I/O. No network. Pure functions.
+- `MemoryError` propagation per `D-MEMORY-001`.
+- No global eager cache of all families.
 
 Validation:
 
 - `tests/test_recipe_family_domain.py`:
   - structural invariants (sum == 10; distinct collections bound;
-    canonical non-Souvenir output rule),
+    canonical non-Souvenir output rule; no Souvenir axis on
+    family identity),
   - canonical serialization roundtrip / hashing determinism,
-  - duplicate suppression,
+  - duplicate suppression by canonical identity,
   - deterministic enumeration order,
   - hash chain stability across reruns.
+- `tests/test_recipe_family_generator.py`:
+  - analytic count per stratum matches
+    `sum_{k=1..K} C(C, k) * C(9, k-1)` for K = 1, 2, 3,
+  - lazy iteration yields families one at a time without
+    materializing all ~14M states,
+  - per-stratum iteration,
+  - duplicate suppression across the full lazy stream,
+  - `MemoryError` propagation,
+  - offline iteration bounds honored when supplied.
 
 Gate: full offline suite, ruff, mypy app, git diff --check
 against the protected-core boundary.
@@ -106,7 +128,11 @@ Scope:
 - `TargetedBuffScanPlanner`:
   - inputs: ranked RecipeFamily tuple,
   - outputs `TargetedBuffScanPlan` per family,
-  - `MAX_EXACT_GOODS_IDS_PER_PRESCREEN = 10`,
+  - run-level BUFF request cap `MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10`,
+  - exactly ONE family is active for one live targeted BUFF scan
+    per run; family #2 is fallback only BEFORE live acquisition
+    starts; once any BUFF page request starts, family switching
+    in that run is forbidden,
   - reuse `MarketUniverseBuilder` only for goods_id mapping /
     eligibility / hard-request bounds / diagnostics.
 - OFFLINE integration. No I/O. No network.
@@ -123,7 +149,9 @@ Validation:
   - tie-break by `family_hash`,
   - exclusion reason codes.
 - `tests/test_targeted_buff_scan_planner.py`:
-  - `MAX_EXACT_GOODS_IDS_PER_PRESCREEN` enforcement,
+  - `MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN` enforcement,
+  - exactly-one-active-family per run,
+  - family-switching-after-live-start forbidden,
   - unresolved identity diagnostics,
   - goods_id mapping correctness via
     `MarketUniverseBuilder`.

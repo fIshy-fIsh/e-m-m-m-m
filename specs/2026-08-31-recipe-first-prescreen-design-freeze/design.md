@@ -6,7 +6,8 @@ Production authority (read-only reuse; no rewrite):
 
 - `app/services/market_universe_builder.py`
   - `build_universe_goods_ids`, `MarketUniverseSpec`,
-    `StatTrakMode`, `SouvenirInclusion`,
+    `StatTrakMode`, `SouvenirInclusion` (planner-level input only;
+    NOT a `RecipeFamily` structural identity axis),
     `UniverseAllocationStrategy`, `MarketUniverseDiagnostics`.
   - Diagnostic counts `catalog_capacity`,
     `canonical_output_count`, `selected_cohort_count` are
@@ -93,7 +94,6 @@ class RecipeFamily:
     family_spec_version: Literal[1]
     input_rarity: str                        # 5 productive rarities
     stattrak_mode: StatTrakMode              # normal / stattrak
-    souvenir_inclusion: SouvenirInclusion    # May-2026 mix allowed
     collection_counts: tuple[tuple[str, int], ...]
     #   sorted by collection_name ascending
     #   each count > 0
@@ -110,9 +110,18 @@ Invariants:
 
 - `input_rarity in {"Consumer Grade","Industrial Grade",
   "Mil-Spec Grade","Restricted","Classified"}`.
-- `stattrak_mode in {normal, stattrak}`.
+- `stattrak_mode in {normal, stattrak}`. StatTrak IS a material
+  structural family dimension.
 - `output_stattrak == (stattrak_mode == stattrak)`.
 - Canonical non-Souvenir output rule unchanged.
+- **Souvenir is NOT a RecipeFamily structural identity axis.**
+  Normal and Souvenir inputs may coexist under the current
+  standard contract; concrete selected inputs retain true Souvenir
+  provenance through the existing temporary `souvenir=False`
+  solver projection + exact rehydration seam. Souvenir policy, if
+  needed by a future targeted scan, lives as a separate
+  planner/runtime acquisition-policy field, not as family
+  identity.
 - `sum(counts) == 10` exactly.
 - `1 <= distinct_collections <= 3`.
 - `family_hash = SHA-256(canonical_sorted_utf8_bytes)`;
@@ -124,6 +133,10 @@ Invariants:
   stattrak_mode, collection_counts)` yields one family.
 - Canonical serialization: keys sorted, no whitespace, exactly
   one trailing newline; `canonicalize(bytes) is its own inverse`.
+- RecipeFamily enumeration MUST support lazy deterministic
+  iteration that yields one family at a time; theoretical
+  family-space counts are analytic evidence, not eager-
+  materialization authorization.
 
 ## 4. Family enumeration / bounds analysis
 
@@ -186,17 +199,29 @@ sum                      |   |    477 |   142,794 |  13,947,034
     cross-collection structure the production already supports.
   - K=2 yields ~143k total family states and misses the
     cohort-depth-3 structure.
-  - K=3 ~14M total family states is a one-time OFFLINE
-    pre-screen enumeration cost; downstream BUFF request budget
-    remains tiny (`TOP_RANKED_FAMILIES *
-    MAX_EXACT_GOODS_IDS_PER_PRESCREEN <= 20`).
+  - K=3 ~14M total family states is a theoretical deterministic
+    structural state space; it is NOT a per-run or per-stratum
+    eager-materialization requirement. It is analytic evidence for
+    the project bound. The generator MUST support lazy
+    deterministic iteration by stratum and analytic counting
+    without materializing all 14M family objects.
 - `TOP_RANKED_FAMILIES = 2` (PROJECT bound).
   - Reason: under the existing `HARD_MAX_GOODS_IDS = 10` and
     `HARD_MAX_VALUATION_REQUESTS_PER_RUN = 60`, two families
-    keep the run inside the existing budget envelope with one
-    fallback slot reserved for sequential-rank expansion.
-- `MAX_EXACT_GOODS_IDS_PER_PRESCREEN = 10` (PROJECT bound).
-  - Aligns with the existing `HARD_MAX_GOODS_IDS = 10`.
+    preserve one fallback family; Top-2 is a ranking / fallback
+    signal and does NOT multiply the live BUFF request budget.
+- `MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10` (PROJECT bound,
+  NOT a BUFF external limit).
+  - Exactly ONE family is active for one live targeted BUFF scan
+    per run. Family #2 is allowed only as a fallback BEFORE any
+    BUFF request starts. Once any BUFF page request starts,
+    family switching in that run is forbidden. Total BUFF page
+    requests per run is `<= MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN`.
+  - Preserves `LiveScannerOrchestrator.HARD_MAX_GOODS_IDS = 10`.
+- `PRESCREEN_BATCH_CHUNK_SIZE = 10` (internal project transport
+  chunk, NEVER a confirmed SteamDT provider limit; do not exceed
+  in any pre-screen call until provider documentation confirms
+  a larger limit).
 
 ## 5. Structural output geometry (offline, no live listings)
 
@@ -303,7 +328,13 @@ Quota boundary: current `price_batch` policy is 1 request /
 minute + 5-second project safety buffer (process-local; Redis
 shared limiter optional via Phase 12C2 / 12C3 settings).
 The pre-screen must respect this rate; offline tests must mock
-transport and assert zero HTTP.
+transport and assert zero HTTP. The pre-screen transport MUST
+deduplicate exact `market_hash_name`s before issuing any batch
+call, and may chunk the deduped set into batches of at most
+`PRESCREEN_BATCH_CHUNK_SIZE = 10` names each. The pre-screen
+MUST NOT issue one batch call per family; the dedupe and chunk
+plan operate over the union of names across the active run
+batch.
 
 ## 8. Coarse economics DTO (frozen, NOT implemented in 16A)
 
@@ -351,7 +382,7 @@ Gates:
 2. `batch_pre_screen outcome == SUCCESS`
 3. no missing-price penalty
 4. >= 1 supporting wear band exists
-5. `family_request_count <= MAX_EXACT_GOODS_IDS_PER_PRESCREEN = 10`
+5. `family_request_count <= MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10`
 
 Lexicographic sort key (descending):
 
@@ -396,16 +427,37 @@ Contract:
   set the family needs; each must resolve via the pinned BUFF
   identity catalog.
 - `mapped_goods_ids` is the bounded subset for anonymous
-  page-1/default-sort fetch (`MAX_EXACT_GOODS_IDS_PER_PRESCREEN =
-  10` per run; aggregated across selected families).
+  page-1/default-sort fetch. The total across the active
+  `TargetedBuffScanPlan` for ONE run is bounded by
+  `MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10`.
+- Exactly ONE family is active for one live targeted BUFF scan
+  per run. Top-2 ranking does NOT multiply the live BUFF request
+  budget.
+- Family #2 is fallback only BEFORE live acquisition starts; if
+  family #1 fails completely during OFFLINE targeted planning,
+  family #2 may become active. Once any BUFF page request starts,
+  family switching in that run is forbidden.
+- Total BUFF page requests per run is
+  `<= MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10`.
 - `unresolved_identity_count > 0` -> plan diagnostic; family
   still proceedable but with diagnostic counters raised.
-- `hard_request_count <= MAX_EXACT_GOODS_IDS_PER_PRESCREEN = 10`
-  total per pre-screen.
 - First-page/default-sort only; no pagination expansion in 16A.
 - `MarketUniverseBuilder` retained for fallback structural
   planning, exact eligibility, and goods_id mapping diagnostics.
   NOT the primary discovery brain.
+
+Conceptual `TargetedBuffScanDecision` (NOT implemented in 16A):
+
+```python
+@dataclass(frozen=True, kw_only=True)
+class TargetedBuffScanDecision:
+    ranked_family_keys: tuple[str, ...]   # max 2
+    active_family_key: str | None
+    active_plan: TargetedBuffScanPlan | None
+    fallback_family_key: str | None
+    hard_request_cap: int                # exactly 10 in V1
+    diagnostics: tuple[str, ...]
+```
 
 ## 11. Family-constrained concrete search (reuses solver)
 

@@ -130,7 +130,9 @@ for the implementation stages:
 
 `tests/test_targeted_buff_scan_planner.py`:
 
-- `MAX_EXACT_GOODS_IDS_PER_PRESCREEN = 10` enforcement,
+- `MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10` enforcement,
+- exactly-one-active-family per run,
+- family-switching-after-live-start forbidden,
 - unresolved identity diagnostics,
 - goods_id mapping correctness via
   `app.services.market_universe_builder`,
