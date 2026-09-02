@@ -191,14 +191,14 @@ against the protected-core boundary.
 
 ## 5. Stage 16E — Family-constrained concrete solver integration + orchestrator composition behind explicit opt-in
 
-Status: NOT STARTED / awaiting separate authorization.
+Status: COMPLETE (`PHASE_16E_FAMILY_CONCRETE_OPTIN_ORCHESTRATOR_COMPLETE`).
 
 Scope:
 
 - `FamilyConstrainedConcreteSearch`:
   - filter listings to family-compatible candidate set,
-  - reuse `enumerate_scanner_recipe_selections` with
-    `RecipeEnumerationConfig(2, 256)`,
+  - reuse `RecipeEnumerationConfig(2, 256)` and a dedicated
+    family-count-preserving radius-one enumerator,
   - prove family-`collection_counts` match,
   - prove homogeneous `stattrak` + right `souvenir` projection,
   - duplicate listing identity fail-closed,

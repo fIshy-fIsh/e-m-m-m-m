@@ -557,31 +557,43 @@ exactly zero or one active plan. Rank #2 is fallback only when rank #1
 is unbuildable before live work. Phase 16D issues no request. Phase
 16E must forbid switching after the first BUFF request starts.
 
-## 11. Family-constrained concrete search (reuses solver)
+## 11. Family-constrained concrete search (implemented by Phase 16E)
 
 After targeted BUFF fetch:
 
 1. Filter / expand the listing pool into a `family`-compatible
    candidate set (matching `input_rarity`, `stattrak_mode`, exact
    pinned identities; no duplicate listing identity).
-2. Reuse `enumerate_scanner_recipe_selections` with
-   `RecipeEnumerationConfig(max_recipe_candidates_returned = 2,
-   max_candidate_states_explored = 256)` (existing default).
-3. For each candidate selection, prove:
-   - `count(collection_name)` per family collection matches the
-     family `collection_counts` exactly;
-   - all inputs have homogeneous `stattrak` and the right
-     `souvenir` projection;
-   - duplicate listing identity fails closed;
-   - output `TradeupResult.output_market_hash_name` is among
-     `family.represented_output_finishes` (finish-level membership).
-4. Reuse `RunScopedValuationSession.prepare_output_prices` and
+2. Reuse `RecipeEnumerationConfig` bounds (default `2 / 256`, hard
+   max `6 / 1024`) and a dedicated baseline-first family-count-
+   preserving radius-one enumerator. The legacy unconstrained
+   `enumerate_scanner_recipe_selections` is not reused because it can
+   miss exact-family states and calls legacy wear-row output geometry.
+3. Every alternative replaces one selected input with one reserve
+   from the SAME collection. Theoretical state count is
+   `1 + Σ_c n_c * (len(G_c) - n_c)`. No simultaneous multi-
+   collection replacement and no exhaustive combinations.
+4. For every candidate selection, prove:
+   - `Counter(collection_name) == dict(family.collection_counts)`;
+   - exactly ten inputs, correct rarity and homogeneous StatTrak mode;
+   - true Souvenir bits preserved as provenance, not family identity;
+   - unique listing provenance and aligned listing-id tuple.
+5. Build concrete outputs directly from Phase 16B finish-level
+   geometry + canonical float/wear mapping. Never call legacy
+   `calculate_tradeup_results`; no wear-row probability and no
+   probability renormalization.
+6. Reuse `RunScopedValuationSession.prepare_output_prices` and
    `ScannerCachedBuffPriceResolver` (Phase 14C FRESH_ONLY reads)
    inside the same atomic NEW-LIVE cap.
-5. Reuse `calculate_opportunity_metrics` and
-   `evaluate_opportunity` unchanged.
-6. Only selections that pass existing `RiskFilterConfig` produce
-   `LiveOpportunity`.
+7. Reuse `calculate_opportunity_metrics` and
+   `evaluate_opportunity` unchanged. Only selections that pass
+   existing `RiskFilterConfig` produce `LiveOpportunity`.
+
+The Phase 16E `RecipeFirstScannerConfig.enabled` default is `False`.
+The current goods-first orchestrator and CLI do not import or enable
+this path. During an enabled offline run, only the already selected
+active plan may be acquired; fallback is never activated after work
+starts.
 
 ## 12. Final valuation boundary
 

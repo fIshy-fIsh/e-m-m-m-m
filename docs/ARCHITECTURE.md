@@ -262,19 +262,22 @@ pinned CS2 metadata snapshot + pinned BUFF community identity snapshot
   -> existing BUFF anonymous listing ingestion      (16E, page-1/default-sort)
   -> existing identity / intrinsic / enrichment     (16E, reused)
   -> family-constrained concrete recipe search      (16E)
-       reuses enumerate_scanner_recipe_selections
-       with RecipeEnumerationConfig(2, 256)
+       reuses RecipeEnumerationConfig(2, 256) and a
+       dedicated family-count-preserving radius-one enumerator
        proves collection_counts match, StatTrak homogeneity,
-       normal/Souvenir projection seam, exact InputItem
-       rehydration, output identity membership;
-       duplicate listing identity fails closed
+       normal/Souvenir projection seam, exact output identity
+       membership; duplicate listing identity fails closed
+  -> correct concrete finish-level output builder    (16E)
+       Phase 16B geometry + canonical float/wear helpers;
+       bypasses the legacy wear-row probability bug;
+       zero probability renormalization
   -> existing strict final SteamDT-BUFF valuation   (16E)
        via RunScopedValuationSession + ScannerCachedBuffPriceResolver
        Phase 14B run-scoped exact-name reuse and
        Phase 14C FRESH_ONLY cache reads unchanged
   -> existing EV / risk                             (16E)
        calculate_opportunity_metrics, evaluate_opportunity
-  -> opportunity report (LiveOpportunity)           (16E)
+  -> opportunity report (LiveOpportunity, opt-in only) (16E)
 ```
 
 ### Phase 16A-R1 frozen V1 project bounds
@@ -434,6 +437,43 @@ exact market_hash_names
   -> sequential existing SteamDT batch transport/parser
   -> existing select_buff_output_price strict BUFF selector
   -> isolated pre-screen quote/missing/failure diagnostics
+```
+
+## Phase 16E Family-Constrained Concrete Search + Opt-In Orchestrator
+
+```text
+RecipeFamily + RecipeFamilyGeometry
+  + StructuralOutputFinishIndex
+  + RunScopedValuationSession
+  + ValuationService + RiskFilterConfig
+  + opt-in RecipeFirstScannerConfig.enabled = False
+    -> opt-in refuses run; zero provider/valuation calls
+
+RecipeFirstScannerConfig.enabled = True
+  + TargetedBuffScanDecision (one active plan only)
+    -> ExistingRecipeFirstAcquisitionPipeline (reuse existing
+       raw listing + identity + intrinsic + candidate + metadata)
+       returns TradeUpEnrichedInput + normalized provenance
+    -> search_family_constrained_recipes (reuses RecipeEnumerationConfig
+       default 2/256 and dedicated family-count-preserving
+       radius-one enumerator; output selection carries a NEW
+       ConcreteFamilyTradeupResults built from
+       build_concrete_family_tradeup_results)
+    -> RunScopedValuationSession.prepare_output_prices (memo +
+       FRESH_ONLY cache reads)
+    -> atomic NEW-LIVE exact-name admission
+    -> RunScopedValuationSession.resolve_prepared (live lookup for
+       NEW names only; never writes cache; never reads cache again)
+    -> ValuationService (existing field application)
+    -> calculate_opportunity_metrics (existing EV/ROI authority)
+    -> evaluate_opportunity (existing RiskFilterConfig policy)
+    -> LiveOpportunity
+
+The orchestrator never activates a fallback family. It performs at
+most one BUFF anonymous page request per active plan item, capped at
+``MAX_TARGETED_BUFF_GOODS_IDS_PER_RUN = 10``. The current
+``LiveScannerOrchestrator`` and ``scripts/run_live_scan_once.py``
+remain unchanged. ``D-TRADEUP-WEAR-ROW-MIGRATION-001`` remains deferred.
 ```
 
 ## Phase 16D Offline Economics, Ranking, and Targeted Plan

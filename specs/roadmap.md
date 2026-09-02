@@ -1027,5 +1027,47 @@ production boundary:
   D-TRADEUP-WEAR-ROW-MIGRATION-001 unchanged/deferred
 
 next:
-  Phase 16E — Family-Constrained Concrete Search + Opt-In Recipe-First Orchestrator Integration
+  Phase 16E — COMPLETE (see checkpoint below)
+```
+
+## Phase 16E — Family-Constrained Concrete Search + Finish-Level Outputs + Opt-In Orchestrator
+
+```text
+status: COMPLETE
+branch: feature/recipe-first-concrete-orchestrator
+base: 783d03e (Phase 16D)
+
+implemented:
+  family_constrained_concrete_search.py
+    dedicated exact family-count-preserving bounded enumeration;
+    baseline + same-collection radius-one alternatives;
+    reuses RecipeEnumerationConfig default 2/256 and hard max 6/1024;
+    no post-filter of legacy unconstrained stream
+  family_concrete_tradeup_results.py
+    Phase 16B unique finish probabilities + concrete ten-input
+    average adjusted float + exact output float/wear + exact pinned
+    non-Souvenir market name; no probability renormalization;
+    never calls legacy calculate_tradeup_results
+  recipe_first_acquisition.py
+    composes existing listing/identity/intrinsic/candidate/enrichment
+    stages; safe normalized provenance only; no raw payload/seller data
+  recipe_first_scanner_orchestrator.py
+    explicit opt-in config default OFF; one active plan only;
+    <=10 sequential active pages; no fallback activation/retry/polling;
+    existing RunScopedValuationSession/ValuationService/EV/risk reused
+
+validation:
+  focused Phase 16E tests PASS
+  ruff PASS; mypy app PASS (99 files)
+  full pytest 3583 passed / 23 skipped / 1 warning
+
+production boundary:
+  no production caller; goods-first scanner/CLI unchanged;
+  final single strict-BUFF valuation unchanged;
+  defaults 5/60 and enumeration 2/256 unchanged;
+  no live BUFF/SteamDT/Redis/Discord/DB/scheduler;
+  legacy wear-row migration remains deferred
+
+next:
+  Phase 16F — ONE Bounded Read-Only Recipe-First BUFF Interface Validation
 ```

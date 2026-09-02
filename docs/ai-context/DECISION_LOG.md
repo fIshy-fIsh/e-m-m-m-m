@@ -1061,3 +1061,30 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 - **Decision:** Phase 16D composes exact pinned input identity/float evidence with strict-BUFF quotes. Candidate order is price, adjusted-float lower bound, known sellCount, exact name, goods ID. Slot targets begin at family collection counts; shortfalls redistribute only among represented collections by family count descending then collection name. Every represented collection is covered; exact name/goods-ID collisions fail closed; plans contain <=10 unique goods IDs. The decision stores at most Top-2 family keys but exactly zero or one active plan; fallback is allowed only before first future BUFF request.
 - **Status:** Complete offline/pre-production implementation. No BUFF request issued; Phase 16E must enforce no switch after live work begins.
 - **Boundary:** `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains active/deferred and production remains goods-first.
+
+## D-RECIPE-FIRST-CONCRETE-SEARCH-001 — Dedicated family-count-preserving bounded enumeration
+
+- **Date:** 2026-09-01
+- **Decision:** Recipe-first concrete search reuses `RecipeEnumerationConfig` bounds and compatibility DTOs (`InputItem`, `ConstructedRecipe`, `ConstructedRecipeSelection`, `TradeupResult`) but does not invoke `enumerate_scanner_recipe_selections`. The legacy stream does not preserve exact `RecipeFamily.collection_counts`; post-filtering can miss valid family-constrained states and its output construction calls the legacy wear-row builder. Phase 16E uses a dedicated baseline-first radius-one enumerator. Each alternative replaces exactly one baseline input with one reserve from the same collection; family quotas cannot drift. Theoretical state count is `1 + Σ_c n_c * (len(G_c) - n_c)`. Existing bounds remain default 2/256 and hard maximum 6/1024.
+- **Status:** Complete offline/pre-production implementation.
+- **Boundary:** Legacy scanner enumeration and goods-first behavior are unchanged.
+
+## D-RECIPE-FIRST-CONCRETE-FINISH-GEOMETRY-001 — Concrete outputs use structural finishes, exact floats, and exact wear names
+
+- **Date:** 2026-09-01
+- **Decision:** Recipe-first concrete output construction starts from Phase 16B `RecipeFamilyGeometry` unique finish probabilities. It calculates the ten selected inputs' average adjusted float with the canonical helper, maps it through each finish's intrinsic range, resolves canonical wear with `get_wear_name`, and resolves the exact pinned non-Souvenir `market_hash_name` through `StructuralOutputFinishIndex`. Missing mappings and finish/name collisions fail closed. Exact Fraction probabilities sum to one; float probability sum remains within existing EV tolerance; no probability renormalization occurs. Price/EV fields remain zero placeholders until complete final valuation.
+- **Status:** Complete offline/pre-production implementation.
+- **Boundary:** The recipe-first path never calls `tradeup_engine.calculate_tradeup_results`. `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains active/deferred for legacy goods-first callers.
+
+## D-RECIPE-FIRST-OPTIN-ORCHESTRATOR-001 — Recipe-first orchestration is explicit opt-in and production-default OFF
+
+- **Date:** 2026-09-01
+- **Decision:** `RecipeFirstScannerConfig.enabled` defaults to `False`. A disabled run fails before identity, listing, or valuation provider calls. The new orchestrator is isolated and not imported by `LiveScannerOrchestrator` or `scripts/run_live_scan_once.py`. Enabled offline runs consume exactly one active `TargetedBuffScanDecision`, acquire at most 10 active plan pages sequentially, run family-constrained search, create one fresh `RunScopedValuationSession`, preserve memo/FRESH_ONLY cache/atomic NEW-LIVE semantics, then reuse `ValuationService`, `calculate_opportunity_metrics`, and `evaluate_opportunity` unchanged.
+- **Status:** Complete offline/pre-production implementation. No live BUFF/SteamDT request and no production-default switch.
+
+## D-RECIPE-FIRST-NO-FALLBACK-AFTER-START-001 — Enabled run never activates fallback family
+
+- **Date:** 2026-09-01
+- **Decision:** Phase 16E validates and acquires only `TargetedBuffScanDecision.active_plan`. The decision's optional `fallback_family_key` is diagnostic and is never resolved, planned, or requested by the orchestrator. A page failure is isolated within the active plan; remaining active pages may continue, but family switching, retry, polling, and pagination are absent.
+- **Status:** Active safety invariant for recipe-first live work.
+- **Boundary:** A fallback may be selected only by Phase 16D before any live acquisition begins.

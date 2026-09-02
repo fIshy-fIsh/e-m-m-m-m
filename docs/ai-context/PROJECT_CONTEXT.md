@@ -269,3 +269,9 @@ Authoritative Phase 16B pinned counts under exact identity + valid next-rarity o
 ## Phase 16D Economics + Ranking + Targeted Plan Complete (2026-09-01)
 
 `PHASE_16D_ECONOMICS_RANKING_TARGETED_PLAN_COMPLETE` on `feature/recipe-first-economics-ranking`: immutable strict-BUFF price evidence; exact per-input identity/float evidence; Decimal/Fraction optimistic/base/conservative economics; deterministic seven-key streaming Top-2; and exact <=10 targeted goods plan with one active family. `update_time` is opaque diagnostics, never chronological ranking authority. Exact static reachability is a gate/structured evidence, not a threshold-margin scalar. Offline/pre-production only; scanner remains goods-first; final valuation and `D-TRADEUP-WEAR-ROW-MIGRATION-001` unchanged. Next: separately authorized Phase 16E.
+
+---
+
+## Phase 16E Family-Constrained Concrete Search + Opt-In Orchestrator (2026-09-01)
+
+`PHASE_16E_FAMILY_CONCRETE_OPTIN_ORCHESTRATOR_COMPLETE` on `feature/recipe-first-concrete-orchestrator`: dedicated family-count-preserving bounded enumerator reusing `RecipeEnumerationConfig(2,256)`; new `ConcreteFamilyTradeupResults` from Phase 16B finish geometry + canonical float/wear helpers bypassing the legacy wear-row probability bug; offline opt-in `RecipeFirstScannerOrchestrator` that reuses existing identity/intrinsic/enrichment, `RunScopedValuationSession`, strict SteamDT-BUFF valuation, `OpportunityMetrics`, and `RiskFilterConfig` unchanged. `enabled=False` by default; no current production caller imports the new modules. Goods-first scanner, final valuation path, defaults 5/60, enumeration 2/256, and `D-TRADEUP-WEAR-ROW-MIGRATION-001` remain unchanged. Next: separately authorized Phase 16F.

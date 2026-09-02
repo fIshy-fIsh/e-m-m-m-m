@@ -135,33 +135,51 @@ for the implementation stages:
 - at most one active family and pre-live-only fallback,
 - hard request cap 10.
 
-### 4.7 Family-constrained concrete search (Stage 16E)
+### 4.7 Family-constrained concrete search (Stage 16E — implemented)
 
 `tests/test_family_constrained_concrete_search.py`:
 
-- family-`collection_counts` match enforcement,
-- StatTrak homogeneity,
-- normal/Souvenir projection seam with exact InputItem
-  rehydration,
-- duplicate listing identity fail-closed,
-- output identity set membership,
-- run-scoped atomic NEW-LIVE cap honored via Phase 14B
-  `RunScopedValuationSession.prepare_output_prices` /
-  `resolve_prepared`,
-- Phase 14C `ScannerCachedBuffPriceResolver` FRESH_ONLY
-  read seam integration unchanged.
+- exact family-count quotas for 10 / 6+4 / 4+3+3;
+- baseline + same-collection radius-one alternatives;
+- theoretical state count `1 + Σ n_c * (len(G_c) - n_c)`;
+- default 2/256 bounds and `max_candidates_per_collection`;
+- unrelated collections ignored, insufficient collection returns no state;
+- duplicate listing provenance fails closed;
+- source-order permutation is deterministic;
+- multiple unique listings from one goods page are allowed;
+- true Souvenir provenance and homogeneous StatTrak mode;
+- MemoryError propagates.
 
-### 4.8 Recipe-first orchestrator composition (Stage 16E)
+`tests/test_family_concrete_tradeup_results.py`:
 
-`tests/test_recipe_first_orchestrator_composition.py`:
+- structural finish probability independent of wear-row count;
+- A×6+B×4 exact probabilities 3/10, 3/10, 4/10;
+- canonical float/wear boundaries 0.07 / 0.15 / 0.38 / 0.45;
+- different finish ranges map one average to different floats/wears;
+- missing finish+wear mapping fails closed;
+- normal/Souvenir mix preserves input bits and canonical non-Souvenir outputs;
+- StatTrak family resolves exact StatTrak output names;
+- no call to legacy `calculate_tradeup_results`.
 
-- explicit opt-in flag enforced,
-- production default OFF,
-- offline-only fixtures,
-- zero live HTTP during tests,
-- Phase 14B / 14C invariants preserved,
-- `evaluate_opportunity` + `calculate_opportunity_metrics`
-  reuse preserved.
+### 4.8 Recipe-first orchestrator composition (Stage 16E — implemented)
+
+`tests/test_recipe_first_scanner_orchestrator.py` and
+`tests/test_recipe_first_acquisition.py`:
+
+- opt-in default OFF gives zero provider calls;
+- reverse exact goods/name identity proven before acquisition;
+- <=10 active-plan pages only; fallback never activated;
+- page failure stays within active family;
+- insufficient listings cause no valuation;
+- one fresh `RunScopedValuationSession` per run;
+- atomic NEW-LIVE cap and within-run exact-name reuse;
+- complete final valuation precedes EV/risk/opportunity;
+- missing final quote skips metrics/risk/opportunity;
+- existing identity/intrinsic/candidate/enrichment composition;
+- safe normalized listing provenance, no raw payload;
+- normal/Souvenir and StatTrak paths;
+- source-order permutation is deterministic.
+
 
 ## 5. Invariant / property tests
 

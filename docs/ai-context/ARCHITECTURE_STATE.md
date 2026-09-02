@@ -477,3 +477,27 @@ Isolated modules with zero current production callers:
 - `app.services.targeted_buff_scan_plan`
 
 `static_float_feasibility` additively exposes exact per-name pinned input identity and adjusted-interval evidence without changing reachability semantics. The decision layer uses precomputed strict-BUFF quotes only; no transport exists inside economics/ranking. Three min/median/max scenarios use Decimal money, exact Fraction finish probabilities/ROI, and explicit sell fee. Ranking is gate-based, seven-key lexicographic, streaming Top-2, and has no timestamp or threshold-margin key. Targeted plans cover every represented collection with <=10 unique exact names/goods IDs and exactly zero or one active family. Production scanner/CLI, final provider, cache/session, EV/risk, defaults, enumeration, and wear-row migration remain unchanged.
+
+---
+
+## Phase 16E Family-Constrained Concrete Search + Opt-In Orchestrator (2026-09-01)
+
+Isolated modules with zero current production callers:
+- `app.services.family_concrete_tradeup_results`
+- `app.services.family_constrained_concrete_search`
+- `app.services.recipe_first_scanner_orchestrator`
+- `app.services.recipe_first_acquisition`
+
+`family_concrete_tradeup_results` builds finish-level outcomes directly from Phase 16B geometry and canonical float/wear helpers. It deliberately bypasses the legacy wear-row ``tradeup_engine.calculate_tradeup_results`` so the recipe-first path does not inherit the wear-row cardinality bug. The dedicated family-constrained enumerator reuses ``RecipeEnumerationConfig(2, 256)`` and produces a baseline plus same-collection radius-one alternatives only; it never crosses collection boundaries. The offline opt-in orchestrator reuses existing identity/intrinsic/enrichment, ``RunScopedValuationSession``, ``ValuationService``, ``OpportunityMetrics``, and ``RiskFilterConfig`` unchanged. ``enabled=False`` by default. Live BUFF/SteamDT calls, scheduler work, cache writes, and Discord delivery remain absent. Production scanner/CLI, final valuation path, defaults 5/60, enumeration 2/256, and ``D-TRADEUP-WEAR-ROW-MIGRATION-001`` remain unchanged.
+
+---
+
+## Phase 16D Offline Decision Layer Implemented (2026-09-01)
+
+Isolated modules with zero current production callers:
+- `app.services.prescreen_price_book`
+- `app.services.recipe_family_prescreen_economics`
+- `app.services.recipe_family_ranking`
+- `app.services.targeted_buff_scan_plan`
+
+`static_float_feasibility` additively exposes exact per-name pinned input identity and adjusted-interval evidence without changing reachability semantics. The decision layer uses precomputed strict-BUFF quotes only; no transport exists inside economics/ranking. Three min/median/max scenarios use Decimal money, exact Fraction finish probabilities/ROI, and explicit sell fee. Ranking is gate-based, seven-key lexicographic, streaming Top-2, and has no timestamp or threshold-margin key. Targeted plans cover every represented collection with <=10 unique exact names/goods IDs and exactly zero or one active family. Production scanner/CLI, final provider, cache/session, EV/risk, defaults, enumeration, and wear-row migration remain unchanged.

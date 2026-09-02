@@ -576,4 +576,14 @@ active family. Phase 16D performs no network and has no production
 scanner/CLI caller. Final valuation and wear-row migration status are
 unchanged.
 
+### 17.12 Phase 16E implementation checkpoint
+
+Phase 16E implements a dedicated family-count-preserving bounded concrete search, a correct finish-level concrete output builder, an existing-stage acquisition composition, and an explicit opt-in recipe-first orchestrator.
+
+The search reuses ``RecipeEnumerationConfig`` bounds (default 2/256; hard maximum 6/1024) but not the legacy unconstrained enumerator. It yields the exact family baseline, then deterministic one-for-one same-collection radius-one replacements. Every returned selection proves the exact family collection counts, input rarity, homogeneous StatTrak mode, true Souvenir provenance, unique listing identity, and aligned listing IDs.
+
+Concrete outputs use Phase 16B unique structural finish probabilities, the ten concrete inputs' canonical average adjusted float, per-finish output float mapping, canonical wear resolution, and exact pinned non-Souvenir market names. Missing mappings and collisions fail closed. The recipe-first path never calls the legacy wear-row ``calculate_tradeup_results``. ``D-TRADEUP-WEAR-ROW-MIGRATION-001`` remains deferred for the goods-first path.
+
+``RecipeFirstScannerConfig.enabled`` defaults to ``False``. The new orchestrator is not wired into the current CLI or goods-first scanner. Enabled offline tests consume one active ``TargetedBuffScanDecision``, reverse-prove every exact goods/name identity before page acquisition, acquire at most 10 active plan pages sequentially, never activate fallback, create one fresh ``RunScopedValuationSession``, preserve memo/FRESH_ONLY-cache/atomic-NEW-LIVE behavior, and reuse final ``ValuationService``, ``calculate_opportunity_metrics``, and ``evaluate_opportunity`` unchanged. Phase 16E performs zero live BUFF/SteamDT work.
+
 Full architectural contract and offline evidence: `specs/2026-08-31-recipe-first-prescreen-design-freeze/{requirements,design,plan,validation}.md`.

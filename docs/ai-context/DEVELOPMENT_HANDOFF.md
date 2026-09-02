@@ -867,3 +867,26 @@ Reconciled decisions: SteamDT `update_time: int | str | None` remains opaque dia
 Production boundary: no production scanner/CLI wiring and zero live BUFF/SteamDT. Goods-first scanner, final single strict-BUFF provider, `OpportunityMetrics`, `RiskFilterConfig`, Phase 14 session/cache/budget, defaults 5/60, enumeration 2/256, and `D-TRADEUP-WEAR-ROW-MIGRATION-001` remain unchanged.
 
 Next: Phase 16E — Family-Constrained Concrete Search + Opt-In Recipe-First Orchestrator Integration (separately authorized).
+
+---
+
+## Phase 16E — Family-Constrained Concrete Search + Opt-In Recipe-First Orchestrator (2026-09-01)
+
+Status: `PHASE_16E_FAMILY_CONCRETE_OPTIN_ORCHESTRATOR_COMPLETE` on `feature/recipe-first-concrete-orchestrator`, based on Phase 16D commit `783d03e`.
+
+Implemented:
+- `app/services/family_concrete_tradeup_results.py`: finish-level concrete outputs from Phase 16B geometry + canonical float/wear helpers. Uses `calculate_average_adjusted_float`, `calculate_output_float`, and `get_wear_name`. Probabilities come from `RecipeFamilyGeometry`; zero price placeholders remain until final valuation. Never calls legacy `tradeup_engine.calculate_tradeup_results`.
+- `app/services/family_constrained_concrete_search.py`: dedicated family-count-preserving bounded enumerator reusing `RecipeEnumerationConfig(2, 256)`. Baseline first; radius-one alternatives replace one baseline slot only with a reserve from the same collection. Returns `FamilyConstrainedRecipeSelection` whose nested `ConstructedRecipe.tradeup_results` carries the finish-level `ConcreteFamilyTradeupResults`.
+- `app/services/recipe_first_acquisition.py`: existing-raw-listing composition over pinned identity + canonical intrinsic classification + candidate adapter + metadata enrichment. Returns normalized `TradeUpEnrichedInput` plus a redacted provenance row with no raw payload / no seller data.
+- `app/services/recipe_first_scanner_orchestrator.py`: opt-in offline orchestrator (`enabled=False` by default). Consumes exactly one `TargetedBuffScanDecision`. Calls the acquisition pipeline for each active plan item only. Uses `RunScopedValuationSession.prepare_output_prices` (memo + FRESH_ONLY cache reads), atomic NEW-LIVE cap admission, and `resolve_prepared`. Reuses `ValuationService`, `calculate_opportunity_metrics`, and `evaluate_opportunity` unchanged. Never activates the decision's fallback family.
+- Focused Phase 16E tests added in `tests/test_family_concrete_tradeup_results.py`, `tests/test_family_constrained_concrete_search.py`, `tests/test_recipe_first_scanner_orchestrator.py`, and `tests/test_recipe_first_acquisition.py`. Full suite 3583 passed / 23 skipped / 1 warning; Ruff and mypy pass (99 files).
+
+Production boundary: zero current production callers import Phase 16E modules; no live BUFF or SteamDT; no production scanner/CLI wiring; defaults 5/60 and enumeration 2/256 unchanged; goods-first scanner unchanged; `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains active/deferred for the legacy path.
+
+Reconciled decisions:
+- `D-RECIPE-FIRST-CONCRETE-SEARCH-001`: legacy `enumerate_scanner_recipe_selections` is incomplete for exact family quotas and carries the wear-row bug. Phase 16E uses a dedicated family-count-preserving bounded enumerator.
+- `D-RECIPE-FIRST-CONCRETE-FINISH-GEOMETRY-001`: recipe-first concrete outputs use Phase 16B unique structural finish probabilities + concrete ten-input average adjusted float + exact wear resolution.
+- `D-RECIPE-FIRST-OPTIN-ORCHESTRATOR-001`: Phase 16E orchestrator is OFF by default; no live BUFF/SteamDT and no production default enables recipe-first.
+- `D-RECIPE-FIRST-NO-FALLBACK-AFTER-START-001`: the decision's fallback family is never activated during an enabled run.
+
+Next: Phase 16F — ONE Bounded Read-Only Recipe-First BUFF Interface Validation (separately authorized).
