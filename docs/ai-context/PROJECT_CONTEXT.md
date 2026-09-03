@@ -285,3 +285,10 @@ hard bound and 2-second sequential pacing. Classification was
 PostgreSQL, scheduler, or Phase 15C campaign work was issued.
 The recipe-first production switch remains OFF. The legacy
 goods-first scanner continues to be the production path.
+
+## Phase 16F-R1 — Artifact identity semantics correction
+
+The Phase 16F-R1 narrow bookkeeping correction replaces the misleading
+hashed HEAD field with the actual Git commit object ID and aligns
+persisted case bytes with the canonical serializer. There is no new
+live work; Phase 16F v1 artifacts are not silently reinterpreted.

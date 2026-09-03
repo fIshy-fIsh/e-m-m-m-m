@@ -605,3 +605,23 @@ became candidates, and 10 were metadata-resolved. Classification was
 No SteamDT, Discord, Redis, PostgreSQL, scheduler, or Phase 15C
 representative campaign work was issued. No production default
 switched; the goods-first production path remains the active scanner.
+
+## Phase 16F-R1 — Artifact identity semantics correction
+
+Phase 16F-R1 corrects two narrow post-validation bookkeeping issues
+without re-runninging the live BUFF request and without contacting
+SteamDT:
+
+- Case artifacts store the actual Git commit object ID verbatim in
+  `repository_commit_oid` (40-character lowercase hex). No hashing,
+  no coercion, no fake SHA-256 expansion.
+- Persisted case artifact bytes equal `serialize_case(case)` exactly;
+  there is no trailing newline. `case_sha256` equals SHA-256 of
+  those exact bytes, which equals `hash_case(case)`. There is no
+  longer a separate canonical/file digest for the same artifact.
+- `LIVE_CASE_SCHEMA_VERSION` is bumped from 1 to 2. Phase 16F v1
+  artifacts are NOT silently reinterpreted.
+- Result artifact schema is bumped to 2 with the renamed commit-ID
+  field and the same no-trailing-newline guarantee.
+
+The historical Phase 16F live evidence is not invalidated.

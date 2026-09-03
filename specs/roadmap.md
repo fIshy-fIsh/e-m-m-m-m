@@ -1085,3 +1085,16 @@ next:
 - Production recipe-first remains OFF; legacy goods-first scanner
   remains the production path; `D-TRADEUP-WEAR-ROW-MIGRATION-001`
   remains deferred.
+
+## Phase 16F-R1 — Artifact identity semantics correction (2026-09-03)
+
+- `LiveValidationCase.repository_commit_oid` stores the verbatim
+  output of `git rev-parse HEAD`; no hashing, no coercion.
+- Persisted case artifact bytes equal `serialize_case(case)` exactly.
+- `case_sha256` is the SHA-256 of the exact persisted bytes, equal to
+  `hash_case(case)`. There is one authoritative case digest, not two.
+- `LIVE_CASE_SCHEMA_VERSION` bumped from 1 to 2. Phase 16F v1
+  artifacts are rejected rather than silently reinterpreted.
+- Result artifact `schema_version` is 2 with the renamed commit-ID
+  field and the same no-trailing-newline guarantee.
+- The historical Phase 16F live observation remains accepted.

@@ -90,6 +90,8 @@ _CLASSIFICATION_INCONCLUSIVE: str = "inconclusive"
 _CLASSIFICATION_CONTRACT_FAILURE: str = "contract_failure"
 _CLASSIFICATION_IDENTITY_FAILURE: str = "identity_failure"
 
+LIVE_RUN_RESULT_SCHEMA_VERSION: int = 2
+
 
 class _BudgetExceeded(RuntimeError):
     """Raised when an attempted BUFF request exceeds the frozen plan budget."""
@@ -223,7 +225,7 @@ class LiveValidationRunResult:
     """Redacted run-level outcome with no raw BUFF payload."""
 
     case_sha256: str
-    repository_head_sha: str
+    repository_commit_oid: str
     hard_request_count: int
     attempted: int
     dispatched: int
@@ -233,6 +235,7 @@ class LiveValidationRunResult:
     aggregate_candidate_accepted: int
     aggregate_metadata_resolved: int
     classification: str
+    schema_version: int
 
     def __post_init__(self) -> None:
         if type(self.case_sha256) is not str or len(self.case_sha256) != 64:
@@ -538,7 +541,7 @@ def _build_run_result(
 ) -> LiveValidationRunResult:
     return LiveValidationRunResult(
         case_sha256=hash_case(case),
-        repository_head_sha=case.repository_head_sha,
+        repository_commit_oid=case.repository_commit_oid,
         hard_request_count=case.hard_request_count,
         attempted=attempted,
         dispatched=dispatched,
@@ -548,4 +551,5 @@ def _build_run_result(
         aggregate_candidate_accepted=aggregate_candidates,
         aggregate_metadata_resolved=aggregate_metadata,
         classification=classification,
+        schema_version=LIVE_RUN_RESULT_SCHEMA_VERSION,
     )

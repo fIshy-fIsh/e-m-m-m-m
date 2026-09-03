@@ -74,7 +74,7 @@ class _FakeFlagResolver(BuffListingIntrinsicFlagResolver):
 
 def _case(
     *,
-    head_sha: str = "0" * 64,
+    commit_oid: str = "f" * 40,
     family_hash: str = "a" * 64,
     family_key: str = "a" * 24,
     items: Sequence[LiveValidationPlanItem] | None = None,
@@ -89,7 +89,7 @@ def _case(
             ),
         )
     return freeze_case(
-        repository_head_sha=head_sha,
+        repository_commit_oid=commit_oid,
         case_purpose="fixture",
         family_hash=family_hash,
         family_key=family_key,
@@ -352,7 +352,7 @@ def test_runner_stops_after_budget_exceeded() -> None:
     )
     # Build a single-collection case with TWO items; budget=2.
     case = freeze_case(
-        repository_head_sha="0" * 64,
+        repository_commit_oid="f" * 40,
         case_purpose="fixture",
         family_hash="a" * 64,
         family_key="a" * 24,
@@ -420,7 +420,7 @@ def test_runner_pacing_sleep_is_invoked_between_pages() -> None:
         ),
     )
     case = freeze_case(
-        repository_head_sha="0" * 64,
+        repository_commit_oid="f" * 40,
         case_purpose="fixture",
         family_hash="a" * 64,
         family_key="a" * 24,

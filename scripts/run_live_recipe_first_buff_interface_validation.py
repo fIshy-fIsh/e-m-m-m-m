@@ -1,4 +1,4 @@
-"""Phase 16F — One bounded read-only recipe-first BUFF live validation script.
+"""Phase 16F / 16F-R1 — One bounded read-only recipe-first BUFF live validation script.
 
 This script supports two deterministic modes:
 
@@ -14,6 +14,23 @@ This script supports two deterministic modes:
 
 The script NEVER retries, paginates, or falls back. It is the only
 admissible live BUFF HTTP entry point for Phase 16F.
+
+R1 artifact-identity corrections (Phase 16F-R1):
+
+- The ``repository_commit_oid`` field stores the exact output of
+  ``git rev-parse HEAD`` verbatim (40-character Git SHA-1 lowercase
+  hex). No hashing, no coercion, no fake SHA-256.
+- The persisted case artifact bytes equal :func:`serialize_case`
+  byte-for-byte. There is no trailing newline.
+- ``case_sha256`` reported by the script is SHA-256 of the exact
+  canonical bytes persisted as the case artifact; it equals
+  :func:`hash_case` exactly. There is no longer a separate
+  ``file_digest`` vs ``canonical_digest``.
+- The result artifact is serialized with no trailing newline; its
+  persisted bytes equal the serializer output exactly.
+- ``LIVE_CASE_SCHEMA_VERSION`` is now 2 (case) and result
+  ``schema_version`` is 2 (run result). Old v1 artifacts are NOT
+  silently reinterpreted.
 """
 
 from __future__ import annotations
@@ -37,6 +54,7 @@ from app.services.buff_community_identity_resolver import (
 )
 from app.services.market_universe_builder import StatTrakMode
 from app.services.recipe_first_live_case import (
+    LIVE_CASE_SCHEMA_VERSION,
     LiveValidationCase,
     LiveValidationCaseError,
     LiveValidationPlanItem,
@@ -46,6 +64,7 @@ from app.services.recipe_first_live_case import (
     verify_case_identity,
 )
 from app.services.recipe_first_live_runner import (
+    LIVE_RUN_RESULT_SCHEMA_VERSION,
     LiveValidationRunner,
     LiveValidationRunnerConfig,
 )
@@ -62,15 +81,15 @@ def _print_lines(printer: Callable[[str], None], *lines: str) -> None:
         printer(line)
 
 
-def _resolve_head_sha(*, run_git: Callable[[Sequence[str]], str]) -> str:
-    """Return the current repository HEAD SHA.
+def _resolve_commit_oid(*, run_git: Callable[[Sequence[str]], str]) -> str:
+    """Return the exact Git commit object ID for ``HEAD``.
 
-    Returns SHA-256 hex of the underlying git SHA-1 so the case field
-    matches the project's strict 64-character lowercase hex contract.
+    The result is the verbatim output of ``git rev-parse HEAD``,
+    stripped of any trailing whitespace. No hashing, no expansion,
+    no coercion. Validation accepts 40 or 64 lowercase hex chars.
     """
 
-    raw = run_git(("rev-parse", "HEAD")).strip()
-    return hashlib.sha256(raw.encode("ascii")).hexdigest()
+    return run_git(("rev-parse", "HEAD")).strip()
 
 
 def _artifact_root(*, env: Mapping[str, str]) -> Path:
@@ -92,7 +111,7 @@ def _default_case_purpose() -> str:
 class _PreparedCaseFixture:
     """Offline-only case construction inputs."""
 
-    repository_head_sha: str
+    repository_commit_oid: str
     family_hash: str
     family_key: str
     input_rarity: str
@@ -101,7 +120,7 @@ class _PreparedCaseFixture:
     plan_items: tuple[LiveValidationPlanItem, ...]
 
 
-def _default_case_fixture(repository_head_sha: str) -> _PreparedCaseFixture:
+def _default_case_fixture(repository_commit_oid: str) -> _PreparedCaseFixture:
     """Default single-collection Restricted/normal case for Phase 16F.
 
     Uses ``AK-47 | Redline (Field-Tested)`` -> ``33960``. This pair is
@@ -120,13 +139,6 @@ def _default_case_fixture(repository_head_sha: str) -> _PreparedCaseFixture:
         collection_name="The 2018 Nuke Collection",
         priority_within_collection=1,
     )
-    # The family_hash below is the canonical SHA-256 of the structural
-    # payload ``{"family_spec_version": 1, "input_rarity": "Restricted",
-    # "stattrak_mode": "normal", "collection_counts": [["The 2018 Nuke
-    # Collection", 10]]}``. The ``verify_case_identity`` step does NOT
-    # depend on this hash; it only needs the goods_id <-> name pair to
-    # reverse-resolve through the pinned identity snapshot. The hash is
-    # used as a stable correlation identifier in the result artifact.
     family_hash = hashlib.sha256(
         json.dumps(
             {
@@ -141,7 +153,7 @@ def _default_case_fixture(repository_head_sha: str) -> _PreparedCaseFixture:
         ).encode("utf-8")
     ).hexdigest()
     return _PreparedCaseFixture(
-        repository_head_sha=repository_head_sha,
+        repository_commit_oid=repository_commit_oid,
         family_hash=family_hash,
         family_key=family_hash[:24],
         input_rarity="Restricted",
@@ -161,7 +173,7 @@ async def prepare_case(
     """Offline preparation. Writes case artifact outside Git. Zero network."""
 
     try:
-        head_sha = _resolve_head_sha(
+        commit_oid = _resolve_commit_oid(
             run_git=(run_git or (lambda argv: subprocess.check_output(
                 ("git",) + tuple(argv), text=True
             )))
@@ -170,14 +182,14 @@ async def prepare_case(
         _print_lines(
             printer,
             "phase16f_prepare: failed",
-            f"reason: head_sha_unavailable ({type(exc).__name__})",
+            f"reason: commit_oid_unavailable ({type(exc).__name__})",
             "live_validation_executed: no",
         )
         return 1
-    fixture = (fixture_factory or _default_case_fixture)(head_sha)
+    fixture = (fixture_factory or _default_case_fixture)(commit_oid)
     try:
         case = freeze_case(
-            repository_head_sha=fixture.repository_head_sha,
+            repository_commit_oid=fixture.repository_commit_oid,
             case_purpose=_default_case_purpose(),
             family_hash=fixture.family_hash,
             family_key=fixture.family_key,
@@ -198,17 +210,27 @@ async def prepare_case(
     root = _artifact_root(env=env)
     root.mkdir(parents=True, exist_ok=True)
     case_path = root / CASE_FILENAME
-    case_bytes = serialize_case(case) + b"\n"
+    case_bytes = serialize_case(case)
     case_path.write_bytes(case_bytes)
-    case_sha = hash_case(case)
+    case_sha = hashlib.sha256(case_bytes).hexdigest()
+    if case_sha != hash_case(case):
+        _print_lines(
+            printer,
+            "phase16f_prepare: failed",
+            "reason: case_digest_inconsistency",
+            "live_validation_executed: no",
+        )
+        return 1
     _print_lines(
         printer,
         "phase16f_prepare: ok",
         f"case_artifact_path: {case_path}",
         f"case_sha256: {case_sha}",
+        f"repository_commit_oid: {case.repository_commit_oid}",
         f"family_key: {case.family_key}",
         f"family_hash: {case.family_hash}",
         f"hard_request_count: {case.hard_request_count}",
+        f"case_schema_version: {case.case_schema_version}",
         "live_validation_executed: no",
     )
     return 0
@@ -280,7 +302,8 @@ async def execute_case(
     finally:
         await runner.aclose()
     result_path = root / RESULT_FILENAME
-    result_path.write_bytes(_serialize_result(result) + b"\n")
+    result_bytes = _serialize_result(result)
+    result_path.write_bytes(result_bytes)
     _print_lines(
         printer,
         "phase16f_execute: complete",
@@ -299,7 +322,7 @@ def _load_case(path: Path) -> LiveValidationCase:
     payload = json.loads(path.read_bytes())
     if (
         type(payload) is not dict
-        or payload.get("case_schema_version") != 1
+        or payload.get("case_schema_version") != LIVE_CASE_SCHEMA_VERSION
     ):
         raise LiveValidationCaseError("unsupported case schema version")
     stattrak_mode = StatTrakMode(payload["stattrak_mode"])
@@ -314,7 +337,7 @@ def _load_case(path: Path) -> LiveValidationCase:
         for item in plan_items_payload
     )
     return freeze_case(
-        repository_head_sha=payload["repository_head_sha"],
+        repository_commit_oid=payload["repository_commit_oid"],
         case_purpose=payload["case_purpose"],
         family_hash=payload["family_hash"],
         family_key=payload["family_key"],
@@ -355,8 +378,8 @@ def _serialize_result(result) -> bytes:
             }
             for page in result.page_results
         ],
-        "repository_head_sha": result.repository_head_sha,
-        "schema_version": 1,
+        "repository_commit_oid": result.repository_commit_oid,
+        "schema_version": LIVE_RUN_RESULT_SCHEMA_VERSION,
     }
     return json.dumps(
         payload,
@@ -369,7 +392,9 @@ def _serialize_result(result) -> bytes:
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="run_live_recipe_first_buff_interface_validation",
-        description="Phase 16F bounded recipe-first BUFF live validation script",
+        description=(
+            "Phase 16F / 16F-R1 bounded recipe-first BUFF live validation script"
+        ),
     )
     sub = parser.add_subparsers(dest="mode", required=True)
     sub.add_parser("prepare", help="freeze and serialize validation case")

@@ -1,4 +1,4 @@
-"""Phase 16F — Live validation case freeze/serialize/verify tests.
+"""Phase 16F / 16F-R1 — Live validation case freeze/serialize/verify tests.
 
 These tests exercise the offline-only Phase 16F validation case module.
 No network I/O is performed.
@@ -7,6 +7,7 @@ No network I/O is performed.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from collections.abc import Sequence
 
@@ -24,6 +25,9 @@ from app.services.recipe_first_live_case import (
     serialize_case,
     verify_case_identity,
 )
+
+# Authoritative Phase 16F-R1 commit OID used by fixture cases.
+_FAKE_40_HEX_OID: str = "f" * 40
 
 
 class _StubIdentityResolver:
@@ -56,11 +60,11 @@ def _valid_kwargs(
     plan_items: Sequence[LiveValidationPlanItem] | None = None,
     collection_counts: Sequence[tuple[str, int]] | None = None,
     family_key: str = "a" * 24,
-    repository_head_sha: str = "0" * 64,
+    repository_commit_oid: str = _FAKE_40_HEX_OID,
     family_hash: str = "a" * 64,
 ) -> dict:
     kwargs: dict = {
-        "repository_head_sha": repository_head_sha,
+        "repository_commit_oid": repository_commit_oid,
         "case_purpose": "test fixture",
         "family_hash": family_hash,
         "family_key": family_key,
@@ -82,11 +86,32 @@ def test_freeze_case_accepts_valid_fixture() -> None:
     assert case.hard_request_count == 1
 
 
+def test_freeze_case_accepts_64_char_git_sha256_oid() -> None:
+    long_oid = "0" * 64
+    case = freeze_case(**_valid_kwargs(repository_commit_oid=long_oid))
+    assert case.repository_commit_oid == long_oid
+
+
+def test_freeze_case_rejects_63_char_oid() -> None:
+    with pytest.raises(LiveValidationCaseError, match="repository_commit_oid"):
+        freeze_case(**_valid_kwargs(repository_commit_oid="0" * 63))
+
+
+def test_freeze_case_rejects_41_char_oid() -> None:
+    with pytest.raises(LiveValidationCaseError, match="repository_commit_oid"):
+        freeze_case(**_valid_kwargs(repository_commit_oid="0" * 41))
+
+
+def test_freeze_case_rejects_uppercase_oid() -> None:
+    with pytest.raises(LiveValidationCaseError, match="repository_commit_oid"):
+        freeze_case(**_valid_kwargs(repository_commit_oid=("F" * 40)))
+
+
 def test_freeze_case_rejects_unsupported_schema_version() -> None:
     with pytest.raises(LiveValidationCaseError, match="case_schema_version"):
         LiveValidationCase(
             case_schema_version=99,
-            repository_head_sha="0" * 64,
+            repository_commit_oid=_FAKE_40_HEX_OID,
             case_purpose="x",
             family_hash="a" * 64,
             family_key="a" * 24,
@@ -177,6 +202,14 @@ def test_serialize_case_is_deterministic_and_canonical() -> None:
     assert parsed["hard_request_count"] == 1
 
 
+def test_serialize_case_uses_correct_commit_oid_field() -> None:
+    case = freeze_case(**_valid_kwargs())
+    raw = serialize_case(case).decode("utf-8")
+    assert "repository_commit_oid" in raw
+    assert "repository_head_sha" not in raw
+    assert case.repository_commit_oid in raw
+
+
 def test_serialize_case_excludes_untrusted_fields() -> None:
     case = freeze_case(**_valid_kwargs())
     raw = serialize_case(case).decode("utf-8")
@@ -184,13 +217,61 @@ def test_serialize_case_excludes_untrusted_fields() -> None:
         assert forbidden not in raw, f"forbidden field {forbidden!r} leaked into case"
 
 
+def test_serialize_case_produces_no_trailing_newline() -> None:
+    """Phase 16F-R1 contract: persisted bytes equal serializer output.
+
+    There must be no undocumented trailing newline on the canonical
+    bytes, otherwise the persisted file digest diverges from the
+    canonical digest.
+    """
+
+    case = freeze_case(**_valid_kwargs())
+    serialized = serialize_case(case)
+    assert not serialized.endswith(b"\n")
+
+
+def test_hash_case_equals_sha256_of_serialize_case() -> None:
+    """R1 invariant: one authoritative case artifact digest.
+
+    The SHA-256 of the exact canonical serializer output MUST equal
+    :func:`hash_case`. There is no longer a separate file digest.
+    """
+
+    case = freeze_case(**_valid_kwargs())
+    canonical_bytes = serialize_case(case)
+    assert hashlib.sha256(canonical_bytes).hexdigest() == hash_case(case)
+
+
+def test_persisted_case_bytes_equal_serialize_case_invariant() -> None:
+    """R1 invariant: persisted case bytes equal serialize_case exactly.
+
+    ``sha256(persisted_bytes) == hash_case(case)`` is the contract.
+    A trailing newline on disk would violate it.
+    """
+
+    case = freeze_case(**_valid_kwargs())
+    canonical_bytes = serialize_case(case)
+    # Simulate disk persistence exactly: no additional bytes.
+    persisted = canonical_bytes
+    assert persisted == canonical_bytes
+    assert hashlib.sha256(persisted).hexdigest() == hash_case(case)
+
+
 def test_hash_case_changes_when_any_field_changes() -> None:
     case = freeze_case(**_valid_kwargs())
     base = hash_case(case)
     mutated = freeze_case(
-        **{**_valid_kwargs(), "repository_head_sha": "1" * 64}
+        **{**_valid_kwargs(), "repository_commit_oid": "a" * 40}
     )
     assert base != hash_case(mutated)
+
+
+def test_load_save_round_trip_preserves_canonical_bytes() -> None:
+    case = freeze_case(**_valid_kwargs())
+    raw = serialize_case(case)
+    parsed = json.loads(raw)
+    assert parsed["case_schema_version"] == LIVE_CASE_SCHEMA_VERSION
+    assert parsed["repository_commit_oid"] == case.repository_commit_oid
 
 
 def test_verify_case_identity_passes_when_resolver_matches() -> None:
@@ -279,7 +360,7 @@ def test_freeze_case_rejects_non_int_count() -> None:
     with pytest.raises(LiveValidationCaseError, match="count"):
         LiveValidationCase(
             case_schema_version=LIVE_CASE_SCHEMA_VERSION,
-            repository_head_sha="0" * 64,
+            repository_commit_oid=_FAKE_40_HEX_OID,
             case_purpose="x",
             family_hash="a" * 64,
             family_key="a" * 24,

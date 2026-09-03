@@ -524,3 +524,15 @@ Legacy goods-first scanner is the production path. Recipe-first remains
 opt-in (`enabled=False`). `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains
 deferred. Single live attempt is the bounded evidence; no replay and
 no additional live runs are authorized by Phase 16F.
+
+## Phase 16F-R1 — Artifact identity semantics correction
+
+`LiveValidationCase.repository_commit_oid` stores the exact Git commit
+object ID (`git rev-parse HEAD`). The persisted case artifact bytes
+equal `serialize_case(case)` exactly, with no trailing newline. The
+authoritative `case_sha256` is SHA-256 of those exact bytes and
+equals `hash_case(case)`. `LIVE_CASE_SCHEMA_VERSION` is bumped from
+1 to 2; legacy v1 artifacts are rejected. The result artifact
+`schema_version` is 2 with the same naming and digest discipline.
+
+The Phase 16F live observation remains accepted; R1 is offline only.

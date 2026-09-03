@@ -1095,3 +1095,29 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 - **Decision:** Phase 16F executed exactly one anonymous BUFF page-1/default-sort GET against the frozen Phase 16D-targeted goods page (`33960`, `AK-47 | Redline (Field-Tested)`) under a `1 <= hard_request_count <= 10` hard bound and 2-second pacing. The case was frozen to canonical UTF-8 JSON outside Git (`$TEMP/cs2-phase16f/phase16f_case.json`); the redacted result was written outside Git (`$TEMP/cs2-phase16f/phase16f_result.json`); no raw payload, seller, account, listing_id, asset_id, paintwear, secret, or webhook data was committed or printed. The interface passed: attempted=1, dispatched=1, budget_exceeded=False, 10 listings received, 10 identity-resolved, 10 candidate-accepted, 10 metadata-resolved; classification=`validated`.
 - **Status:** Complete. Phase 16E orchestration, Phase 16D economics, Phase 16C strict BUFF selector, Phase 16B finish geometry, Phase 16A recipe-first architecture, and Phase 14B/C valuation semantics are validated through the live acquisition seam only.
 - **Boundary:** No SteamDT, no Discord, no Redis, no PostgreSQL mutation, no scheduler, no Phase 15C campaign, no production default switch. The legacy goods-first path remains the production default; `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains active/deferred. The single live attempt is the bounded evidence; no replay and no additional live runs are authorized by Phase 16F.
+
+## D-LIVE-ARTIFACT-COMMIT-IDENTITY-001 — Live artifacts store the actual Git commit object ID
+
+- **Date:** 2026-09-03
+- **Decision:** Phase 16F-R1 replaces the misleading `repository_head_sha` field with `repository_commit_oid`, which stores the verbatim output of `git rev-parse HEAD`. The resolver MUST NOT hash, coerce, expand, or transform the Git commit object ID. Validation accepts 40-character (Git SHA-1) or 64-character (Git SHA-256) lowercase hex. DTO, serialization, result DTO, tests, and docs all use the corrected semantic naming.
+- **Status:** Active Phase 16F-R1 authority.
+- **Boundary:** No live BUFF or SteamDT work; no Phase 15C campaign slot; no production switch.
+
+## D-LIVE-ARTIFACT-DIGEST-001 — One authoritative case artifact digest
+
+- **Date:** 2026-09-03
+- **Decision:** Phase 16F-R1 makes `case_sha256` equal to SHA-256 of the exact bytes canonical bytes (no trailing newline) persisted as the case artifact. `hash_case(case)` returns the same SHA-256 so there is no longer a separate canonical/file digest. Phase 16F v1 artifacts (with hashed HEAD SHA field and trailing-newline persisted bytes) are NOT silently reinterpreted; their `case_schema_version` is `1` and the loader rejects v1.
+- **Status:** Active Phase 16F-R1 authority.
+- **Boundary:** The historical Phase 16F live observation remains accepted under `D-RECIPE-FIRST-BUFF-LIVE-INTERFACE-001`; R1 corrects future artifact semantics only and emits zero new external observations.
+
+## Historical Phase 16F live evidence preserved
+
+The single Phase 16F live attempt remains accepted as `validated`:
+
+- one BUFF anonymous sell-order GET against `33960` (`AK-47 | Redline (Field-Tested)`)
+- attempted=1, dispatched=1, budget_exceeded=False
+- 10 listings identity-resolved, intrinsic-resolved, candidate-accepted, metadata-resolved
+- classification=`validated`
+- zero SteamDT, zero Discord, zero Redis, zero PostgreSQL mutation, zero scheduler
+
+The two historical case digests (the v1 persisted `serialize_case(case) + b"\n"` vs the v1 `hash_case(case) == sha256(serialize_case(case))`) differed only by the trailing newline byte; this was an artifact bookkeeping ambiguity, not a BUFF interface validation failure. R1 removes that ambiguity by aligning persisted bytes with the canonical serializer.

@@ -66,7 +66,7 @@
 6. 检查是否把未确认的 BUFF API 细节错误写死进代码。
 
 ## 当前阶段指针
-- 阶段：`PHASE_16F_RECIPE_FIRST_BUFF_INTERFACE_VALIDATED`（one bounded read-only recipe-first BUFF interface validation；分支 `feature/recipe-first-live-buff-interface-validation` from Phase 16E `f67d500c`；Phase 16G NOT STARTED / NOT AUTHORIZED）。
+- 阶段：`PHASE_16F_R1_ARTIFACT_IDENTITY_SEMANTICS_CORRECTED`（offline-only narrow bookkeeping correction；branch `feature/recipe-first-live-buff-interface-validation-r1` from Phase 16F `15a02ff`；Phase 16F live observation remains validated under `D-RECIPE-FIRST-BUFF-LIVE-INTERFACE-001`；Phase 16G NOT STARTED / NOT AUTHORIZED）。
 - Phase 16F implemented：frozen case DTO `LiveValidationCase` + canonical UTF-8 JSON outside-Git serialization；`LiveValidationRunner` reusing existing `BuffAnonymousListingHttpClient` + `BuffListingProvider` + `ExistingRecipeFirstAcquisitionPipeline`；`attempted` budget enforced before HTTP dispatch；sequential at most `hard_request_count <= 10` page-1/default-sort GET requests；2-second minimum pacing；redacted `LiveValidationRunResult` excludes raw payload, listing_id, asset_id, paintwear, secret, webhook data；classification=`validated` from one live attempt against goods_id `33960` (`AK-47 | Redline (Field-Tested)`)；10 listings identity-resolved/intrinsic-resolved/candidate-accepted/metadata-resolved；ZERO SteamDT；ZERO Discord；ZERO Redis；ZERO PostgreSQL mutation；ZERO scheduler；ZERO production-default switch。
 - Phase 16F boundary：production recipe-first remains OFF；`LiveScannerOrchestrator` and `scripts/run_live_scan_once.py` byte-deterministic unchanged；legacy goods-first path remains the production default；`D-TRADEUP-WEAR-ROW-MIGRATION-001` remains deferred；single live attempt is the bounded evidence, no replay, no additional live runs authorized by Phase 16F。
 - Phase 16E implemented：family-count-preserving bounded enumerator reusing `RecipeEnumerationConfig(2,256)`；new `ConcreteFamilyTradeupResults` from Phase 16B finish geometry + canonical float/wear helpers bypassing the legacy wear-row bug；opt-in offline orchestrator with `enabled=False` default；existing acquisition/enrichment/identity/intrinsic stages composed via `ExistingRecipeFirstAcquisitionPipeline`；`RunScopedValuationSession` + `ValuationService` + `calculate_opportunity_metrics` + `evaluate_opportunity` reused unchanged；ZERO BUFF/SteamDT HTTP / zero production caller imports.
@@ -112,3 +112,9 @@
 - 硬编码 secrets
 - 编造 BUFF endpoint / 签名 / 参数 / 字段 mapping
 - 在未补足单元测试前提交核心计算逻辑
+## Phase 16F-R1 pointer
+- Stage: `PHASE_16F_R1_ARTIFACT_IDENTITY_SEMANTICS_CORRECTED` (offline-only narrow correction; branch `feature/recipe-first-live-buff-interface-validation-r1` from Phase 16F `15a02ff`; Phase 16G NOT STARTED / NOT AUTHORIZED).
+- R1 renamed `repository_head_sha` -> `repository_commit_oid` storing the verbatim `git rev-parse HEAD` output (40-char lowercase hex); no hashing, no coercion. Validation accepts 40 or 64 lowercase hex chars.
+- R1 made persisted case bytes equal `serialize_case(case)` exactly (no trailing newline); `case_sha256 = sha256(persisted_bytes) == hash_case(case)`. There is no longer a separate canonical/file digest for the same artifact.
+- R1 bumped `LIVE_CASE_SCHEMA_VERSION` from 1 to 2. Phase 16F v1 artifacts are rejected; the historical Phase 16F live observation remains accepted under `D-RECIPE-FIRST-BUFF-LIVE-INTERFACE-001` (validated).
+- R1 is OFFLINE ONLY: zero new BUFF, zero SteamDT, zero Phase 15C campaign, zero production switch. Legacy goods-first path and `D-TRADEUP-WEAR-ROW-MIGRATION-001` remain unchanged.

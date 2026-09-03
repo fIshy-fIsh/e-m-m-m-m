@@ -538,3 +538,23 @@ the scheduler remain excluded.
 The current production scanner is unchanged. Recipe-first remains
 explicit opt-in (`enabled=False` default). The legacy wear-row
 migration `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains deferred.
+
+## Phase 16F-R1 — Artifact identity semantics correction
+
+Phase 16F-R1 hardens the artifact identity boundary established in
+Phase 16F:
+
+- `repository_commit_oid` stores the verbatim output of
+  `git rev-parse HEAD` (40-character lowercase hex). No hashing,
+  no coercion, no expansion. Validation allows 40-char Git SHA-1 or
+  64-char Git SHA-256.
+- Persisted case bytes equal `serialize_case(case)` exactly.
+  `case_sha256 = sha256(persisted_bytes) == hash_case(case)`.
+- `LIVE_CASE_SCHEMA_VERSION` is 2; Phase 16F v1 artifacts are rejected
+  rather than silently reinterpreted.
+- Result artifact `schema_version` is 2 with the renamed commit-ID
+  field and a no-trailing-newline guarantee.
+
+The Phase 16F live BUFF observation remains accepted as `validated`
+under `D-RECIPE-FIRST-BUFF-LIVE-INTERFACE-001`. R1 is offline only
+and emits zero new external observations.

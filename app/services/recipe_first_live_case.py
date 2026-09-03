@@ -1,4 +1,4 @@
-"""Phase 16F — Frozen live-validation case DTO + serialization.
+"""Phase 16F / 16F-R1 — Frozen live-validation case DTO + serialization.
 
 This module freezes the deterministic Phase 16F validation case used to
 exercise the recipe-first BUFF acquisition interface against the
@@ -14,7 +14,20 @@ The case content is fully serializable and contains NO:
 Identity is bound through the pinned BUFF community identity snapshot
 via the :func:`verify_case_identity` function before any HTTP dispatch.
 The case is serialized outside Git by the live runner; the SHA-256 of
-its canonical bytes is the immutable case identity.
+its canonical bytes is the immutable case artifact identity.
+
+R1 contract corrections (schema version 2):
+
+- The ``repository_commit_oid`` field stores the actual Git commit
+  object ID exactly as returned by ``git rev-parse HEAD``. It is no
+  longer hashed or coerced to a 64-character value. Validation
+  accepts either 40-character (Git SHA-1) or 64-character (Git
+  SHA-256) lowercase hex so future hash transitions remain valid.
+- The persisted case artifact bytes are byte-equal to
+  :func:`serialize_case`. There is no longer a trailing newline on
+  disk, and :func:`hash_case` returns SHA-256 of those exact bytes.
+- Schema version is bumped from 1 to 2 explicitly. Phase 16F v1
+  artifacts are no longer reinterpreted by v2 code paths.
 """
 
 from __future__ import annotations
@@ -41,9 +54,10 @@ __all__ = (
     "verify_case_identity",
 )
 
-LIVE_CASE_SCHEMA_VERSION: Final[int] = 1
+LIVE_CASE_SCHEMA_VERSION: Final[int] = 2
 _PLAN_ITEMS_HARD_CAP: Final[int] = 10
 _INPUT_COUNT: Final[int] = 10
+_VALID_COMMIT_OID_LENGTHS: Final[tuple[int, ...]] = (40, 64)
 
 
 class LiveValidationCaseError(ValueError):
@@ -60,6 +74,24 @@ def _exact_hex64(value: object, *, field: str) -> str:
     exact = _exact(value, field=field)
     if len(exact) != 64 or any(ch not in "0123456789abcdef" for ch in exact):
         raise LiveValidationCaseError(f"{field} must be full lowercase SHA-256 hex")
+    return exact
+
+
+def _exact_commit_oid(value: object, *, field: str) -> str:
+    """Accept 40-char (Git SHA-1) or 64-char (Git SHA-256) lowercase hex.
+
+    No hashing, no coercion, no expansion. The exact Git commit object
+    ID is preserved verbatim.
+    """
+
+    exact = _exact(value, field=field)
+    if (
+        len(exact) not in _VALID_COMMIT_OID_LENGTHS
+        or any(ch not in "0123456789abcdef" for ch in exact)
+    ):
+        raise LiveValidationCaseError(
+            f"{field} must be 40- or 64-character lowercase hex"
+        )
     return exact
 
 
@@ -92,7 +124,8 @@ class LiveValidationCase:
 
     The case freezes:
 
-    - exact repository HEAD SHA at preparation time
+    - the actual Git commit object ID at preparation time
+      (no hashing, no coercion; verbatim ``git rev-parse HEAD``)
     - one immutable :class:`app.services.recipe_family.RecipeFamily`
       structural composition (hash / key / rarity / StatTrak mode /
       collection counts)
@@ -101,7 +134,7 @@ class LiveValidationCase:
     """
 
     case_schema_version: int
-    repository_head_sha: str
+    repository_commit_oid: str
     case_purpose: str
     family_hash: str
     family_key: str
@@ -119,7 +152,7 @@ class LiveValidationCase:
             raise LiveValidationCaseError(
                 f"case_schema_version must equal {LIVE_CASE_SCHEMA_VERSION}"
             )
-        _exact_hex64(self.repository_head_sha, field="repository_head_sha")
+        _exact_commit_oid(self.repository_commit_oid, field="repository_commit_oid")
         _exact(self.case_purpose, field="case_purpose")
         _exact_hex64(self.family_hash, field="family_hash")
         if (
@@ -209,7 +242,7 @@ class LiveValidationCase:
 
 def freeze_case(
     *,
-    repository_head_sha: str,
+    repository_commit_oid: str,
     case_purpose: str,
     family_hash: str,
     family_key: str,
@@ -227,7 +260,7 @@ def freeze_case(
 
     return LiveValidationCase(
         case_schema_version=LIVE_CASE_SCHEMA_VERSION,
-        repository_head_sha=repository_head_sha,
+        repository_commit_oid=repository_commit_oid,
         case_purpose=case_purpose,
         family_hash=family_hash,
         family_key=family_key,
@@ -277,7 +310,7 @@ def serialize_case(case: LiveValidationCase) -> bytes:
                 ),
             )
         ],
-        "repository_head_sha": case.repository_head_sha,
+        "repository_commit_oid": case.repository_commit_oid,
         "stattrak_mode": case.stattrak_mode.value,
     }
     return json.dumps(
@@ -289,7 +322,12 @@ def serialize_case(case: LiveValidationCase) -> bytes:
 
 
 def hash_case(case: LiveValidationCase) -> str:
-    """Return SHA-256 hex hash of canonical case bytes."""
+    """Return SHA-256 hex hash of canonical case bytes.
+
+    The returned digest is the authoritative case artifact identity.
+    Persisted case bytes MUST equal :func:`serialize_case` exactly,
+    so ``sha256(persisted_bytes) == hash_case(case)``.
+    """
 
     if type(case) is not LiveValidationCase:
         raise LiveValidationCaseError("case must be LiveValidationCase")

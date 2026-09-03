@@ -904,3 +904,19 @@ Next: Phase 16F — ONE Bounded Read-Only Recipe-First BUFF Interface Validation
 - Production recipe-first remains OFF; legacy goods-first scanner is the production path.
 - `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains deferred.
 - Next phase 16G requires separate authorization.
+
+## Phase 16F-R1 handoff
+
+- Branch: `feature/recipe-first-live-buff-interface-validation-r1`
+- Phase 16F base: `15a02ffb6353a022911d58ca28e1d211b9151d88`
+- R1 commit: TBD (offline-only artifact identity correction)
+- `LIVE_CASE_SCHEMA_VERSION` is now 2. `repository_commit_oid` stores
+  the verbatim `git rev-parse HEAD` output.
+- Persisted case bytes equal `serialize_case(case)` exactly.
+- One authoritative `case_sha256` equals SHA-256 of persisted bytes
+  and equals `hash_case(case)`.
+- Phase 16F v1 artifacts (with hashed HEAD field + trailing newline)
+  are rejected; v1 evidence is preserved only as historical context
+  under `D-RECIPE-FIRST-BUFF-LIVE-INTERFACE-001`.
+- Production recipe-first remains OFF. Legacy goods-first path is
+  unchanged. `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains deferred.
