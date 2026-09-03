@@ -292,3 +292,14 @@ The Phase 16F-R1 narrow bookkeeping correction replaces the misleading
 hashed HEAD field with the actual Git commit object ID and aligns
 persisted case bytes with the canonical serializer. There is no new
 live work; Phase 16F v1 artifacts are not silently reinterpreted.
+
+## Phase 16F-R2 — Corrected family metadata contract
+
+The historical generic BUFF acquisition observation remains valid, but
+the v1/v2 family fixture claim is superseded: pinned Redline metadata
+is Phoenix/Classified/normal, not Nuke/Restricted. R2 schema v3 uses
+pinned metadata plus `build_recipe_family` and finish geometry before
+HTTP, then validates enriched inputs/provenance against the family.
+The one corrected request returned 10 family-compatible enriched
+inputs and validated; SteamDT remained zero. Production recipe-first
+remains OFF and Phase 15C remains not started.

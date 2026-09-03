@@ -1098,3 +1098,25 @@ next:
 - Result artifact `schema_version` is 2 with the renamed commit-ID
   field and the same no-trailing-newline guarantee.
 - The historical Phase 16F live observation remains accepted.
+
+## Phase 16F-R2 — Family fixture metadata-contract correction + revalidation (2026-09-03)
+
+- Audited `33960 / AK-47 | Redline (Field-Tested)` through pinned
+  identity and metadata: The Phoenix Collection, Classified, normal,
+  non-Souvenir, float 0.1–0.7.
+- Replaced manual family hash construction with authoritative
+  `build_recipe_family`.
+- Added v3 `verify_case_metadata_contract` before case persistence and
+  before HTTP dispatch; added post-acquisition enriched family and
+  normalized provenance compatibility classification.
+- Corrected family: Classified/normal/The Phoenix Collection ×10,
+  family hash `45bfd0...52516`, 2 Covert structural outputs, exact
+  probability sum 1.
+- One separately authorized anonymous BUFF request validated:
+  attempted=1, dispatched=1, 10 listings, 10 family-compatible
+  enriched inputs, no retry/pagination/fallback, SteamDT=0.
+- Historical generic BUFF observation remains valid; old v1/v2
+  RecipeFamily fixture claim is superseded.
+- Status: `PHASE_16F_R2_FAMILY_METADATA_CONTRACT_VALIDATED`.
+- Production recipe-first remains OFF. Phase 15C campaign remains not
+  started. Phase 16G is not started and requires separate authorization.

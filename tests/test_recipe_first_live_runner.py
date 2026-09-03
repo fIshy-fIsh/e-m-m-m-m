@@ -39,6 +39,7 @@ from app.services.recipe_first_live_runner import (
     LiveValidationPageResult,
     LiveValidationRunner,
     LiveValidationRunnerConfig,
+    _PageAcquisitionOutcome,
 )
 from app.services.trade_up_input_enrichment import (
     InMemoryTradeUpInputEnricher,
@@ -544,8 +545,16 @@ def test_enrich_candidates_round_trip() -> None:
 class _StubPipeline:
     """Replaces LiveValidationRunner._acquire_one with deterministic stubs."""
 
-    def __init__(self, page_results: Sequence[tuple[str, LiveValidationPageResult]]) -> None:
+    def __init__(
+        self,
+        page_results: Sequence[tuple[str, LiveValidationPageResult]],
+        *,
+        compatible: int | None = None,
+        incompatible: int = 0,
+    ) -> None:
         self._page_results = page_results
+        self._compatible = compatible
+        self._incompatible = incompatible
         self.calls: list[str] = []
 
     async def acquire(
@@ -553,24 +562,26 @@ class _StubPipeline:
         *,
         pipeline,
         plan_item: LiveValidationPlanItem,
-    ) -> LiveValidationPageResult:
+    ) -> _PageAcquisitionOutcome:
         self.calls.append(plan_item.goods_id)
         for goods_id, result in self._page_results:
             if goods_id == plan_item.goods_id:
-                return result
+                return _PageAcquisitionOutcome(
+                    page_result=result,
+                    family_compatible=(
+                        result.metadata_resolved
+                        if self._compatible is None
+                        else self._compatible
+                    ),
+                    family_incompatible=self._incompatible,
+                    provenance_keys=(),
+                    contract_failed=(self._incompatible > 0),
+                )
         raise LiveValidationCaseError("no stub for goods_id")
 
 
 async def _noop_sleep(_seconds: float) -> None:
     return None
-
-
-def _noop_clock(_seconds: float):
-    return _noop_sleep
-
-
-async def _recording_sleep(target: list[float], seconds: float) -> None:
-    target.append(seconds)
 
 
 def _recorder_clock(target: list[float]):
@@ -593,10 +604,3 @@ def _dispatched_page_result(goods_id: str, *, metadata_resolved: int) -> LiveVal
         rejection_histograms=(),
         error_reason=None,
     )
-
-
-def _recorder_clock(target: list[float]):
-    async def _sleep(seconds: float) -> None:
-        target.append(seconds)
-
-    return _sleep

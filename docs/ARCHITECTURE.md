@@ -558,3 +558,34 @@ Phase 16F:
 The Phase 16F live BUFF observation remains accepted as `validated`
 under `D-RECIPE-FIRST-BUFF-LIVE-INTERFACE-001`. R1 is offline only
 and emits zero new external observations.
+
+## Phase 16F-R2 — Family fixture metadata-contract correction
+
+The v1/v2 case hardcoded `AK-47 | Redline (Field-Tested)` / `33960`
+as `The 2018 Nuke Collection` / `Restricted`. Pinned metadata instead
+proves `The Phoenix Collection` / `Classified` / normal. Therefore the
+historical HTTP observation remains generic exact-identity/acquisition
+evidence, but its RecipeFamily-bound claim is superseded.
+
+R2 schema v3 adds `verify_case_metadata_contract`:
+
+- every exact plan name resolves through pinned metadata;
+- pinned collection equals the plan collection and is represented by
+  the family composition;
+- pinned rarity and StatTrak mode equal the family;
+- Souvenir remains provenance, not a family identity axis;
+- authoritative `build_recipe_family` reproduces hash/key/counts/mode;
+- `compute_recipe_family_geometry` proves next-rarity outputs and exact
+  `Fraction` probability sum 1;
+- after acquisition, every enriched input and aligned normalized
+  provenance row must match the frozen plan/family;
+- any mismatch or cross-page provenance collision is a
+  `contract_failure`.
+
+The authoritative family is Classified/normal,
+`The Phoenix Collection ×10`, family hash
+`45bfd0f0d3e7405588acdcf742d980577eed4963382c2fde31632fc43db52516`,
+with 2 Covert structural outcomes and exact probability sum 1. One
+separately authorized R2 anonymous GET returned 10 listings and 10
+family-compatible enriched inputs; classification was `validated`.
+SteamDT and all other forbidden external work remained zero.

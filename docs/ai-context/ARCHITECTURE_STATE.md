@@ -536,3 +536,18 @@ equals `hash_case(case)`. `LIVE_CASE_SCHEMA_VERSION` is bumped from
 `schema_version` is 2 with the same naming and digest discipline.
 
 The Phase 16F live observation remains accepted; R1 is offline only.
+
+## Phase 16F-R2 — Authoritative family-bound live validation
+
+The v1/v2 fixture was wrong for `AK-47 | Redline (Field-Tested)`:
+pinned metadata is Classified / The Phoenix Collection / normal, not
+Restricted / The 2018 Nuke Collection. R2 schema v3 adds pinned
+metadata and authoritative family/geometry proof before HTTP and
+family/provenance proof after HTTP.
+
+Authoritative case: Classified/normal, The Phoenix Collection ×10,
+family hash `45bfd0...52516`, output rarity Covert, 2 structural
+outcomes, exact probability sum 1. One corrected anonymous GET
+returned 10 listings; all 10 enriched inputs were family-compatible;
+classification `validated`; SteamDT=0. Historical generic BUFF
+evidence remains valid; the old family fixture claim is superseded.

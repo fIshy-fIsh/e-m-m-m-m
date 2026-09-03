@@ -236,7 +236,10 @@ against the protected-core boundary.
 
 ## 6. Stage 16F — ONE bounded live read-only validation
 
-Status: NOT STARTED / awaiting separate authorization.
+Status: COMPLETE after Phase 16F-R2 correction. Historical v1/v2
+generic BUFF acquisition evidence remains valid, but its family
+fixture claim is superseded; R2 v3 is the authoritative family-bound
+validation.
 
 Scope:
 

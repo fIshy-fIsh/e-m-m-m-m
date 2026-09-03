@@ -33,10 +33,7 @@ _FAKE_OID = "f" * 40
 
 
 class _FakeCaseFixtureFactory:
-    """Mimic :func:`script._default_case_fixture` for the test."""
-
-    def __call__(self, commit_oid: str) -> script._PreparedCaseFixture:
-        return script._default_case_fixture(commit_oid)
+    """Legacy v1/R1 fixture factory kept for compatibility."""
 
 
 def _noop_printer(_line: str) -> None:
@@ -54,8 +51,8 @@ def _run_prepare(tmp_path: Path) -> Path:
         script.prepare_case(
             env={"RECIPE_FIRST_PHASE16F_ARTIFACT_DIR": str(tmp_path)},
             printer=_noop_printer,
+            snapshot_root=ROOT,
             run_git=_fake_git,
-            fixture_factory=_FakeCaseFixtureFactory(),
         )
     )
     assert rc == 0
@@ -109,10 +106,10 @@ def test_prepare_no_trailing_newline_on_persisted_bytes(tmp_path: Path) -> None:
     assert not persisted.endswith(b"\n")
 
 
-def test_prepare_schema_version_is_2(tmp_path: Path) -> None:
+def test_prepare_schema_version_is_3(tmp_path: Path) -> None:
     case_path = _run_prepare(tmp_path)
     payload = json.loads(case_path.read_bytes())
-    assert payload["case_schema_version"] == 2
+    assert payload["case_schema_version"] == 3
 
 
 def test_prepare_load_round_trip_preserves_canonical_bytes(tmp_path: Path) -> None:
@@ -154,6 +151,36 @@ def test_load_case_rejects_v1_schema(tmp_path: Path) -> None:
         raise AssertionError("v1 case must be rejected")
 
 
+def test_load_case_rejects_v2_schema(tmp_path: Path) -> None:
+    v2_payload = {
+        "case_schema_version": 2,
+        "repository_commit_oid": "f" * 40,
+        "case_purpose": "legacy",
+        "family_hash": "a" * 64,
+        "family_key": "a" * 24,
+        "hard_request_count": 1,
+        "input_rarity": "Restricted",
+        "plan_items": [
+            {
+                "collection_name": "The 2018 Nuke Collection",
+                "goods_id": "33960",
+                "market_hash_name": "AK-47 | Redline (Field-Tested)",
+                "priority_within_collection": 1,
+            }
+        ],
+        "collection_counts": [["The 2018 Nuke Collection", 10]],
+        "stattrak_mode": "normal",
+    }
+    path = tmp_path / "v2.json"
+    path.write_bytes(json.dumps(v2_payload).encode("utf-8"))
+    try:
+        script._load_case(path)
+    except script.LiveValidationCaseError as exc:
+        assert "schema" in str(exc).lower()
+    else:
+        raise AssertionError("v2 case must be rejected")
+
+
 def test_result_serializer_is_deterministic_and_excludes_untrusted_fields(tmp_path: Path) -> None:
     """R1 invariant G: result artifact serializer/persistence deterministic."""
 
@@ -179,6 +206,9 @@ def test_result_serializer_is_deterministic_and_excludes_untrusted_fields(tmp_pa
     result = LiveValidationRunResult(
         case_sha256=script.hash_case(case),
         repository_commit_oid=case.repository_commit_oid,
+        family_hash=case.family_hash,
+        family_key=case.family_key,
+        collection_counts=case.collection_counts,
         hard_request_count=case.hard_request_count,
         attempted=1,
         dispatched=1,
@@ -187,24 +217,36 @@ def test_result_serializer_is_deterministic_and_excludes_untrusted_fields(tmp_pa
         aggregate_listings_received=10,
         aggregate_candidate_accepted=10,
         aggregate_metadata_resolved=10,
+        family_compatible_enriched_inputs=10,
+        family_incompatible_enriched_inputs=0,
+        input_rarity=case.input_rarity,
+        stattrak_mode=case.stattrak_mode.value,
         classification="validated",
-        schema_version=2,
+        schema_version=3,
     )
     first = script._serialize_result(result)
     second = script._serialize_result(result)
     assert first == second
     assert not first.endswith(b"\n")
     parsed = json.loads(first)
-    assert parsed["schema_version"] == 2
+    assert parsed["schema_version"] == 3
     assert parsed["repository_commit_oid"] == case.repository_commit_oid
+    assert parsed["input_rarity"] == case.input_rarity
+    assert parsed["stattrak_mode"] == case.stattrak_mode.value
+    assert parsed["family_compatible_enriched_inputs"] == 10
     assert "repository_head_sha" not in parsed
     for forbidden in ("listing_id", "asset_id", "paintwear", "price", "cookie"):
         assert forbidden not in first.decode("utf-8")
 
 
-def test_prepare_case_uses_no_network_factory() -> None:
-    """R1 invariant H: tests remain zero-network."""
+def test_prepare_case_uses_no_network_factory(tmp_path: Path) -> None:
+    """R2 invariant: prepare only uses offline pinned snapshots + git."""
 
-    factory = script._default_case_fixture
-    fixture = factory(_FAKE_OID)
-    assert fixture.repository_commit_oid == _FAKE_OID
+    case_path = _run_prepare(tmp_path)
+    assert case_path.is_file()
+    payload = json.loads(case_path.read_bytes())
+    # The corrected fixture drives family from authoritative builder.
+    assert payload["input_rarity"] == "Classified"
+    assert payload["collection_counts"] == [["The Phoenix Collection", 10]]
+    assert payload["stattrak_mode"] == "normal"
+    assert payload["case_schema_version"] == 3

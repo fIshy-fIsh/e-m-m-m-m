@@ -625,3 +625,22 @@ SteamDT:
   field and the same no-trailing-newline guarantee.
 
 The historical Phase 16F live evidence is not invalidated.
+
+## Phase 16F-R2 — Corrected RecipeFamily-bound BUFF validation
+
+Pinned metadata proves `AK-47 | Redline (Field-Tested)` (`33960`)
+belongs to `The Phoenix Collection` at `Classified` rarity in normal
+mode, not `The 2018 Nuke Collection` / `Restricted`. Consequently:
+
+- the old v1/v2 generic BUFF acquisition observation remains valid;
+- the old v1/v2 RecipeFamily-bound fixture claim is superseded;
+- R2 v3 is the authoritative family-bound validation.
+
+The v3 fixture derives family identity with `build_recipe_family`,
+proves finish geometry before HTTP, and validates each enriched input
+plus normalized provenance against the frozen family after HTTP. The
+corrected family is Classified/normal, `The Phoenix Collection ×10`,
+with 2 Covert finish outcomes and exact probability sum 1. The one
+separately authorized R2 request returned 10 listings and 10
+family-compatible enriched inputs; classification was `validated`.
+No SteamDT or other forbidden external work occurred.

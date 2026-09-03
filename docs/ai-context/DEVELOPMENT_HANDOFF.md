@@ -920,3 +920,23 @@ Next: Phase 16F — ONE Bounded Read-Only Recipe-First BUFF Interface Validation
   under `D-RECIPE-FIRST-BUFF-LIVE-INTERFACE-001`.
 - Production recipe-first remains OFF. Legacy goods-first path is
   unchanged. `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains deferred.
+
+## Phase 16F-R2 handoff
+
+- Branch: `feature/recipe-first-live-buff-interface-validation-r2`
+- R1 base: `16562c30087a257092913ecfd783072dd52604dc`
+- Pinned Redline metadata: Classified / normal /
+  The Phoenix Collection / non-Souvenir / float 0.1–0.7.
+- Corrected family hash:
+  `45bfd0f0d3e7405588acdcf742d980577eed4963382c2fde31632fc43db52516`.
+- Geometry: output rarity Covert; 2 structural finishes; exact
+  probability sum 1.
+- v3 case SHA-256:
+  `9251c86031be091cf02948aab6d67a70dd592f0e4ba1c97ce134405184dc30a1`.
+- R2 live result: attempted=1, dispatched=1, 10 listings, 10
+  family-compatible enriched inputs, classification `validated`,
+  SteamDT=0.
+- Historical generic BUFF evidence remains valid; old v1/v2 family
+  fixture claim is superseded.
+- Production recipe-first remains OFF. Phase 15C campaign remains not
+  started. Phase 16G requires separate authorization.

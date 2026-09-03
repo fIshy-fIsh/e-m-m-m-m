@@ -306,6 +306,32 @@ Stage 16F requires:
 Commit: `validate recipe-first prescreen interface`.
 No PR. No merge. No force. No tag deletion.
 
+### Phase 16F-R2 reconciliation (2026-09-03)
+
+The initial v1/v2 live case used the correct exact goods/name identity
+but the wrong hardcoded family metadata (`The 2018 Nuke Collection` /
+`Restricted`). Its generic BUFF acquisition evidence remains valid,
+but its family-bound claim is superseded.
+
+Authoritative v3 gates add:
+
+- exact plan name must resolve through pinned `SkinMetadata`;
+- pinned collection/rarity/StatTrak must match the frozen family;
+- family identity must be produced by `build_recipe_family`;
+- finish geometry must have at least one next-rarity finish and exact
+  `Fraction` sum 1;
+- the metadata/family/geometry contract runs before persistence and
+  again before HTTP;
+- every enriched input and normalized provenance row must match the
+  family after HTTP;
+- v1/v2 artifacts are rejected by the v3 loader;
+- any mismatch or provenance collision is `contract_failure`.
+
+Corrected v3 family: Classified/normal, The Phoenix Collection ×10,
+2 Covert structural finishes, exact probability sum 1. One separately
+authorized request returned 10 family-compatible enriched inputs and
+validated with SteamDT=0.
+
 ## 14. Reporting tokens
 
 Final report MUST end with:

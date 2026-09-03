@@ -1,4 +1,4 @@
-"""Phase 16F / 16F-R1 — One bounded read-only recipe-first BUFF live validation script.
+"""Phase 16F / 16F-R1 / 16F-R2 — One bounded read-only recipe-first BUFF live validation script.
 
 This script supports two deterministic modes:
 
@@ -26,11 +26,21 @@ R1 artifact-identity corrections (Phase 16F-R1):
   canonical bytes persisted as the case artifact; it equals
   :func:`hash_case` exactly. There is no longer a separate
   ``file_digest`` vs ``canonical_digest``.
-- The result artifact is serialized with no trailing newline; its
-  persisted bytes equal the serializer output exactly.
-- ``LIVE_CASE_SCHEMA_VERSION`` is now 2 (case) and result
-  ``schema_version`` is 2 (run result). Old v1 artifacts are NOT
-  silently reinterpreted.
+
+R2 family-metadata-contract corrections (Phase 16F-R2):
+
+- ``LIVE_CASE_SCHEMA_VERSION`` is now 3. v1 and v2 artifacts are
+  rejected by the loader; they are not silently reinterpreted.
+- The frozen family identity (``family_hash`` / ``family_key`` /
+  ``input_rarity`` / ``stattrak_mode`` / ``collection_counts``) is
+  produced by the authoritative ``build_recipe_family``. Manual
+  hash construction is forbidden.
+- Every plan item is proven against the pinned metadata snapshot,
+  canonical intrinsic classifier, and authoritative recipe family
+  builder BEFORE HTTP dispatch via
+  ``verify_case_metadata_contract``.
+- Souvenir is treated as concrete-input provenance only; structural
+  family identity is canonical non-Souvenir.
 """
 
 from __future__ import annotations
@@ -52,7 +62,19 @@ if __package__ is None or __package__ == "":
 from app.services.buff_community_identity_resolver import (
     BuffCommunityIdentityResolver,
 )
+from app.services.buff_intrinsic_flag_resolver import (
+    BuffListingIntrinsicFlagResolver,
+    CanonicalNameIntrinsicFlagResolver,
+)
 from app.services.market_universe_builder import StatTrakMode
+from app.services.recipe_family import (
+    RecipeFamilyIdentityError,
+    build_recipe_family,
+)
+from app.services.recipe_family_geometry import (
+    RecipeFamilyGeometryError,
+    compute_recipe_family_geometry,
+)
 from app.services.recipe_first_live_case import (
     LIVE_CASE_SCHEMA_VERSION,
     LiveValidationCase,
@@ -62,18 +84,29 @@ from app.services.recipe_first_live_case import (
     hash_case,
     serialize_case,
     verify_case_identity,
+    verify_case_metadata_contract,
 )
 from app.services.recipe_first_live_runner import (
     LIVE_RUN_RESULT_SCHEMA_VERSION,
     LiveValidationRunner,
     LiveValidationRunnerConfig,
 )
-from app.services.skin_metadata_resolver import PinnedSkinMetadataResolver
+from app.services.skin_metadata_resolver import (
+    PinnedSkinMetadataResolver,
+)
+from app.services.structural_output_finish import StructuralOutputFinishIndex
+from app.services.trade_up_input_enrichment import TradeUpInputMetadataResolver
 
 RUN_GATE_ENV: str = "RECIPE_FIRST_RUN_BUFF_INTERFACE_VALIDATION"
 ARTIFACT_DIR_ENV: str = "RECIPE_FIRST_PHASE16F_ARTIFACT_DIR"
 CASE_FILENAME: str = "phase16f_case.json"
 RESULT_FILENAME: str = "phase16f_result.json"
+
+# Authoritative Phase 16F-R2 default live fixture.
+# Derived from pinned identity + pinned metadata audit, not from
+# fabricated hard-coded family fields.
+DEFAULT_TARGET_MARKET_HASH_NAME: str = "AK-47 | Redline (Field-Tested)"
+DEFAULT_TARGET_GOODS_ID: str = "33960"
 
 
 def _print_lines(printer: Callable[[str], None], *lines: str) -> None:
@@ -101,9 +134,9 @@ def _artifact_root(*, env: Mapping[str, str]) -> Path:
 
 def _default_case_purpose() -> str:
     return (
-        "Phase 16F bounded recipe-first BUFF anonymous live interface "
-        "validation; one fixed single-collection Restricted/normal "
-        "family and one anonymous goods-page request."
+        "Phase 16F-R2 bounded recipe-first BUFF anonymous live "
+        "interface validation; one corrected fixed single-collection "
+        "Classified family and one anonymous goods-page request."
     )
 
 
@@ -120,45 +153,71 @@ class _PreparedCaseFixture:
     plan_items: tuple[LiveValidationPlanItem, ...]
 
 
-def _default_case_fixture(repository_commit_oid: str) -> _PreparedCaseFixture:
-    """Default single-collection Restricted/normal case for Phase 16F.
+def _build_default_fixture(
+    *,
+    repository_commit_oid: str,
+    metadata_resolver: TradeUpInputMetadataResolver,
+    intrinsic_resolver: BuffListingIntrinsicFlagResolver,
+    finish_index: StructuralOutputFinishIndex,
+    target_market_hash_name: str = DEFAULT_TARGET_MARKET_HASH_NAME,
+    target_goods_id: str = DEFAULT_TARGET_GOODS_ID,
+) -> _PreparedCaseFixture:
+    """Build the authoritative fixture from pinned metadata.
 
-    Uses ``AK-47 | Redline (Field-Tested)`` -> ``33960``. This pair is
-    present in the pinned BUFF community identity snapshot and
-    corresponds to a real pinned metadata row in
-    ``The 2018 Nuke Collection`` at Restricted / normal mode.
-
-    The collection counts (``The 2018 Nuke Collection``, 10) require
-    exactly one distinct pinned goods page request, satisfying the
-    ``1 <= hard_request_count <= 10`` bound for this phase.
+    No manual hash duplication. The exact family hash, key, rarity,
+    StatTrak mode, and collection_counts come from
+    :func:`build_recipe_family`. The exact collection_name and
+    input_rarity come from the pinned metadata snapshot. The exact
+    StatTrak mode comes from the canonical intrinsic classifier.
     """
 
+    metadata = metadata_resolver.resolve(target_market_hash_name)
+    if metadata is None:
+        raise LiveValidationCaseError(
+            f"target {target_market_hash_name!r} is not in pinned metadata"
+        )
+    intrinsic = intrinsic_resolver.resolve(target_market_hash_name)
+    if intrinsic is None:
+        raise LiveValidationCaseError(
+            f"target {target_market_hash_name!r} canonical intrinsic flags unresolved"
+        )
+    collection_name = metadata.collection_name
+    input_rarity = metadata.rarity
+    stattrak_mode = (
+        StatTrakMode.STATTRAK if intrinsic.stattrak else StatTrakMode.NORMAL
+    )
+    try:
+        family = build_recipe_family(
+            input_rarity=input_rarity,
+            stattrak_mode=stattrak_mode,
+            collection_counts=((collection_name, 10),),
+        )
+        geometry = compute_recipe_family_geometry(
+            family, finish_index=finish_index
+        )
+    except MemoryError:
+        raise
+    except (RecipeFamilyIdentityError, RecipeFamilyGeometryError) as exc:
+        raise LiveValidationCaseError(
+            "target cannot form a valid productive RecipeFamily"
+        ) from exc
+    if not geometry.outcomes:
+        raise LiveValidationCaseError(
+            "family geometry has no structural outcomes"
+        )
     plan_item = LiveValidationPlanItem(
-        market_hash_name="AK-47 | Redline (Field-Tested)",
-        goods_id="33960",
-        collection_name="The 2018 Nuke Collection",
+        market_hash_name=target_market_hash_name,
+        goods_id=target_goods_id,
+        collection_name=collection_name,
         priority_within_collection=1,
     )
-    family_hash = hashlib.sha256(
-        json.dumps(
-            {
-                "family_spec_version": 1,
-                "input_rarity": "Restricted",
-                "stattrak_mode": "normal",
-                "collection_counts": [["The 2018 Nuke Collection", 10]],
-            },
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")
-    ).hexdigest()
     return _PreparedCaseFixture(
         repository_commit_oid=repository_commit_oid,
-        family_hash=family_hash,
-        family_key=family_hash[:24],
-        input_rarity="Restricted",
-        stattrak_mode=StatTrakMode.NORMAL,
-        collection_counts=(("The 2018 Nuke Collection", 10),),
+        family_hash=family.family_hash,
+        family_key=family.family_key,
+        input_rarity=family.input_rarity,
+        stattrak_mode=family.stattrak_mode,
+        collection_counts=family.collection_counts,
         plan_items=(plan_item,),
     )
 
@@ -167,8 +226,8 @@ async def prepare_case(
     *,
     env: Mapping[str, str],
     printer: Callable[[str], None] = print,
+    snapshot_root: Path,
     run_git: Callable[[Sequence[str]], str] | None = None,
-    fixture_factory: Callable[[str], _PreparedCaseFixture] | None = None,
 ) -> int:
     """Offline preparation. Writes case artifact outside Git. Zero network."""
 
@@ -181,12 +240,37 @@ async def prepare_case(
     except Exception as exc:
         _print_lines(
             printer,
-            "phase16f_prepare: failed",
+            "phase16f_r2_prepare: failed",
             f"reason: commit_oid_unavailable ({type(exc).__name__})",
             "live_validation_executed: no",
         )
         return 1
-    fixture = (fixture_factory or _default_case_fixture)(commit_oid)
+    identity = BuffCommunityIdentityResolver.from_snapshot_path(
+        snapshot_root / "data" / "identity" / "buff_identity_v1.json"
+    )
+    metadata_resolver = PinnedSkinMetadataResolver.from_snapshot_path(
+        snapshot_root / "data" / "metadata" / "skin_metadata_v1.json"
+    )
+    skins = metadata_resolver.skins
+    intrinsic_resolver: BuffListingIntrinsicFlagResolver = (
+        CanonicalNameIntrinsicFlagResolver()
+    )
+    finish_index = StructuralOutputFinishIndex.from_skins(skins)
+    try:
+        fixture = _build_default_fixture(
+            repository_commit_oid=commit_oid,
+            metadata_resolver=metadata_resolver,
+            intrinsic_resolver=intrinsic_resolver,
+            finish_index=finish_index,
+        )
+    except LiveValidationCaseError as exc:
+        _print_lines(
+            printer,
+            "phase16f_r2_prepare: failed",
+            f"reason: fixture_invalid ({exc})",
+            "live_validation_executed: no",
+        )
+        return 1
     try:
         case = freeze_case(
             repository_commit_oid=fixture.repository_commit_oid,
@@ -201,12 +285,29 @@ async def prepare_case(
     except LiveValidationCaseError as exc:
         _print_lines(
             printer,
-            "phase16f_prepare: failed",
+            "phase16f_r2_prepare: failed",
             f"reason: case_invalid ({exc})",
             "live_validation_executed: no",
         )
         return 1
-
+    # Pre-persist identity + metadata contract proof.
+    try:
+        await verify_case_identity(case, identity_resolver=identity)
+        verify_case_metadata_contract(
+            case,
+            metadata_resolver=metadata_resolver,
+            intrinsic_resolver=intrinsic_resolver,
+            skins=skins,
+            finish_index=finish_index,
+        )
+    except LiveValidationCaseError as exc:
+        _print_lines(
+            printer,
+            "phase16f_r2_prepare: failed",
+            f"reason: metadata_contract_failed ({exc})",
+            "live_validation_executed: no",
+        )
+        return 1
     root = _artifact_root(env=env)
     root.mkdir(parents=True, exist_ok=True)
     case_path = root / CASE_FILENAME
@@ -216,17 +317,20 @@ async def prepare_case(
     if case_sha != hash_case(case):
         _print_lines(
             printer,
-            "phase16f_prepare: failed",
+            "phase16f_r2_prepare: failed",
             "reason: case_digest_inconsistency",
             "live_validation_executed: no",
         )
         return 1
     _print_lines(
         printer,
-        "phase16f_prepare: ok",
+        "phase16f_r2_prepare: ok",
         f"case_artifact_path: {case_path}",
         f"case_sha256: {case_sha}",
         f"repository_commit_oid: {case.repository_commit_oid}",
+        f"input_rarity: {case.input_rarity}",
+        f"stattrak_mode: {case.stattrak_mode.value}",
+        f"collection_counts: {list(case.collection_counts)}",
         f"family_key: {case.family_key}",
         f"family_hash: {case.family_hash}",
         f"hard_request_count: {case.hard_request_count}",
@@ -249,7 +353,7 @@ async def execute_case(
     if gate not in {"1", "true", "yes", "on"}:
         _print_lines(
             printer,
-            "phase16f_execute: refused",
+            "phase16f_r2_execute: refused",
             f"reason: gate_missing ({RUN_GATE_ENV})",
             "live_validation_executed: no",
         )
@@ -259,7 +363,7 @@ async def execute_case(
     if not case_path.is_file():
         _print_lines(
             printer,
-            "phase16f_execute: failed",
+            "phase16f_r2_execute: failed",
             f"reason: case_artifact_missing ({case_path})",
             "live_validation_executed: no",
         )
@@ -269,7 +373,7 @@ async def execute_case(
     except LiveValidationCaseError as exc:
         _print_lines(
             printer,
-            "phase16f_execute: failed",
+            "phase16f_r2_execute: failed",
             f"reason: case_invalid ({exc})",
             "live_validation_executed: no",
         )
@@ -277,24 +381,47 @@ async def execute_case(
     identity = BuffCommunityIdentityResolver.from_snapshot_path(
         snapshot_root / "data" / "identity" / "buff_identity_v1.json"
     )
-    metadata = PinnedSkinMetadataResolver.from_snapshot_path(
+    metadata_resolver = PinnedSkinMetadataResolver.from_snapshot_path(
         snapshot_root / "data" / "metadata" / "skin_metadata_v1.json"
     )
+    skins = metadata_resolver.skins
+    intrinsic_resolver: BuffListingIntrinsicFlagResolver = (
+        CanonicalNameIntrinsicFlagResolver()
+    )
+    finish_index = StructuralOutputFinishIndex.from_skins(skins)
     # Identity proof before HTTP.
     try:
         await verify_case_identity(case, identity_resolver=identity)
     except LiveValidationCaseError as exc:
         _print_lines(
             printer,
-            "phase16f_execute: failed",
+            "phase16f_r2_execute: failed",
             f"reason: identity_proof_failed ({exc})",
+            "live_validation_executed: no",
+        )
+        return 1
+    # Metadata + family contract proof before HTTP.
+    try:
+        verify_case_metadata_contract(
+            case,
+            metadata_resolver=metadata_resolver,
+            intrinsic_resolver=intrinsic_resolver,
+            skins=skins,
+            finish_index=finish_index,
+        )
+    except LiveValidationCaseError as exc:
+        _print_lines(
+            printer,
+            "phase16f_r2_execute: failed",
+            f"reason: metadata_contract_failed ({exc})",
             "live_validation_executed: no",
         )
         return 1
     runner = LiveValidationRunner(
         case=case,
         identity_resolver=identity,
-        metadata_resolver=metadata,
+        metadata_resolver=metadata_resolver,
+        intrinsic_resolver=intrinsic_resolver,
         config=runner_config or LiveValidationRunnerConfig(),
     )
     try:
@@ -306,13 +433,14 @@ async def execute_case(
     result_path.write_bytes(result_bytes)
     _print_lines(
         printer,
-        "phase16f_execute: complete",
+        "phase16f_r2_execute: complete",
         f"result_artifact_path: {result_path}",
         f"classification: {result.classification}",
         f"attempted: {result.attempted}",
         f"dispatched: {result.dispatched}",
         f"budget_exceeded: {result.budget_exceeded}",
         f"hard_request_count: {result.hard_request_count}",
+        f"family_compatible_enriched_inputs: {result.family_compatible_enriched_inputs}",
         "live_validation_executed: yes",
     )
     return 0
@@ -324,7 +452,10 @@ def _load_case(path: Path) -> LiveValidationCase:
         type(payload) is not dict
         or payload.get("case_schema_version") != LIVE_CASE_SCHEMA_VERSION
     ):
-        raise LiveValidationCaseError("unsupported case schema version")
+        raise LiveValidationCaseError(
+            f"unsupported case schema version: {payload.get('case_schema_version')!r}; "
+            f"only {LIVE_CASE_SCHEMA_VERSION} is accepted"
+        )
     stattrak_mode = StatTrakMode(payload["stattrak_mode"])
     plan_items_payload = payload["plan_items"]
     plan_items = tuple(
@@ -359,8 +490,16 @@ def _serialize_result(result) -> bytes:
         "budget_exceeded": result.budget_exceeded,
         "case_sha256": result.case_sha256,
         "classification": result.classification,
+        "collection_counts": [
+            [name, count] for name, count in result.collection_counts
+        ],
         "dispatched": result.dispatched,
+        "family_hash": result.family_hash,
+        "family_key": result.family_key,
+        "family_compatible_enriched_inputs": result.family_compatible_enriched_inputs,
+        "family_incompatible_enriched_inputs": result.family_incompatible_enriched_inputs,
         "hard_request_count": result.hard_request_count,
+        "input_rarity": result.input_rarity,
         "page_results": [
             {
                 "candidate_accepted": page.candidate_accepted,
@@ -380,6 +519,7 @@ def _serialize_result(result) -> bytes:
         ],
         "repository_commit_oid": result.repository_commit_oid,
         "schema_version": LIVE_RUN_RESULT_SCHEMA_VERSION,
+        "stattrak_mode": result.stattrak_mode,
     }
     return json.dumps(
         payload,
@@ -393,7 +533,8 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="run_live_recipe_first_buff_interface_validation",
         description=(
-            "Phase 16F / 16F-R1 bounded recipe-first BUFF live validation script"
+            "Phase 16F / 16F-R1 / 16F-R2 bounded recipe-first BUFF "
+            "live validation script"
         ),
     )
     sub = parser.add_subparsers(dest="mode", required=True)
@@ -405,10 +546,10 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_arg_parser().parse_args(argv)
     env = os.environ
+    snapshot_root = Path(__file__).resolve().parents[1]
     if args.mode == "prepare":
-        return asyncio.run(prepare_case(env=env))
+        return asyncio.run(prepare_case(env=env, snapshot_root=snapshot_root))
     if args.mode == "execute":
-        snapshot_root = Path(__file__).resolve().parents[1]
         return asyncio.run(
             execute_case(env=env, snapshot_root=snapshot_root)
         )

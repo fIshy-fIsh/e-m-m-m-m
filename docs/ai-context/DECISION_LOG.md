@@ -1121,3 +1121,23 @@ The single Phase 16F live attempt remains accepted as `validated`:
 - zero SteamDT, zero Discord, zero Redis, zero PostgreSQL mutation, zero scheduler
 
 The two historical case digests (the v1 persisted `serialize_case(case) + b"\n"` vs the v1 `hash_case(case) == sha256(serialize_case(case))`) differed only by the trailing newline byte; this was an artifact bookkeeping ambiguity, not a BUFF interface validation failure. R1 removes that ambiguity by aligning persisted bytes with the canonical serializer.
+
+## D-RECIPE-FIRST-LIVE-FAMILY-METADATA-001 — Live items require pinned metadata/family proof
+
+- **Date:** 2026-09-03
+- **Decision:** Every recipe-first live targeted item must prove its exact pinned metadata collection, input rarity, and StatTrak mode against the frozen `RecipeFamily` before HTTP dispatch. The same constraints must be checked against every metadata-resolved `TradeUpEnrichedInput` and its normalized provenance after acquisition. Identity-only goods-ID/name proof is insufficient; any collection/rarity/mode or provenance contradiction is a `contract_failure`.
+- **Status:** Active Phase 16F-R2 authority.
+- **Boundary:** Souvenir remains concrete-input provenance, not a `RecipeFamily` structural axis. No fuzzy matching or name synthesis.
+
+## D-RECIPE-FIRST-LIVE-FAMILY-CONSTRUCTION-001 — Live family identity uses build_recipe_family
+
+- **Date:** 2026-09-03
+- **Decision:** Recipe-first live validation family identity must be produced by authoritative `build_recipe_family` from exact pinned metadata; scripts may not duplicate the canonical family JSON/hash formula. `compute_recipe_family_geometry` must prove matching family hash, at least one next-rarity structural finish, and exact `Fraction` probability sum 1 before HTTP dispatch.
+- **Status:** Active Phase 16F-R2 authority.
+- **Boundary:** R2 case/result schema is version 3; v1/v2 artifacts are rejected by the v3 loader. R1 commit-OID and one-artifact-digest decisions remain active.
+
+## Phase 16F evidence reconciliation after R2
+
+- Historical **generic BUFF exact-identity/acquisition interface evidence remains valid**: one anonymous GET, goods ID `33960`, exact name `AK-47 | Redline (Field-Tested)`, 10 listings, 10 identity-resolved, 10 intrinsic-resolved, 10 candidate-accepted, 10 metadata-resolved, SteamDT=0.
+- Historical **v1/v2 RecipeFamily-bound fixture evidence is invalid/superseded**. The old fixture claimed `The 2018 Nuke Collection` / `Restricted`; pinned metadata proves `The Phoenix Collection` / `Classified` / normal. The old code did not verify those family fields against exact pinned metadata before HTTP or enriched evidence after HTTP.
+- Phase 16F-R2 v3 is the authoritative RecipeFamily-bound validation: `Classified`, normal, `The Phoenix Collection ×10`, family hash `45bfd0f0d3e7405588acdcf742d980577eed4963382c2fde31632fc43db52516`, output rarity `Covert`, 2 structural finish outcomes, exact probability sum 1. One separately authorized anonymous GET returned 10 listings and 10 family-compatible enriched inputs; classification `validated`; SteamDT=0.

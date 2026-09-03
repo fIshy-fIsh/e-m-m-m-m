@@ -1,4 +1,4 @@
-"""Phase 16F — Bounded read-only recipe-first BUFF live validation runner.
+"""Phase 16F / 16F-R1 / 16F-R2 — Bounded read-only recipe-first BUFF live validation runner.
 
 The runner performs exactly one anonymous BUFF sell-order page-1/default-sort
 HTTP request per frozen plan item, in deterministic order, with at most the
@@ -19,6 +19,14 @@ Strict guarantees:
 - ``attempted`` request counter is enforced before HTTP dispatch
 - result excludes raw BUFF payload and seller / account / asset data
 - pacing sleep between sequential starts (off by default for tests)
+
+R2 family contract enforcement:
+
+- After page acquisition, every enriched input MUST be validated
+  against the frozen ``RecipeFamily``: candidate goods_id, exact
+  market_hash_name, input_item collection_name and rarity, family
+  StatTrak mode, and intrinsic alignment. Any mismatch classifies
+  the run as ``contract_failure`` instead of ``validated``.
 """
 
 from __future__ import annotations
@@ -45,6 +53,7 @@ from app.services.buff_intrinsic_flag_resolver import (
     CanonicalNameIntrinsicFlagResolver,
 )
 from app.services.buff_listing_provider import BuffListingProvider
+from app.services.market_universe_builder import StatTrakMode
 from app.services.recipe_first_acquisition import (
     ExistingRecipeFirstAcquisitionPipeline,
     RecipeFirstAcquisitionPage,
@@ -90,7 +99,7 @@ _CLASSIFICATION_INCONCLUSIVE: str = "inconclusive"
 _CLASSIFICATION_CONTRACT_FAILURE: str = "contract_failure"
 _CLASSIFICATION_IDENTITY_FAILURE: str = "identity_failure"
 
-LIVE_RUN_RESULT_SCHEMA_VERSION: int = 2
+LIVE_RUN_RESULT_SCHEMA_VERSION: int = 3
 
 
 class _BudgetExceeded(RuntimeError):
@@ -221,11 +230,25 @@ class LiveValidationPageResult:
 
 
 @dataclass(frozen=True, kw_only=True, repr=False)
+class _PageAcquisitionOutcome:
+    """Internal page result plus family/provenance contract evidence."""
+
+    page_result: LiveValidationPageResult
+    family_compatible: int
+    family_incompatible: int
+    provenance_keys: tuple[tuple[str, str, str], ...]
+    contract_failed: bool
+
+
+@dataclass(frozen=True, kw_only=True, repr=False)
 class LiveValidationRunResult:
     """Redacted run-level outcome with no raw BUFF payload."""
 
     case_sha256: str
     repository_commit_oid: str
+    family_hash: str
+    family_key: str
+    collection_counts: tuple[tuple[str, int], ...]
     hard_request_count: int
     attempted: int
     dispatched: int
@@ -234,14 +257,60 @@ class LiveValidationRunResult:
     aggregate_listings_received: int
     aggregate_candidate_accepted: int
     aggregate_metadata_resolved: int
+    family_compatible_enriched_inputs: int
+    family_incompatible_enriched_inputs: int
+    input_rarity: str
+    stattrak_mode: str
     classification: str
     schema_version: int
 
     def __post_init__(self) -> None:
-        if type(self.case_sha256) is not str or len(self.case_sha256) != 64:
+        if (
+            type(self.case_sha256) is not str
+            or len(self.case_sha256) != 64
+            or any(ch not in "0123456789abcdef" for ch in self.case_sha256)
+        ):
             raise LiveValidationCaseError("case_sha256 must be SHA-256 hex")
-        if type(self.aggregate_listings_received) is not int:
-            raise LiveValidationCaseError("aggregate counters must be ints")
+        counters = (
+            self.hard_request_count,
+            self.attempted,
+            self.dispatched,
+            self.aggregate_listings_received,
+            self.aggregate_candidate_accepted,
+            self.aggregate_metadata_resolved,
+            self.family_compatible_enriched_inputs,
+            self.family_incompatible_enriched_inputs,
+        )
+        if any(type(value) is not int or value < 0 for value in counters):
+            raise LiveValidationCaseError(
+                "run counters must be non-negative integers"
+            )
+        if type(self.budget_exceeded) is not bool:
+            raise LiveValidationCaseError("budget_exceeded must be bool")
+        if type(self.page_results) is not tuple or any(
+            type(page) is not LiveValidationPageResult for page in self.page_results
+        ):
+            raise LiveValidationCaseError(
+                "page_results must contain LiveValidationPageResult values"
+            )
+        if self.schema_version != LIVE_RUN_RESULT_SCHEMA_VERSION:
+            raise LiveValidationCaseError(
+                "run result schema_version does not match current schema"
+            )
+        if (
+            type(self.family_hash) is not str
+            or len(self.family_hash) != 64
+            or any(ch not in "0123456789abcdef" for ch in self.family_hash)
+        ):
+            raise LiveValidationCaseError("family_hash must be SHA-256 hex")
+        if self.family_key != self.family_hash[:24]:
+            raise LiveValidationCaseError(
+                "family_key must match family_hash prefix"
+            )
+        if not self.collection_counts:
+            raise LiveValidationCaseError(
+                "collection_counts must be non-empty"
+            )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -350,6 +419,8 @@ class LiveValidationRunner:
                 aggregate_listings=0,
                 aggregate_candidates=0,
                 aggregate_metadata=0,
+                family_compatible=0,
+                family_incompatible=0,
                 classification=_CLASSIFICATION_IDENTITY_FAILURE,
             )
 
@@ -371,18 +442,31 @@ class LiveValidationRunner:
         aggregate_listings = 0
         aggregate_candidates = 0
         aggregate_metadata = 0
+        family_compatible = 0
+        family_incompatible = 0
+        cross_page_contract_failed = False
+        seen_provenance_keys: set[tuple[str, str, str]] = set()
         plan_items = list(self.case.plan_items)
         last_index = len(plan_items) - 1
         pacing_seconds_value = self._config.pacing_seconds
         for index, plan_item in enumerate(plan_items):
-            page_result = await self._acquire_one(
+            outcome = await self._acquire_one(
                 pipeline=pipeline,
                 plan_item=plan_item,
             )
+            page_result = outcome.page_result
             page_results.append(page_result)
             aggregate_listings += page_result.listing_count
             aggregate_candidates += page_result.candidate_accepted
             aggregate_metadata += page_result.metadata_resolved
+            family_compatible += outcome.family_compatible
+            family_incompatible += outcome.family_incompatible
+            if outcome.contract_failed:
+                cross_page_contract_failed = True
+            for provenance_key in outcome.provenance_keys:
+                if provenance_key in seen_provenance_keys:
+                    cross_page_contract_failed = True
+                seen_provenance_keys.add(provenance_key)
             if self._tracker.exceeded:
                 break
             if pacing_seconds_value > 0.0 and index < last_index:
@@ -394,6 +478,10 @@ class LiveValidationRunner:
             dispatched=self._tracker.dispatched,
             budget_exceeded=self._tracker.exceeded,
             hard_request_count=self.case.hard_request_count,
+            family_compatible=family_compatible,
+            family_incompatible=family_incompatible,
+            aggregate_metadata_resolved=aggregate_metadata,
+            contract_failed=cross_page_contract_failed,
         )
         return _build_run_result(
             case=self.case,
@@ -404,6 +492,8 @@ class LiveValidationRunner:
             aggregate_listings=aggregate_listings,
             aggregate_candidates=aggregate_candidates,
             aggregate_metadata=aggregate_metadata,
+            family_compatible=family_compatible,
+            family_incompatible=family_incompatible,
             classification=classification,
         )
 
@@ -412,40 +502,52 @@ class LiveValidationRunner:
         *,
         pipeline: ExistingRecipeFirstAcquisitionPipeline,
         plan_item: LiveValidationPlanItem,
-    ) -> LiveValidationPageResult:
+    ) -> _PageAcquisitionOutcome:
         try:
             page: RecipeFirstAcquisitionPage = await pipeline.acquire_page(
                 goods_id=plan_item.goods_id,
                 market_hash_name=plan_item.market_hash_name,
             )
         except _BudgetExceeded:
-            return LiveValidationPageResult(
-                goods_id=plan_item.goods_id,
-                market_hash_name=plan_item.market_hash_name,
-                request_status=RUN_STATUS_BUDGET_EXCEEDED,
-                listing_count=0,
-                candidate_accepted=0,
-                candidate_rejected=0,
-                metadata_resolved=0,
-                metadata_unresolved=0,
-                rejection_histograms=(),
-                error_reason="attempted_request_exceeded_frozen_budget",
+            return _PageAcquisitionOutcome(
+                page_result=LiveValidationPageResult(
+                    goods_id=plan_item.goods_id,
+                    market_hash_name=plan_item.market_hash_name,
+                    request_status=RUN_STATUS_BUDGET_EXCEEDED,
+                    listing_count=0,
+                    candidate_accepted=0,
+                    candidate_rejected=0,
+                    metadata_resolved=0,
+                    metadata_unresolved=0,
+                    rejection_histograms=(),
+                    error_reason="attempted_request_exceeded_frozen_budget",
+                ),
+                family_compatible=0,
+                family_incompatible=0,
+                provenance_keys=(),
+                contract_failed=True,
             )
         except (MemoryError, asyncio.CancelledError):
             raise
         except Exception as exc:
             reason = _classify_exception(exc)
-            return LiveValidationPageResult(
-                goods_id=plan_item.goods_id,
-                market_hash_name=plan_item.market_hash_name,
-                request_status=reason,
-                listing_count=0,
-                candidate_accepted=0,
-                candidate_rejected=0,
-                metadata_resolved=0,
-                metadata_unresolved=0,
-                rejection_histograms=(),
-                error_reason=reason,
+            return _PageAcquisitionOutcome(
+                page_result=LiveValidationPageResult(
+                    goods_id=plan_item.goods_id,
+                    market_hash_name=plan_item.market_hash_name,
+                    request_status=reason,
+                    listing_count=0,
+                    candidate_accepted=0,
+                    candidate_rejected=0,
+                    metadata_resolved=0,
+                    metadata_unresolved=0,
+                    rejection_histograms=(),
+                    error_reason=reason,
+                ),
+                family_compatible=0,
+                family_incompatible=0,
+                provenance_keys=(),
+                contract_failed=False,
             )
         counts = page.counts
         combined_histograms: list[tuple[str, int]] = []
@@ -453,17 +555,30 @@ class LiveValidationRunner:
             combined_histograms.append((entry[0], int(entry[1])))
         for entry in page.metadata_rejection_histogram:
             combined_histograms.append((entry[0], int(entry[1])))
-        return LiveValidationPageResult(
-            goods_id=plan_item.goods_id,
-            market_hash_name=plan_item.market_hash_name,
-            request_status=RUN_STATUS_DISPATCHED,
-            listing_count=counts.listings_received,
-            candidate_accepted=counts.candidate_accepted,
-            candidate_rejected=counts.candidate_rejected,
-            metadata_resolved=counts.metadata_resolved,
-            metadata_unresolved=counts.metadata_unresolved,
-            rejection_histograms=tuple(combined_histograms),
-            error_reason=None,
+        compatible, incompatible, provenance_keys, contract_failed = (
+            _validate_family_compatible_page(
+                page,
+                plan_item=plan_item,
+                case=self.case,
+            )
+        )
+        return _PageAcquisitionOutcome(
+            page_result=LiveValidationPageResult(
+                goods_id=plan_item.goods_id,
+                market_hash_name=plan_item.market_hash_name,
+                request_status=RUN_STATUS_DISPATCHED,
+                listing_count=counts.listings_received,
+                candidate_accepted=counts.candidate_accepted,
+                candidate_rejected=counts.candidate_rejected,
+                metadata_resolved=counts.metadata_resolved,
+                metadata_unresolved=counts.metadata_unresolved,
+                rejection_histograms=tuple(combined_histograms),
+                error_reason=None,
+            ),
+            family_compatible=compatible,
+            family_incompatible=incompatible,
+            provenance_keys=provenance_keys,
+            contract_failed=contract_failed,
         )
 
 
@@ -497,10 +612,18 @@ def _classify_run(
     dispatched: int,
     budget_exceeded: bool,
     hard_request_count: int,
+    family_compatible: int,
+    family_incompatible: int,
+    aggregate_metadata_resolved: int,
+    contract_failed: bool,
 ) -> str:
-    if budget_exceeded:
+    if budget_exceeded or contract_failed:
         return _CLASSIFICATION_CONTRACT_FAILURE
     if attempted > hard_request_count or dispatched > hard_request_count:
+        return _CLASSIFICATION_CONTRACT_FAILURE
+    if family_incompatible > 0:
+        return _CLASSIFICATION_CONTRACT_FAILURE
+    if family_compatible != aggregate_metadata_resolved:
         return _CLASSIFICATION_CONTRACT_FAILURE
     if any(
         result.request_status not in _VALID_PAGE_STATUSES
@@ -527,6 +650,83 @@ def _classify_run(
     return _CLASSIFICATION_INCONCLUSIVE
 
 
+def _validate_family_compatible_page(
+    page: RecipeFirstAcquisitionPage,
+    *,
+    plan_item: LiveValidationPlanItem,
+    case: LiveValidationCase,
+) -> tuple[int, int, tuple[tuple[str, str, str], ...], bool]:
+    """Validate enriched input and normalized provenance against the family.
+
+    Every enriched input and its aligned provenance row must match the
+    frozen plan goods/name and the frozen family collection/rarity/mode.
+    Duplicate provenance on a page is a contract failure. The caller
+    checks returned keys across pages to reject cross-page collisions.
+    """
+
+    expected_stattrak = case.stattrak_mode is StatTrakMode.STATTRAK
+    represented_collections = {name for name, _ in case.collection_counts}
+    compatible = 0
+    incompatible = 0
+    contract_failed = False
+    provenance_keys: list[tuple[str, str, str]] = []
+    seen_page_keys: set[tuple[str, str, str]] = set()
+
+    if page.goods_id != plan_item.goods_id:
+        contract_failed = True
+    if page.market_hash_name != plan_item.market_hash_name:
+        contract_failed = True
+    if len(page.enriched_inputs) != len(page.provenance):
+        contract_failed = True
+
+    for enriched, provenance in zip(
+        page.enriched_inputs,
+        page.provenance,
+        strict=True,
+    ):
+        candidate = enriched.candidate
+        item = enriched.input_item
+        provenance_key = (
+            provenance.source,
+            provenance.goods_id,
+            provenance.listing_id,
+        )
+        provenance_keys.append(provenance_key)
+        if provenance_key in seen_page_keys:
+            contract_failed = True
+        seen_page_keys.add(provenance_key)
+
+        candidate_matches = (
+            candidate.goods_id == plan_item.goods_id
+            and candidate.market_hash_name == plan_item.market_hash_name
+            and item.market_hash_name == plan_item.market_hash_name
+            and item.collection_name == plan_item.collection_name
+            and item.collection_name in represented_collections
+            and item.rarity == case.input_rarity
+            and item.stattrak is expected_stattrak
+            and candidate.stattrak is expected_stattrak
+            and item.stattrak is candidate.stattrak
+            and item.souvenir is candidate.souvenir
+        )
+        provenance_matches = (
+            provenance.goods_id == candidate.goods_id
+            and provenance.market_hash_name == candidate.market_hash_name
+            and provenance.listing_id == candidate.listing_id
+            and provenance.asset_id == candidate.asset_id
+            and provenance.price_cny == candidate.price_cny
+            and provenance.paintwear == candidate.paintwear
+            and provenance.stattrak is candidate.stattrak
+            and provenance.souvenir is candidate.souvenir
+            and provenance.source == candidate.source
+        )
+        if candidate_matches and provenance_matches:
+            compatible += 1
+        else:
+            incompatible += 1
+
+    return compatible, incompatible, tuple(provenance_keys), contract_failed
+
+
 def _build_run_result(
     *,
     case: LiveValidationCase,
@@ -537,11 +737,16 @@ def _build_run_result(
     aggregate_listings: int,
     aggregate_candidates: int,
     aggregate_metadata: int,
+    family_compatible: int,
+    family_incompatible: int,
     classification: str,
 ) -> LiveValidationRunResult:
     return LiveValidationRunResult(
         case_sha256=hash_case(case),
         repository_commit_oid=case.repository_commit_oid,
+        family_hash=case.family_hash,
+        family_key=case.family_key,
+        collection_counts=case.collection_counts,
         hard_request_count=case.hard_request_count,
         attempted=attempted,
         dispatched=dispatched,
@@ -550,6 +755,10 @@ def _build_run_result(
         aggregate_listings_received=aggregate_listings,
         aggregate_candidate_accepted=aggregate_candidates,
         aggregate_metadata_resolved=aggregate_metadata,
+        family_compatible_enriched_inputs=family_compatible,
+        family_incompatible_enriched_inputs=family_incompatible,
+        input_rarity=case.input_rarity,
+        stattrak_mode=case.stattrak_mode.value,
         classification=classification,
         schema_version=LIVE_RUN_RESULT_SCHEMA_VERSION,
     )

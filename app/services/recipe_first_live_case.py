@@ -1,4 +1,4 @@
-"""Phase 16F / 16F-R1 — Frozen live-validation case DTO + serialization.
+"""Phase 16F / 16F-R1 / 16F-R2 — Frozen live-validation case DTO + serialization.
 
 This module freezes the deterministic Phase 16F validation case used to
 exercise the recipe-first BUFF acquisition interface against the
@@ -13,8 +13,12 @@ The case content is fully serializable and contains NO:
 
 Identity is bound through the pinned BUFF community identity snapshot
 via the :func:`verify_case_identity` function before any HTTP dispatch.
-The case is serialized outside Git by the live runner; the SHA-256 of
-its canonical bytes is the immutable case artifact identity.
+Family metadata is bound through the pinned metadata snapshot,
+canonical intrinsic classifier, and authoritative
+:func:`app.services.recipe_family.build_recipe_family` via
+:func:`verify_case_metadata_contract`. The case is serialized outside
+Git by the live runner; the SHA-256 of its canonical bytes is the
+immutable case artifact identity.
 
 R1 contract corrections (schema version 2):
 
@@ -28,6 +32,19 @@ R1 contract corrections (schema version 2):
   disk, and :func:`hash_case` returns SHA-256 of those exact bytes.
 - Schema version is bumped from 1 to 2 explicitly. Phase 16F v1
   artifacts are no longer reinterpreted by v2 code paths.
+
+R2 contract corrections (schema version 3):
+
+- Every plan item MUST be proven against pinned metadata BEFORE
+  HTTP dispatch and again against enriched evidence after HTTP
+  acquisition. Identity-only proof is no longer sufficient.
+- The frozen family fields (``family_hash`` / ``family_key`` /
+  ``input_rarity`` / ``stattrak_mode`` / ``collection_counts``) MUST
+  be reproducible from authoritative
+  :func:`build_recipe_family`. Manual hash duplication is
+  forbidden.
+- Phase 16F v1 and v2 artifacts are no longer reinterpreted by v3
+  code paths; the loader rejects them explicitly.
 """
 
 from __future__ import annotations
@@ -36,12 +53,27 @@ import hashlib
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass
+from fractions import Fraction
 from typing import Final
 
 from app.services.buff_community_identity_resolver import (
     BuffCommunityIdentityResolver,
 )
+from app.services.buff_intrinsic_flag_resolver import (
+    BuffListingIntrinsicFlagResolver,
+)
 from app.services.market_universe_builder import StatTrakMode
+from app.services.metadata_models import SkinMetadata
+from app.services.recipe_family import (
+    RecipeFamilyIdentityError,
+    build_recipe_family,
+)
+from app.services.recipe_family_geometry import (
+    RecipeFamilyGeometryError,
+    compute_recipe_family_geometry,
+)
+from app.services.structural_output_finish import StructuralOutputFinishIndex
+from app.services.trade_up_input_enrichment import TradeUpInputMetadataResolver
 
 __all__ = (
     "LIVE_CASE_SCHEMA_VERSION",
@@ -52,9 +84,10 @@ __all__ = (
     "hash_case",
     "serialize_case",
     "verify_case_identity",
+    "verify_case_metadata_contract",
 )
 
-LIVE_CASE_SCHEMA_VERSION: Final[int] = 2
+LIVE_CASE_SCHEMA_VERSION: Final[int] = 3
 _PLAN_ITEMS_HARD_CAP: Final[int] = 10
 _INPUT_COUNT: Final[int] = 10
 _VALID_COMMIT_OID_LENGTHS: Final[tuple[int, ...]] = (40, 64)
@@ -128,7 +161,8 @@ class LiveValidationCase:
       (no hashing, no coercion; verbatim ``git rev-parse HEAD``)
     - one immutable :class:`app.services.recipe_family.RecipeFamily`
       structural composition (hash / key / rarity / StatTrak mode /
-      collection counts)
+      collection counts), produced by the authoritative
+      :func:`build_recipe_family` after metadata contract proof
     - one deterministic active plan with at most ten distinct
       goods_ids and exact market names
     """
@@ -253,9 +287,9 @@ def freeze_case(
 ) -> LiveValidationCase:
     """Build a frozen validation case from validated offline inputs.
 
-    The caller MUST have already verified the inputs (e.g. by
-    reverse-resolving every goods_id through the pinned identity
-    snapshot). The freeze operation is pure construction.
+    The caller MUST have already proven the inputs (e.g. by
+    :func:`verify_case_identity` and :func:`verify_case_metadata_contract`).
+    The freeze operation is pure construction.
     """
 
     return LiveValidationCase(
@@ -379,3 +413,210 @@ async def verify_case_identity(
                 "goods_id "
                 f"{item.goods_id!r} resolver returned goods_id {resolved_gid!r}"
             )
+
+
+def verify_case_metadata_contract(
+    case: LiveValidationCase,
+    *,
+    metadata_resolver: TradeUpInputMetadataResolver,
+    intrinsic_resolver: BuffListingIntrinsicFlagResolver,
+    skins: Sequence[SkinMetadata],
+    finish_index: StructuralOutputFinishIndex,
+) -> None:
+    """Verify every plan item against pinned metadata + family contract.
+
+    Required checks (always):
+
+    1. exact market_hash_name resolves through pinned metadata;
+    2. exact metadata collection_name equals plan item collection_name;
+    3. exact metadata collection_name is represented by
+       ``case.collection_counts``;
+    4. exact metadata rarity equals ``case.input_rarity``;
+    5. canonical intrinsic StatTrak mode equals ``case.stattrak_mode``;
+    6. :func:`build_recipe_family` reproduces
+       ``family_hash`` / ``family_key`` / ``input_rarity`` /
+       ``stattrak_mode`` / ``collection_counts`` exactly.
+
+    Geometry check (when ``finish_index`` is provided):
+
+    7. :func:`compute_recipe_family_geometry` yields at least one
+       structural outcome with exact Fraction probability sum equal
+       to one.
+
+    No fuzzy matching. No name synthesis. Souvenir is treated as
+    concrete-input provenance and is not part of the structural
+    family identity.
+    """
+
+    if type(case) is not LiveValidationCase:
+        raise LiveValidationCaseError("case must be LiveValidationCase")
+    if not hasattr(metadata_resolver, "resolve"):
+        raise LiveValidationCaseError(
+            "metadata_resolver must expose resolve"
+        )
+    if not hasattr(intrinsic_resolver, "resolve"):
+        raise LiveValidationCaseError(
+            "intrinsic_resolver must expose resolve"
+        )
+    if type(finish_index) is not StructuralOutputFinishIndex:
+        raise LiveValidationCaseError(
+            "finish_index must be StructuralOutputFinishIndex"
+        )
+    if not isinstance(skins, Sequence) or any(
+        type(skin) is not SkinMetadata for skin in skins
+    ):
+        raise LiveValidationCaseError(
+            "skins must contain exact SkinMetadata values"
+        )
+    expected_stattrak = case.stattrak_mode is StatTrakMode.STATTRAK
+    represented_collections = {name for name, _ in case.collection_counts}
+
+    for item in case.plan_items:
+        metadata = metadata_resolver.resolve(item.market_hash_name)
+        if metadata is None:
+            raise LiveValidationCaseError(
+                f"market_hash_name {item.market_hash_name!r} is not in pinned metadata"
+            )
+        pinned_collection_name = getattr(metadata, "collection_name", None)
+        if pinned_collection_name != item.collection_name:
+            raise LiveValidationCaseError(
+                "pinned metadata collection_name "
+                f"{pinned_collection_name!r} does not match "
+                f"plan collection_name {item.collection_name!r}"
+            )
+        if pinned_collection_name not in represented_collections:
+            raise LiveValidationCaseError(
+                "pinned metadata collection_name "
+                f"{pinned_collection_name!r} is not represented "
+                "by case.collection_counts"
+            )
+        pinned_rarity = getattr(metadata, "rarity", None)
+        if pinned_rarity != case.input_rarity:
+            raise LiveValidationCaseError(
+                "pinned metadata rarity "
+                f"{pinned_rarity!r} does not match "
+                f"case.input_rarity {case.input_rarity!r}"
+            )
+        metadata_skin = _resolve_exact_skin_metadata(
+            skins=skins,
+            market_hash_name=item.market_hash_name,
+        )
+        if metadata_skin is None:
+            raise LiveValidationCaseError(
+                "exact market_hash_name is not represented by the pinned "
+                "metadata catalog"
+            )
+        if metadata_skin.collection_name != pinned_collection_name:
+            raise LiveValidationCaseError(
+                "pinned metadata resolver and catalog collection disagree"
+            )
+        if metadata_skin.rarity != pinned_rarity:
+            raise LiveValidationCaseError(
+                "pinned metadata resolver and catalog rarity disagree"
+            )
+        if metadata_skin.stattrak is not expected_stattrak:
+            raise LiveValidationCaseError(
+                "pinned metadata StatTrak mode does not match case.stattrak_mode"
+            )
+        intrinsic = intrinsic_resolver.resolve(item.market_hash_name)
+        if intrinsic is None:
+            raise LiveValidationCaseError(
+                "canonical intrinsic flags could not be resolved for "
+                f"market_hash_name {item.market_hash_name!r}"
+            )
+        intrinsic_stattrak = getattr(intrinsic, "stattrak", None)
+        if intrinsic_stattrak is not expected_stattrak:
+            raise LiveValidationCaseError(
+                "canonical intrinsic StatTrak mode "
+                f"{intrinsic_stattrak!r} does not match "
+                f"case.stattrak_mode {case.stattrak_mode.value!r}"
+            )
+        intrinsic_souvenir = getattr(intrinsic, "souvenir", None)
+        if metadata_skin.souvenir is not intrinsic_souvenir:
+            raise LiveValidationCaseError(
+                "pinned metadata Souvenir provenance does not match "
+                "canonical intrinsic classification"
+            )
+
+    try:
+        reconstructed = build_recipe_family(
+            input_rarity=case.input_rarity,
+            stattrak_mode=case.stattrak_mode,
+            collection_counts=case.collection_counts,
+        )
+    except MemoryError:
+        raise
+    except RecipeFamilyIdentityError as exc:
+        raise LiveValidationCaseError(
+            "frozen family fields cannot construct a valid RecipeFamily"
+        ) from exc
+    if reconstructed.family_hash != case.family_hash:
+        raise LiveValidationCaseError(
+            "frozen family_hash does not match authoritative "
+            "build_recipe_family output"
+        )
+    if reconstructed.family_key != case.family_key:
+        raise LiveValidationCaseError(
+            "frozen family_key does not match authoritative "
+            "build_recipe_family output"
+        )
+    if reconstructed.input_rarity != case.input_rarity:
+        raise LiveValidationCaseError(
+            "frozen input_rarity does not match authoritative "
+            "build_recipe_family output"
+        )
+    if reconstructed.stattrak_mode != case.stattrak_mode:
+        raise LiveValidationCaseError(
+            "frozen stattrak_mode does not match authoritative "
+            "build_recipe_family output"
+        )
+    if reconstructed.collection_counts != case.collection_counts:
+        raise LiveValidationCaseError(
+            "frozen collection_counts does not match authoritative "
+            "build_recipe_family output"
+        )
+
+    try:
+        geometry = compute_recipe_family_geometry(
+            reconstructed, finish_index=finish_index
+        )
+    except MemoryError:
+        raise
+    except RecipeFamilyGeometryError as exc:
+        raise LiveValidationCaseError(
+            "family geometry is invalid or has no next-rarity "
+            "structural outputs"
+        ) from exc
+    if not geometry.outcomes:
+        raise LiveValidationCaseError(
+            "family geometry has no structural outcomes"
+        )
+    total = sum(
+        (outcome.probability for outcome in geometry.outcomes),
+        start=Fraction(0, 1),
+    )
+    if total != Fraction(1, 1):
+        raise LiveValidationCaseError(
+            "family geometry probability sum does not equal exactly 1"
+        )
+    if geometry.family_hash != case.family_hash:
+        raise LiveValidationCaseError(
+            "geometry family_hash does not match frozen case"
+        )
+
+
+def _resolve_exact_skin_metadata(
+    *,
+    skins: Sequence[SkinMetadata],
+    market_hash_name: str,
+) -> SkinMetadata | None:
+    """Resolve one exact pinned ``SkinMetadata`` row without fuzzy matching."""
+
+    matches = tuple(
+        skin for skin in skins if skin.market_hash_name == market_hash_name
+    )
+    if len(matches) > 1:
+        raise LiveValidationCaseError(
+            "duplicate exact market_hash_name in pinned metadata catalog"
+        )
+    return matches[0] if matches else None
