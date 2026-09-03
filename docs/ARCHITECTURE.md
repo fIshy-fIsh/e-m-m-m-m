@@ -515,3 +515,26 @@ SteamDT request. Production remains goods-first. Final valuation,
 `OpportunityMetrics`, `RiskFilterConfig`, Phase 14 cache/session/budget
 semantics, default 5, hard max 60, enumeration 2/256, and
 `D-TRADEUP-WEAR-ROW-MIGRATION-001` remain unchanged.
+
+## Phase 16F — One bounded read-only recipe-first BUFF interface validation
+
+Phase 16F freezes a single deterministic RecipeFamily/TargetedBuffScanPlan
+case (`AK-47 | Redline (Field-Tested)` -> `33960`,
+`The 2018 Nuke Collection` × 10) and serializes it to canonical UTF-8
+JSON outside Git (`$TEMP/cs2-phase16f/phase16f_case.json`).
+
+The `LiveValidationRunner` reuses the existing
+`BuffAnonymousListingHttpClient` + `BuffListingProvider` +
+`ExistingRecipeFirstAcquisitionPipeline` chain with a per-run
+attempted-budget tracker that fails closed before HTTP dispatch beyond
+`hard_request_count <= 10` and respects 2-second sequential pacing.
+
+The single live attempt validated the recipe-first acquisition seam:
+attempted=1, dispatched=1, 10 listings received, 10 identity-resolved,
+10 intrinsic-resolved, 10 candidate-accepted, 10 metadata-resolved,
+classification=`validated`. SteamDT, Redis, PostgreSQL, Discord, and
+the scheduler remain excluded.
+
+The current production scanner is unchanged. Recipe-first remains
+explicit opt-in (`enabled=False` default). The legacy wear-row
+migration `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains deferred.

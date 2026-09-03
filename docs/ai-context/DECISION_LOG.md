@@ -1088,3 +1088,10 @@ Format per entry: Decision ID, Date, Decision, Status, Reason, Alternatives cons
 - **Decision:** Phase 16E validates and acquires only `TargetedBuffScanDecision.active_plan`. The decision's optional `fallback_family_key` is diagnostic and is never resolved, planned, or requested by the orchestrator. A page failure is isolated within the active plan; remaining active pages may continue, but family switching, retry, polling, and pagination are absent.
 - **Status:** Active safety invariant for recipe-first live work.
 - **Boundary:** A fallback may be selected only by Phase 16D before any live acquisition begins.
+
+## D-RECIPE-FIRST-BUFF-LIVE-INTERFACE-001 — One bounded read-only recipe-first BUFF live validation
+
+- **Date:** 2026-09-03
+- **Decision:** Phase 16F executed exactly one anonymous BUFF page-1/default-sort GET against the frozen Phase 16D-targeted goods page (`33960`, `AK-47 | Redline (Field-Tested)`) under a `1 <= hard_request_count <= 10` hard bound and 2-second pacing. The case was frozen to canonical UTF-8 JSON outside Git (`$TEMP/cs2-phase16f/phase16f_case.json`); the redacted result was written outside Git (`$TEMP/cs2-phase16f/phase16f_result.json`); no raw payload, seller, account, listing_id, asset_id, paintwear, secret, or webhook data was committed or printed. The interface passed: attempted=1, dispatched=1, budget_exceeded=False, 10 listings received, 10 identity-resolved, 10 candidate-accepted, 10 metadata-resolved; classification=`validated`.
+- **Status:** Complete. Phase 16E orchestration, Phase 16D economics, Phase 16C strict BUFF selector, Phase 16B finish geometry, Phase 16A recipe-first architecture, and Phase 14B/C valuation semantics are validated through the live acquisition seam only.
+- **Boundary:** No SteamDT, no Discord, no Redis, no PostgreSQL mutation, no scheduler, no Phase 15C campaign, no production default switch. The legacy goods-first path remains the production default; `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains active/deferred. The single live attempt is the bounded evidence; no replay and no additional live runs are authorized by Phase 16F.

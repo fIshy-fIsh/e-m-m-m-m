@@ -1071,3 +1071,17 @@ production boundary:
 next:
   Phase 16F — ONE Bounded Read-Only Recipe-First BUFF Interface Validation
 ```
+
+## Phase 16F — One bounded read-only recipe-first BUFF interface validation (2026-09-03)
+
+- Frozen case + `LiveValidationRunner` reusing existing
+  `BuffAnonymousListingHttpClient` + `BuffListingProvider` +
+  `ExistingRecipeFirstAcquisitionPipeline`.
+- One live attempt classified `validated`: attempted=1, dispatched=1,
+  10 listings identity/intrinsic/candidate/metadata-resolved,
+  budget_exceeded=False, hard_request_count=1.
+- Outside-Git artifacts under `$TEMP/cs2-phase16f/`; no raw payload,
+  no listing_id, no asset_id, no paintwear, no secret, no webhook data.
+- Production recipe-first remains OFF; legacy goods-first scanner
+  remains the production path; `D-TRADEUP-WEAR-ROW-MIGRATION-001`
+  remains deferred.

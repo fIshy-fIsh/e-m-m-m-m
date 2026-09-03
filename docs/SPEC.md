@@ -587,3 +587,21 @@ Concrete outputs use Phase 16B unique structural finish probabilities, the ten c
 ``RecipeFirstScannerConfig.enabled`` defaults to ``False``. The new orchestrator is not wired into the current CLI or goods-first scanner. Enabled offline tests consume one active ``TargetedBuffScanDecision``, reverse-prove every exact goods/name identity before page acquisition, acquire at most 10 active plan pages sequentially, never activate fallback, create one fresh ``RunScopedValuationSession``, preserve memo/FRESH_ONLY-cache/atomic-NEW-LIVE behavior, and reuse final ``ValuationService``, ``calculate_opportunity_metrics``, and ``evaluate_opportunity`` unchanged. Phase 16E performs zero live BUFF/SteamDT work.
 
 Full architectural contract and offline evidence: `specs/2026-08-31-recipe-first-prescreen-design-freeze/{requirements,design,plan,validation}.md`.
+## Phase 16F — One bounded read-only recipe-first BUFF interface validation
+
+Phase 16F performed exactly one anonymous BUFF sell-order
+page-1/default-sort HTTP request against the single
+Phase 16D-targeted goods page for the pinned
+`AK-47 | Redline (Field-Tested)` (`33960`,
+`The 2018 Nuke Collection`) identity pair.
+
+The case was frozen to canonical UTF-8 JSON outside Git; the run
+result was redacted and written outside Git. Attempted and dispatched
+counters each stayed at 1; budget was not exceeded; 10 listings were
+received, 10 were identity-resolved, 10 were intrinsic-resolved, 10
+became candidates, and 10 were metadata-resolved. Classification was
+`validated`.
+
+No SteamDT, Discord, Redis, PostgreSQL, scheduler, or Phase 15C
+representative campaign work was issued. No production default
+switched; the goods-first production path remains the active scanner.

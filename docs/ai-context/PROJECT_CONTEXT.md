@@ -275,3 +275,13 @@ Authoritative Phase 16B pinned counts under exact identity + valid next-rarity o
 ## Phase 16E Family-Constrained Concrete Search + Opt-In Orchestrator (2026-09-01)
 
 `PHASE_16E_FAMILY_CONCRETE_OPTIN_ORCHESTRATOR_COMPLETE` on `feature/recipe-first-concrete-orchestrator`: dedicated family-count-preserving bounded enumerator reusing `RecipeEnumerationConfig(2,256)`; new `ConcreteFamilyTradeupResults` from Phase 16B finish geometry + canonical float/wear helpers bypassing the legacy wear-row probability bug; offline opt-in `RecipeFirstScannerOrchestrator` that reuses existing identity/intrinsic/enrichment, `RunScopedValuationSession`, strict SteamDT-BUFF valuation, `OpportunityMetrics`, and `RiskFilterConfig` unchanged. `enabled=False` by default; no current production caller imports the new modules. Goods-first scanner, final valuation path, defaults 5/60, enumeration 2/256, and `D-TRADEUP-WEAR-ROW-MIGRATION-001` remain unchanged. Next: separately authorized Phase 16F.
+
+## Phase 16F — One bounded read-only recipe-first BUFF interface validation
+
+Validated the recipe-first acquisition interface against the anonymous
+BUFF sell-order endpoint under a `1 <= hard_request_count <= 10`
+hard bound and 2-second sequential pacing. Classification was
+`validated` from one live attempt; no SteamDT, Discord, Redis,
+PostgreSQL, scheduler, or Phase 15C campaign work was issued.
+The recipe-first production switch remains OFF. The legacy
+goods-first scanner continues to be the production path.

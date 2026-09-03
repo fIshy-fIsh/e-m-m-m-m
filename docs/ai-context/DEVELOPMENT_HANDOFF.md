@@ -890,3 +890,17 @@ Reconciled decisions:
 - `D-RECIPE-FIRST-NO-FALLBACK-AFTER-START-001`: the decision's fallback family is never activated during an enabled run.
 
 Next: Phase 16F — ONE Bounded Read-Only Recipe-First BUFF Interface Validation (separately authorized).
+
+## Phase 16F handoff
+
+- Branch: `feature/recipe-first-live-buff-interface-validation`
+- Phase 16E base: `f67d500cba132f2fbc91f12cab9394b17e6bad0c`
+- Live result classification: `validated`
+- Live counters: attempted=1, dispatched=1, budget_exceeded=False
+- Live aggregate: 10 listings received, 10 identity/intrinsic/candidate/metadata-resolved
+- Artifact root (outside Git): `$TEMP/cs2-phase16f/`
+  - case: `phase16f_case.json` (sha256: `b9a9cbc3b55b6270d31e835c163ecbe33ec370d1efd6d1801e5b94784e469d08`)
+  - result: `phase16f_result.json`
+- Production recipe-first remains OFF; legacy goods-first scanner is the production path.
+- `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains deferred.
+- Next phase 16G requires separate authorization.

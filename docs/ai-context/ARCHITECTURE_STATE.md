@@ -501,3 +501,26 @@ Isolated modules with zero current production callers:
 - `app.services.targeted_buff_scan_plan`
 
 `static_float_feasibility` additively exposes exact per-name pinned input identity and adjusted-interval evidence without changing reachability semantics. The decision layer uses precomputed strict-BUFF quotes only; no transport exists inside economics/ranking. Three min/median/max scenarios use Decimal money, exact Fraction finish probabilities/ROI, and explicit sell fee. Ranking is gate-based, seven-key lexicographic, streaming Top-2, and has no timestamp or threshold-margin key. Targeted plans cover every represented collection with <=10 unique exact names/goods IDs and exactly zero or one active family. Production scanner/CLI, final provider, cache/session, EV/risk, defaults, enumeration, and wear-row migration remain unchanged.
+
+## Phase 16F — One bounded read-only recipe-first BUFF interface validation
+
+Frozen case DTO `LiveValidationCase` + canonical UTF-8 JSON
+outside-Git serialization; `LiveValidationRunner` reusing the existing
+`BuffAnonymousListingHttpClient` + `BuffListingProvider` +
+`ExistingRecipeFirstAcquisitionPipeline`; attempted-budget tracker
+enforced before HTTP dispatch; sequential at most `hard_request_count <= 10`
+page-1/default-sort GET requests; 2-second minimum pacing; redacted
+`LiveValidationRunResult` excludes raw payload, listing_id, asset_id,
+paintwear, secret, and webhook data.
+
+Live classification=`validated` from one attempt against
+`33960 / AK-47 | Redline (Field-Tested) / The 2018 Nuke Collection`:
+attempted=1, dispatched=1, 10 listings received,
+10 identity/intrinsic/candidate/metadata-resolved. ZERO SteamDT,
+ZERO Discord, ZERO Redis, ZERO PostgreSQL mutation, ZERO scheduler,
+ZERO production default switch.
+
+Legacy goods-first scanner is the production path. Recipe-first remains
+opt-in (`enabled=False`). `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains
+deferred. Single live attempt is the bounded evidence; no replay and
+no additional live runs are authorized by Phase 16F.
