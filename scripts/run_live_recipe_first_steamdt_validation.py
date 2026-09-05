@@ -63,14 +63,14 @@ from app.services.recipe_first_steamdt_live_runner import (
     RecipeFirstSteamDTLiveRunner,
     RecipeFirstSteamDTLiveRunnerConfig,
 )
+from app.services.skin_metadata_resolver import (
+    PinnedSkinMetadataResolver,
+)
 from app.services.static_float_feasibility import (
     StaticFloatFeasibilityStatus,
     compute_static_float_feasibility,
 )
 from app.services.structural_output_finish import StructuralOutputFinishIndex
-from app.services.trade_up_input_enrichment import (
-    PinnedSkinMetadataResolver,
-)
 
 RUN_GATE_ENV: str = "RECIPE_FIRST_RUN_PHASE16G_LIVE_VALIDATION"
 ARTIFACT_DIR_ENV: str = "RECIPE_FIRST_PHASE16G_ARTIFACT_DIR"
