@@ -222,6 +222,7 @@ async def prepare_case(
             buff_case,
             metadata_resolver=metadata_resolver,
             intrinsic_resolver=intrinsic_resolver,
+            skins=skins,
             finish_index=finish_index,
         )
     except LiveValidationCaseError as exc:
