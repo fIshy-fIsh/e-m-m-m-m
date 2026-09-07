@@ -144,12 +144,8 @@ class _BudgetedPayloadClient:
     async def fetch_sell_order_payload(self, goods_id: str) -> bytes:
         if not self._tracker.begin_attempt():
             raise _BudgetExceeded("attempted BUFF request exceeds frozen plan budget")
-        try:
-            payload = await self._delegate.fetch_sell_order_payload(goods_id)
-        except BaseException:
-            raise
         self._tracker.record_dispatch()
-        return payload
+        return await self._delegate.fetch_sell_order_payload(goods_id)
 
 
 class _BudgetedRawListingProvider:

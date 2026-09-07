@@ -233,6 +233,30 @@ def test_runner_with_synthetic_payload_records_dispatched_state() -> None:
     assert tracker.exceeded is False
 
 
+def test_runner_budget_records_failed_delegate_as_dispatched() -> None:
+    from app.clients.buff_anonymous_listing_client import (
+        BuffAnonymousListingPayloadClient,
+    )
+    from app.services.recipe_first_live_runner import (
+        _BudgetedPayloadClient,
+        _BudgetTracker,
+    )
+
+    class _FailingPayload(BuffAnonymousListingPayloadClient):
+        async def fetch_sell_order_payload(self, goods_id: str) -> bytes:
+            raise RuntimeError("offline fake failure")
+
+    tracker = _BudgetTracker(budget=1)
+    bounded = _BudgetedPayloadClient(
+        delegate=_FailingPayload(),
+        tracker=tracker,
+    )
+    with pytest.raises(RuntimeError, match="offline fake failure"):
+        asyncio.run(bounded.fetch_sell_order_payload("33960"))
+    assert tracker.attempted == 1
+    assert tracker.dispatched == 1
+
+
 def test_runner_budget_blocks_extra_attempts_before_dispatch() -> None:
     from app.clients.buff_anonymous_listing_client import (
         BuffAnonymousListingPayloadClient,

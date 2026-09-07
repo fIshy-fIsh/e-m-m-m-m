@@ -29,6 +29,7 @@ import os
 import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
+from decimal import Decimal
 from pathlib import Path
 
 if __package__ is None or __package__ == "":
@@ -44,11 +45,15 @@ from app.services.buff_intrinsic_flag_resolver import (
 from app.services.market_universe_builder import StatTrakMode
 from app.services.metadata_models import SkinMetadata
 from app.services.recipe_family import build_recipe_family
+from app.services.recipe_family_geometry import (
+    compute_recipe_family_geometry,
+)
 from app.services.recipe_first_live_case import (
     LIVE_CASE_SCHEMA_VERSION,
     LiveValidationCaseError,
     LiveValidationPlanItem,
     freeze_case,
+    verify_case_identity,
     verify_case_metadata_contract,
 )
 from app.services.recipe_first_steamdt_live_case import (
@@ -62,6 +67,10 @@ from app.services.recipe_first_steamdt_live_case import (
 from app.services.recipe_first_steamdt_live_runner import (
     RecipeFirstSteamDTLiveRunner,
     RecipeFirstSteamDTLiveRunnerConfig,
+)
+from app.services.recipe_solver import (
+    RecipeEnumerationConfig,
+    RecipeSolverConfig,
 )
 from app.services.skin_metadata_resolver import (
     PinnedSkinMetadataResolver,
@@ -368,11 +377,65 @@ async def execute_case(
     intrinsic_resolver: BuffListingIntrinsicFlagResolver = (
         CanonicalNameIntrinsicFlagResolver()
     )
+    skins = metadata_resolver.skins
+    finish_index = StructuralOutputFinishIndex.from_skins(skins)
+
+    # Re-prove the complete frozen case against pinned identity and metadata
+    # before any live request can be attempted.
+    try:
+        await verify_case_identity(case.buff_case, identity_resolver=identity)
+        verify_case_metadata_contract(
+            case.buff_case,
+            metadata_resolver=metadata_resolver,
+            intrinsic_resolver=intrinsic_resolver,
+            skins=skins,
+            finish_index=finish_index,
+        )
+    except LiveValidationCaseError as exc:
+        _print_lines(
+            printer,
+            "phase16g_execute: failed",
+            f"reason: frozen_case_contract_failed ({type(exc).__name__})",
+            "live_validation_executed: no",
+        )
+        return 1
+
+    family = build_recipe_family(
+        input_rarity=case.buff_case.input_rarity,
+        stattrak_mode=case.buff_case.stattrak_mode,
+        collection_counts=case.buff_case.collection_counts,
+    )
+    if (
+        family.family_hash != case.buff_case.family_hash
+        or family.family_key != case.buff_case.family_key
+    ):
+        _print_lines(
+            printer,
+            "phase16g_execute: failed",
+            "reason: family_authority_mismatch",
+            "live_validation_executed: no",
+        )
+        return 1
+    geometry = compute_recipe_family_geometry(family, finish_index=finish_index)
+    solver_config = RecipeSolverConfig(
+        input_rarity=family.input_rarity,
+        sell_fee_rate=Decimal("0"),
+        target_stattrak=family.stattrak_mode is StatTrakMode.STATTRAK,
+    )
+    enumeration_config = RecipeEnumerationConfig(
+        max_recipe_candidates_returned=1,
+        max_candidate_states_explored=256,
+    )
     runner = RecipeFirstSteamDTLiveRunner(
         case=case,
         buff_identity_resolver=identity,
         metadata_resolver=metadata_resolver,
         intrinsic_resolver=intrinsic_resolver,
+        family=family,
+        geometry=geometry,
+        finish_index=finish_index,
+        solver_config=solver_config,
+        enumeration_config=enumeration_config,
         config=runner_config
         or RecipeFirstSteamDTLiveRunnerConfig(api_key=api_key),
     )
@@ -444,15 +507,69 @@ def _load_case(
     )
 
 
+def _serialize_tradeup_result(result) -> dict[str, object]:
+    """Serialize one safe finish-level result without listing/provider payloads."""
+
+    return {
+        "estimated_price_cny": str(result.estimated_price_cny),
+        "expected_value_contribution": str(
+            result.expected_value_contribution
+        ),
+        "market_hash_name": result.output_market_hash_name,
+        "output_float": result.output_float,
+        "output_wear": result.output_wear,
+        "probability": result.probability,
+    }
+
+
 def _serialize_result(result) -> bytes:
     payload = {
-        "buff_http_cap": result.page_results and "buff" or None,
+        "buff_http_cap": result.buff_http_cap,
         "case_sha256": result.case_sha256,
         "classification": result.classification,
         "concrete_output_market_hash_names": list(
             result.concrete_output_market_hash_names
         ),
         "concrete_selection_count": result.concrete_selection_count,
+        "concrete_search_diagnostics": (
+            None
+            if result.concrete_search_diagnostics is None
+            else {
+                "candidate_limit_reached": (
+                    result.concrete_search_diagnostics.candidate_limit_reached
+                ),
+                "duplicates_suppressed": (
+                    result.concrete_search_diagnostics.duplicates_suppressed
+                ),
+                "eligible_input_count": (
+                    result.concrete_search_diagnostics.eligible_input_count
+                ),
+                "exploration_limit_reached": (
+                    result.concrete_search_diagnostics.exploration_limit_reached
+                ),
+                "family_hash": result.concrete_search_diagnostics.family_hash,
+                "raw_candidates_found": (
+                    result.concrete_search_diagnostics.raw_candidates_found
+                ),
+                "retained_input_count": (
+                    result.concrete_search_diagnostics.retained_input_count
+                ),
+                "states_explored": (
+                    result.concrete_search_diagnostics.states_explored
+                ),
+                "unique_candidates_returned": (
+                    result.concrete_search_diagnostics.unique_candidates_returned
+                ),
+            }
+        ),
+        "concrete_tradeup_results": [
+            _serialize_tradeup_result(row)
+            for row in result.concrete_tradeup_results
+        ],
+        "valued_tradeup_results": [
+            _serialize_tradeup_result(row)
+            for row in result.valued_tradeup_results
+        ],
         "family_compatible_enriched_inputs": result.family_compatible_enriched_inputs,
         "family_hash": result.family_hash,
         "family_incompatible_enriched_inputs": result.family_incompatible_enriched_inputs,
@@ -514,6 +631,11 @@ def _serialize_result(result) -> bytes:
         "schema_version": result.schema_version,
         "stattrak_mode": result.stattrak_mode,
         "static_feasibility_status": result.static_feasibility_status,
+        "steamdt_batch_http_cap": result.steamdt_batch_http_cap,
+        "steamdt_final_single_http_cap": result.steamdt_final_single_http_cap,
+        "steamdt_total_http_cap": result.steamdt_total_http_cap,
+        "structural_fields_preserved": result.structural_fields_preserved,
+        "structural_mismatch_reason": result.structural_mismatch_reason,
     }
     return json.dumps(
         payload,
