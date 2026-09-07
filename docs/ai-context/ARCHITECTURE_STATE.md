@@ -571,3 +571,29 @@ BUFF 1, SteamDT singles 2, total SteamDT 3. Result SHA-256 is
 
 This is interface evidence, not an economic/risk pass. Production
 recipe-first remains OFF and goods-first remains unchanged.
+
+## Phase 16G-H — Current-state documentation synchronization (2026-09-07)
+
+Top-level current-position and active-line pointers in this document and
+in `specs/roadmap.md` were corrected to point at `PHASE_16G_R7_LIVE_VALIDATED`
+as the completed authority and `PHASE_17A_RECIPE_FIRST_RUNTIME_INTEGRATION_DESIGN_FREEZE`
+as the next docs/design authority. Historical Phase 15/16 entries were
+preserved verbatim.
+
+## Phase 17A — Recipe-first runtime integration design freeze (2026-09-07)
+
+- Active docs/design branch: `feature/recipe-first-runtime-integration-design`.
+- Composition target: separate `scripts/run_recipe_first_scan_once.py` in
+  future Phase 17B; explicit opt-in/default-disabled. The current
+  `LiveScannerOrchestrator` and `scripts/run_live_scan_once.py` remain
+  unchanged.
+- Front half replaces the discovery brain only; back half reuses the
+  existing targeted acquisition, family-constrained concrete search,
+  FRESH_ONLY run-scoped final valuation, EV/ROI/risk, and report authority.
+- State rule: exactly one active family per run; family #2 may be selected
+  only before any BUFF dispatch starts.
+- Prescreen economics is ranking/pruning only and never substitutes the
+  exact final SteamDT-BUFF valuation.
+- No production default change is authorized through Phase 17D.
+- Phase 15C representative campaign remains deferred until Phase 17F
+  side-by-side re-entry is separately authorized.

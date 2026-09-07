@@ -3,21 +3,33 @@
 ## Current Position
 
 ```text
-Current phase:                            PHASE_15B_POLICY_FREEZE_COMPLETE
+Current completed phase:                  PHASE_16G_R7_LIVE_VALIDATED
 
-Current capability:                       read-only bounded multi-recipe one-shot scanner
-                                          plus offline exact-output-name calibration
-                                          evidence and no-change budget policy freeze
+Validated live authority:                 pre-live Commit F ce546730e4a34bf53e3973e5a30508361f51355e
+                                          case SHA 266bbd0f4df64bd947c4d081a0b978d51a03a221691c2e2acc8987fe890f5e68
+                                          result SHA 9a0aa4ac2572018af65af3692f4f9db1e374efa2c7ad41723eaea11289a8f17e
+                                          completion commit 940127ff4d8f7d6a55aba4128670c059acd7e731
+                                          completion CI 34085292093 SUCCESS
 
-Active development line:                  feature/valuation-budget-calibration
-                                          (research/tests/docs/policy only)
+Current capability:                       goods-first read-only bounded one-shot scanner
+                                          plus validated recipe-first prescreen/acquisition/
+                                          concrete-search/final-valuation interface path
 
-Latest Phase 15 checkpoints:              Phase 15A df621d4
-                                          measure scanner valuation output cardinality
-                                          CI run 33325598811 SUCCESS
-                                          Phase 15B policy freeze:
-                                          default 5 unchanged / hard max 60 unchanged
-                                          representative snapshot gate required
+Active development line:                  feature/recipe-first-runtime-integration-design
+                                          (Phase 17A docs/design only)
+
+Next authorized phase:                    PHASE_17A_RECIPE_FIRST_RUNTIME_INTEGRATION_DESIGN_FREEZE
+
+Production boundary:                      recipe-first default OFF
+                                          goods-first unchanged
+                                          no new Phase16G live run authorized
+                                          Phase16G proves path correctness, not profitability
+                                          Phase15C campaign deferred / NOT STARTED
+                                          D-TRADEUP-WEAR-ROW-MIGRATION-001 deferred
+
+Latest Phase 15 policy checkpoint:        Phase 15A df621d4 / CI 33325598811 SUCCESS
+                                          Phase 15B default 5 and hard max 60 unchanged;
+                                          representative runtime measurement still required
 
 Post-Phase-13T documentation /
 handoff baseline:                         bb09068
@@ -1118,8 +1130,9 @@ next:
 - Historical generic BUFF observation remains valid; old v1/v2
   RecipeFamily fixture claim is superseded.
 - Status: `PHASE_16F_R2_FAMILY_METADATA_CONTRACT_VALIDATED`.
-- Production recipe-first remains OFF. Phase 15C campaign remains not
-  started. Phase 16G is not started and requires separate authorization.
+- At Phase 16F-R2 completion, production recipe-first remained OFF,
+  Phase 15C had not started, and Phase 16G still required separate
+  authorization. Phase 16G-R7 was later completed as recorded below.
 
 ## Phase 16G-R7 — Recipe-first SteamDT live path validation (2026-09-07)
 
@@ -1147,3 +1160,34 @@ next:
   No retry, pagination, polling, or fallback. Production recipe-first
   remains OFF; goods-first unchanged; no economic/risk pass is claimed;
   Phase 15C campaign remains not started.
+
+## Phase 16G-H — Current-state documentation synchronization (2026-09-07)
+
+- Corrected stale top-level Phase 15B current-position and active-line
+  pointers while preserving historical Phase 15/16 records.
+- Current completed authority is `PHASE_16G_R7_LIVE_VALIDATED`; the live
+  path evidence proves interface correctness, not profitability/risk.
+- Production recipe-first remains OFF and goods-first remains unchanged.
+- No additional Phase 16G live run is authorized. Phase 15C remains
+  deferred/not started; `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains deferred.
+- Docker/Linux remains future operations infrastructure, not a requirement
+  for the Windows/Python manual one-shot development path.
+
+## Phase 17A — Recipe-first runtime integration design freeze (2026-09-07)
+
+- Status: `PHASE_17A_RECIPE_FIRST_RUNTIME_INTEGRATION_DESIGN_FREEZE`.
+- Docs/design only on `feature/recipe-first-runtime-integration-design`.
+- Chosen entrypoint: separate `scripts/run_recipe_first_scan_once.py` in
+  future Phase 17B; explicit opt-in/default-disabled; goods-first script
+  remains unchanged.
+- Frozen composition replaces only the discovery brain, then reuses existing
+  targeted acquisition, family-constrained concrete search, FRESH_ONLY
+  run-scoped final valuation, EV/ROI/risk, and report authority.
+- One active family per run; ranked family #2 can be selected only before any
+  BUFF dispatch starts. No family switch after BUFF starts.
+- Prescreen economics is ranking/pruning only and cannot seed or substitute
+  final exact SteamDT-BUFF valuation.
+- Phase 17 stages: 17B opt-in composition; 17C offline end-to-end; 17D one
+  separately authorized actual-CLI bounded live run; 17E default/cutover
+  decision; 17F controlled side-by-side Phase15C re-entry.
+- No production default change is authorized through Phase 17D.

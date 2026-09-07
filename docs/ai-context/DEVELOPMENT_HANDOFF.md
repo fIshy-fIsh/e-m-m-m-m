@@ -967,3 +967,35 @@ Next: Phase 16F — ONE Bounded Read-Only Recipe-First BUFF Interface Validation
   fallback. Production recipe-first remains OFF; goods-first unchanged;
   no economic/risk pass claimed; Phase 15C remains not started.
 - Durable detailed evidence: `docs/phase16g-r7-live-validation-evidence.md`.
+
+## Phase 16G-H — Current-state documentation synchronization (2026-09-07)
+
+- Top-level current-position and active-line pointers in this document and
+  in `specs/roadmap.md` were corrected to point at
+  `PHASE_16G_R7_LIVE_VALIDATED` as the completed authority and
+  `PHASE_17A_RECIPE_FIRST_RUNTIME_INTEGRATION_DESIGN_FREEZE` as the next
+  docs/design authority. Historical Phase 15/16 entries are preserved.
+- No production code/test/CI/data change. No new Phase 16G live run is
+  authorized. Phase 15C remains deferred/not started.
+  `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains deferred.
+
+## Phase 17A — Recipe-first runtime integration design freeze (2026-09-07)
+
+- Active docs/design branch: `feature/recipe-first-runtime-integration-design`
+  from completion commit `940127ff4d8f7d6a55aba4128670c059acd7e731`.
+- Spec: `specs/2026-09-07-recipe-first-runtime-integration-design-freeze/`.
+- Entrypoint decision: separate future `scripts/run_recipe_first_scan_once.py`;
+  explicit opt-in/default-disabled; goods-first script byte-stable.
+- Composition principle: replace the discovery brain; reuse existing
+  targeted acquisition, family-constrained concrete search, FRESH_ONLY
+  run-scoped final valuation, EV/ROI/risk, and report authority.
+- One active family per run; ranked family #2 only before any BUFF dispatch
+  starts; no family switch after BUFF starts.
+- Prescreen economics is ranking/pruning only; never seeds final exact
+  SteamDT-BUFF valuation.
+- Phase 17B/C/D/E/F gates are frozen; no production default change is
+  authorized through Phase 17D; Phase 15C campaign remains deferred until
+  Phase 17F side-by-side re-entry.
+- No Phase 16G live harness is imported by the future runtime. The
+  Phase 16G harness remains the validated live-evidence boundary and is
+  never the production composition path.

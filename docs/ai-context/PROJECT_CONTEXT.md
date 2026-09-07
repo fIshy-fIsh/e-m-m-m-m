@@ -64,7 +64,15 @@ The bridge `market_hash_name ↔ BUFF goods_id` is the **provisional community c
 ## Git / Phase Baselines
 
 ```text
-Current phase:                              PHASE_15B_POLICY_FREEZE_COMPLETE
+Current phase:                              PHASE_16G_R7_LIVE_VALIDATED
+Active docs/design line:                   feature/recipe-first-runtime-integration-design
+                                              (PHASE_17A_RECIPE_FIRST_RUNTIME_INTEGRATION_DESIGN_FREEZE;
+                                              docs/design only)
+Latest completed live attempt:              Phase 16G-R7 commit 940127f
+                                              CI run 34085292093 SUCCESS
+                                              result SHA 9a0aa4ac2572018af65af3692f4f9db1e374efa2c7ad41723eaea11289a8f17e
+                                              proves interface/path correctness, not profitability
+                                              no new Phase 16G live run is authorized
 
 Latest Phase 15 checkpoints:                Phase 15A df621d4
                                             192 designed replays /
@@ -316,3 +324,41 @@ valued from `steamdt:buff` with structural fields preserved. Result
 SHA-256: `9a0aa4ac2572018af65af3692f4f9db1e374efa2c7ad41723eaea11289a8f17e`.
 No economic/risk pass is claimed. Production recipe-first remains OFF,
 goods-first remains unchanged, and Phase 15C remains not started.
+
+## Phase 16G-H — Current-state documentation synchronization (2026-09-07)
+
+- Corrected stale top-level Phase 15B current-position and active-line
+  pointers in this document and in `specs/roadmap.md`.
+- Current completed authority is `PHASE_16G_R7_LIVE_VALIDATED`; the
+  bounded live attempt proved interface/path correctness, not profitability
+  or risk acceptance.
+- Production recipe-first remains OFF. Goods-first remains unchanged.
+- No further Phase 16G live run is authorized. Phase 15C remains
+  deferred/not started; `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains deferred.
+- Docker/Linux is future operations infrastructure, not a requirement for
+  the current Windows/Python manual one-shot development path.
+
+## Phase 17A — Recipe-first runtime integration design freeze (2026-09-07)
+
+- Status: `PHASE_17A_RECIPE_FIRST_RUNTIME_INTEGRATION_DESIGN_FREEZE`.
+- Active docs/design branch: `feature/recipe-first-runtime-integration-design`.
+- Frozen entrypoint strategy: separate `scripts/run_recipe_first_scan_once.py`
+  in future Phase 17B; explicit opt-in/default-disabled; goods-first script
+  unchanged.
+- Frozen composition: replace the discovery brain only; reuse existing
+  targeted acquisition, family-constrained concrete search, FRESH_ONLY
+  run-scoped final valuation, EV/ROI/risk, and report authority.
+- Frozen state rule: exactly one active family per run; ranked family #2
+  may be selected only before any BUFF dispatch starts; no family switch
+  after BUFF starts.
+- Prescreen economics is ranking/pruning only; never seeds final
+  exact SteamDT-BUFF valuation.
+- Phase 17 stages: 17B opt-in composition, 17C offline end-to-end, 17D one
+  separately authorized actual-CLI bounded live run, 17E default/cutover
+  decision, 17F controlled side-by-side Phase 15C re-entry.
+- No production default change is authorized through Phase 17D.
+- Artifacts: `specs/2026-09-07-recipe-first-runtime-integration-design-freeze/{requirements,design,plan,validation}.md`.
+- Decisions appended: `D-PHASE16G-COMPLETE`, `D-PHASE17A-ENTRYPOINT`,
+  `D-PHASE17-DEFAULT-OFF`, `D-PHASE17-FALLBACK-RULE`,
+  `D-PHASE17-PRESCREEN-VS-FINAL`, `D-PHASE17A-RUNTIME-EVIDENCE`,
+  `D-PHASE15C-DEFER-THROUGH-17D`, `D-PHASE17E-CUTOVER-SEPARATE`.

@@ -1149,3 +1149,45 @@ The two historical case digests (the v1 persisted `serialize_case(case) + b"\n"`
 - **Evidence:** Prescreen selected all 9 exact names; one BUFF page returned 10 listings and 10 family-compatible inputs; concrete search explored one state and returned exactly one selection; concrete outputs were `AUG | Chameleon (Field-Tested)` and `AWP | Asiimov (Battle-Scarred)`, probability 0.5 each, with floats/wears `0.20962120840946835` / Field-Tested and `0.523778781791528` / Battle-Scarred. Strict final prices were CNY `524.49` and `505.77` from `steamdt:buff`; missing/errors were empty; structural fields were preserved exactly.
 - **Request boundary:** SteamDT batch dispatched=1, BUFF dispatched=1, SteamDT singles dispatched=2, total SteamDT dispatched=3. No retry, pagination, polling, or fallback. This is interface validation only; no economic/risk pass is claimed.
 - **Status:** Complete. Production recipe-first remains OFF; goods-first remains the production default. No Redis/PostgreSQL/Discord/scheduler or Phase15C campaign work occurred.
+
+## D-PHASE16G-COMPLETE — Phase 16G completed authority is interface/path evidence only
+
+- **Date:** 2026-09-07
+- **Decision:** Phase 16G-R7 is the authoritative completed phase. The bounded live attempt proved the recipe-first SteamDT pre-screen, anonymous BUFF acquisition, family-constrained concrete search, and strict SteamDT-BUFF final valuation interface path. It did NOT prove profitability or risk acceptance, and no further Phase 16G live run is authorized.
+- **Boundary:** Goods-first remains the production default. Recipe-first production default remains OFF. `D-TRADEUP-WEAR-ROW-MIGRATION-001` remains deferred. Docker/Linux is future operations infrastructure, not a requirement for the current Windows/Python manual one-shot development path.
+
+## D-PHASE17A-ENTRYPOINT — Recipe-first runtime uses a separate explicit one-shot CLI
+
+- **Date:** 2026-09-07
+- **Decision:** Phase 17B will introduce `scripts/run_recipe_first_scan_once.py` as a separate explicit opt-in CLI. `scripts/run_live_scan_once.py` and `LiveScannerOrchestrator` remain byte-stable.
+- **Boundary:** The Phase 16G live harness remains the validated evidence boundary; it is never imported by the production runtime.
+
+## D-PHASE17-DEFAULT-OFF — Recipe-first production default remains OFF through Phase 17D
+
+- **Date:** 2026-09-07
+- **Decision:** No default cutover is authorized before Phase 17E. Phase 17E requires a separate decision record, rollback plan, and authorized implementation. Recipe-first runtime remains explicit opt-in through Phase 17D.
+
+## D-PHASE17-FALLBACK-RULE — One active family per run; ranked family #2 only before any BUFF dispatch
+
+- **Date:** 2026-09-07
+- **Decision:** Recipe-first runtime ranks up to `TOP_RANKED_FAMILIES = 2` but activates exactly one family for BUFF acquisition per run. Ranked family #2 may replace family #1 only while `buff_dispatch_started == 0`. After any BUFF dispatch start, the active family is immutable for the rest of the run. No third family, no recursive fallback, and no fallback that hides a contract failure.
+
+## D-PHASE17-PRESCREEN-VS-FINAL — Prescreen economics never substitutes final exact SteamDT-BUFF valuation
+
+- **Date:** 2026-09-07
+- **Decision:** Recipe-first batch prescreen is approximate ranking/pruning evidence only. Prescreen quotes never enter the run memo, the persistent cache, or the final `OpportunityMetrics`/`RiskDecision`/`LiveOpportunity` evidence. Final valuation remains exact strict SteamDT-BUFF sell-price authority.
+
+## D-PHASE17A-RUNTIME-EVIDENCE — Phase 17D must exercise the actual operator-facing CLI
+
+- **Date:** 2026-09-07
+- **Decision:** Phase 17D bounded-live validation must execute the actual `scripts/run_recipe_first_scan_once.py` invocation path. The Phase 16G harness is acceptable evidence for interface contracts only; it is not acceptable evidence for the recipe-first production runtime. A separately approved live spec must freeze commit, snapshots, config identity (excluding secrets), discovery/prescreen bounds, BUFF hard cap, final NEW-LIVE cap, retry/pagination/polling rules, safe artifact policy, and the operator manual command.
+
+## D-PHASE15C-DEFER-THROUGH-17D — Phase 15C representative campaign remains deferred until Phase 17F
+
+- **Date:** 2026-09-07
+- **Decision:** Phase 15C-1/2/2B remain preserved on `feature/representative-snapshot-calibration`. No 14-day campaign execution begins in Phase 17A/B/C/D/E. Phase 17F reopens measurement only after Phase 17E, as a controlled side-by-side comparison using matched observation windows with independent per-arm budgets, cache state, run artifacts, and pinned snapshots/policies.
+
+## D-PHASE17E-CUTOVER-SEPARATE — Default/cutover is a separately authorized Phase 17E decision
+
+- **Date:** 2026-09-07
+- **Decision:** Switching the production default to recipe-first requires a separate decision record, migration/rollback plan, tests, and authorization. Bounded interface validation is not sufficient to authorize a default cutover. Goods-first remains the production default until Phase 17E produces an approved change.
