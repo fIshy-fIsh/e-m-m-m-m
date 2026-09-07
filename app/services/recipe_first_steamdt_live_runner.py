@@ -372,8 +372,8 @@ class RecipeFirstSteamDTLiveRunner:
         self._steamdt_batch_dispatched = 0
         self._steamdt_single_attempted = 0
         self._steamdt_single_dispatched = 0
-        self._steamdt_batch_dispatch_started = 0
-        self._steamdt_single_dispatch_started = 0
+        self._steamdt_batch_successes = 0
+        self._steamdt_single_successes = 0
 
     @property
     def request_state(self) -> LiveSteamDTRequestState:
@@ -677,11 +677,11 @@ class RecipeFirstSteamDTLiveRunner:
             raise _BudgetExceeded("steamdt batch cap reached")
         self._steamdt_batch_attempted += 1
         if self._batch_result_provider is not None:
-            self._steamdt_batch_dispatch_started += 1
+            self._steamdt_batch_dispatched += 1
             result = await self._batch_result_provider(
                 self.case.prescreen_market_hash_names
             )
-            self._steamdt_batch_dispatched += 1
+            self._steamdt_batch_successes += 1
             return result
 
         if self._steamdt_http_client is None:
@@ -708,7 +708,7 @@ class RecipeFirstSteamDTLiveRunner:
                 market_hash_names=list(self.case.prescreen_market_hash_names)
             )
         )
-        self._steamdt_batch_dispatched += 1
+        self._steamdt_batch_successes += 1
         return result
 
     async def _acquire_buff_page(
@@ -949,11 +949,11 @@ class _BudgetedSteamDTBatchTransport:
         avg_prices_by_name: dict[str, Decimal] | None = None,
     ) -> Any:
         if (
-            self.tracker._steamdt_batch_dispatch_started
+            self.tracker._steamdt_batch_dispatched
             >= self.tracker.case.steamdt_batch_http_cap
         ):
             raise _BudgetExceeded("steamdt batch cap reached")
-        self.tracker._steamdt_batch_dispatch_started += 1
+        self.tracker._steamdt_batch_dispatched += 1
         return await self.client.get_price_batch_with_selection(
             market_hash_names,
             selection_config=selection_config,
@@ -1021,7 +1021,7 @@ class _LiveSinglePriceProvider:
                     for remaining_index, _ in enumerate(remaining, start=index)
                 )
                 break
-            if self._tracker._steamdt_single_dispatch_started >= self._cap:
+            if self._tracker._steamdt_single_dispatched >= self._cap:
                 remaining = names[index:]
                 missing.extend(remaining)
                 errors.extend(
@@ -1030,7 +1030,7 @@ class _LiveSinglePriceProvider:
                 )
                 break
             self._tracker._steamdt_single_attempted += 1
-            self._tracker._steamdt_single_dispatch_started += 1
+            self._tracker._steamdt_single_dispatched += 1
             try:
                 quote = await self._single(name)
             except (MemoryError, asyncio.CancelledError):
@@ -1044,7 +1044,7 @@ class _LiveSinglePriceProvider:
                 errors.append(f"STEAMDT_SINGLE_IDENTITY_MISMATCH:{index}")
                 continue
             quotes[name] = quote
-            self._tracker._steamdt_single_dispatched += 1
+            self._tracker._steamdt_single_successes += 1
         return PriceLookupResult(quotes=quotes, missing=missing, errors=errors)
 
 
@@ -1195,19 +1195,33 @@ def _validate_prescreen_result(
     missing_names = result.missing_market_hash_names
     failure_names = tuple(name for name, _reason in result.terminal_selection_failures)
     expected_set = set(expected_names)
+    quote_set = set(quote_names)
+    missing_set = set(missing_names)
+    failure_set = set(failure_names)
     if (
-        len(set(quote_names)) != len(quote_names)
-        or len(set(missing_names)) != len(missing_names)
-        or len(set(failure_names)) != len(failure_names)
-        or not set(quote_names).issubset(expected_set)
-        or not set(missing_names).issubset(expected_set)
-        or not set(failure_names).issubset(expected_set)
-        or set(quote_names) & set(missing_names)
-        or set(quote_names) & set(failure_names)
+        len(quote_set) != len(quote_names)
+        or len(missing_set) != len(missing_names)
+        or len(failure_set) != len(failure_names)
+        or not quote_set.issubset(expected_set)
+        or not missing_set.issubset(expected_set)
+        or not failure_set.issubset(expected_set)
+        or quote_set & missing_set
+        or quote_set & failure_set
+        or missing_set & failure_set
     ):
         raise RecipeFirstSteamDTCaseError(
             "prescreen result identity partition is invalid"
         )
+    union = quote_set | missing_set | failure_set
+    if union != expected_set:
+        raise RecipeFirstSteamDTCaseError(
+            "prescreen result does not cover all expected frozen names"
+        )
+    if not missing_names and not failure_names:
+        if quote_names != expected_names:
+            raise RecipeFirstSteamDTCaseError(
+                "prescreen quotes are not in exact frozen order"
+            )
 
 
 def _redact_search_diagnostics(

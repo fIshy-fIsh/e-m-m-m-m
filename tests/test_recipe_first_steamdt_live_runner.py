@@ -437,7 +437,7 @@ def test_validated_runs_real_concrete_search_and_session_valuation() -> None:
     ) == (1, 1, 2, 3)
 
 
-def test_concrete_output_missing_from_successful_prescreen_fails_before_singles() -> None:
+def test_concrete_output_missing_from_successful_prescreen_is_inconclusive() -> None:
     omitted = "AWP | Asiimov (Battle-Scarred)"
 
     async def malformed_success(
@@ -448,16 +448,15 @@ def test_concrete_output_missing_from_successful_prescreen_fails_before_singles(
         return SteamDTBatchPreScreenResult(
             requested_market_hash_names=result.requested_market_hash_names,
             quotes=result.quotes,
-            missing_market_hash_names=(),
-            terminal_selection_failures=(),
+            missing_market_hash_names=result.missing_market_hash_names,
+            terminal_selection_failures=result.terminal_selection_failures,
             diagnostics=result.diagnostics,
         )
 
     runner, _, single_calls = _runner(batch_provider=malformed_success)
     result = asyncio.run(runner.run(live_validation_authorized=True))
-    assert result.classification == CLASSIFICATION_CONTRACT_FAILURE
-    assert result.concrete_selection_count == 1
-    assert omitted in result.concrete_output_market_hash_names
+    assert result.classification == CLASSIFICATION_INCONCLUSIVE
+    assert omitted in result.prescreen_missing_names
     assert single_calls == []
     assert result.request_state.steamdt_single_attempted == 0
 
@@ -495,12 +494,12 @@ def test_single_failure_shape_is_normalized_and_run_is_inconclusive() -> None:
         "LIVE_LOOKUP_TERMINAL_FAILURE: item_index=0",
     )
     assert result.request_state.steamdt_single_attempted == 2
-    assert result.request_state.steamdt_single_dispatched == 1
-    assert runner._steamdt_single_dispatch_started == 2
+    assert result.request_state.steamdt_single_dispatched == 2
+    assert runner._steamdt_single_successes == 1
     assert "untrusted provider detail" not in repr(result)
 
 
-def test_batch_failure_consumes_single_dispatch_start() -> None:
+def test_batch_failure_consumes_dispatch_started_counter() -> None:
     async def fail(_names: tuple[str, ...]) -> SteamDTBatchPreScreenResult:
         raise RuntimeError("offline fake failure")
 
@@ -508,8 +507,206 @@ def test_batch_failure_consumes_single_dispatch_start() -> None:
     result = asyncio.run(runner.run(live_validation_authorized=True))
     assert result.classification == CLASSIFICATION_CONTRACT_FAILURE
     assert result.request_state.steamdt_batch_attempted == 1
-    assert result.request_state.steamdt_batch_dispatched == 0
-    assert runner._steamdt_batch_dispatch_started == 1
+    assert result.request_state.steamdt_batch_dispatched == 1
+    assert result.request_state.steamdt_single_dispatched == 0
+    assert result.request_state.buff_dispatched == 0
+    assert runner._steamdt_batch_successes == 0
+
+
+def test_single_first_call_failure_consumes_dispatch_started_counter() -> None:
+    calls: list[str] = []
+
+    async def one_failure(name: str) -> PriceQuote:
+        calls.append(name)
+        if len(calls) == 1:
+            raise RuntimeError("untrusted provider detail")
+        return PriceQuote(
+            market_hash_name=name,
+            price_cny=Decimal("700"),
+            source="steamdt:buff",
+            raw=None,
+        )
+
+    runner, _, _ = _runner(single_fetcher=one_failure)
+    result = asyncio.run(runner.run(live_validation_authorized=True))
+    assert result.classification == CLASSIFICATION_INCONCLUSIVE
+    assert result.request_state.steamdt_single_attempted == 2
+    assert result.request_state.steamdt_single_dispatched == 2
+    assert runner._steamdt_single_successes == 1
+    assert len(result.final_missing_names) == 1
+    assert result.final_missing_names[0] == result.concrete_output_market_hash_names[0]
+
+
+def test_single_identity_mismatch_consumes_dispatch_started_counter() -> None:
+    async def mismatch(name: str) -> PriceQuote:
+        return PriceQuote(
+            market_hash_name=f"WRONG::{name}",
+            price_cny=Decimal("700"),
+            source="steamdt:buff",
+            raw=None,
+        )
+
+    runner, _, _ = _runner(single_fetcher=mismatch)
+    result = asyncio.run(runner.run(live_validation_authorized=True))
+    assert result.classification == CLASSIFICATION_INCONCLUSIVE
+    assert result.request_state.steamdt_single_dispatched == len(
+        result.concrete_output_market_hash_names
+    )
+    assert runner._steamdt_single_successes == 0
+    assert result.final_quotes == ()
+
+
+def test_prescreen_silent_omission_blocks_buff_with_zero_dispatch() -> None:
+    omitted = "AWP | Asiimov (Battle-Scarred)"
+
+    async def silent_omission(
+        names: tuple[str, ...],
+    ) -> SteamDTBatchPreScreenResult:
+        selected = tuple(name for name in names if name != omitted)
+        return SteamDTBatchPreScreenResult(
+            requested_market_hash_names=names,
+            quotes=tuple(
+                SteamDTBuffPreScreenQuote(
+                    market_hash_name=name,
+                    sell_price_cny=Decimal("100"),
+                    sell_count=1,
+                    update_time="opaque",
+                )
+                for name in selected
+            ),
+            missing_market_hash_names=(),
+            terminal_selection_failures=(),
+            diagnostics=SteamDTBatchPreScreenDiagnostics(
+                logical_requested_names=len(names),
+                unique_names=len(names),
+                duplicates_suppressed=0,
+                chunk_count=1,
+                transport_attempted_names=len(names),
+                selected_names=len(selected),
+                missing_names=0,
+                terminal_selection_failures=0,
+                transport_errors=(),
+            ),
+        )
+
+    runner, listing_provider, _ = _runner(batch_provider=silent_omission)
+    result = asyncio.run(runner.run(live_validation_authorized=True))
+    assert result.classification == CLASSIFICATION_CONTRACT_FAILURE
+    assert result.request_state.buff_dispatched == 0
+    assert result.request_state.steamdt_single_dispatched == 0
+    assert listing_provider.calls == 0
+
+
+def test_prescreen_duplicate_overlap_blocks_buff_with_zero_dispatch() -> None:
+    async def overlap(
+        names: tuple[str, ...],
+    ) -> SteamDTBatchPreScreenResult:
+        first = names[0]
+        return SteamDTBatchPreScreenResult(
+            requested_market_hash_names=names,
+            quotes=(
+                SteamDTBuffPreScreenQuote(
+                    market_hash_name=first,
+                    sell_price_cny=Decimal("100"),
+                    sell_count=1,
+                    update_time="opaque",
+                ),
+            ),
+            missing_market_hash_names=names,
+            terminal_selection_failures=(),
+            diagnostics=SteamDTBatchPreScreenDiagnostics(
+                logical_requested_names=len(names),
+                unique_names=len(names),
+                duplicates_suppressed=0,
+                chunk_count=1,
+                transport_attempted_names=len(names),
+                selected_names=1,
+                missing_names=len(names),
+                terminal_selection_failures=0,
+                transport_errors=(),
+            ),
+        )
+
+    runner, listing_provider, _ = _runner(batch_provider=overlap)
+    result = asyncio.run(runner.run(live_validation_authorized=True))
+    assert result.classification == CLASSIFICATION_CONTRACT_FAILURE
+    assert result.request_state.buff_dispatched == 0
+    assert listing_provider.calls == 0
+
+
+def test_prescreen_complete_missing_partition_is_inconclusive_with_zero_buff() -> None:
+    async def missing_partition(
+        names: tuple[str, ...],
+    ) -> SteamDTBatchPreScreenResult:
+        first = names[0]
+        return SteamDTBatchPreScreenResult(
+            requested_market_hash_names=names,
+            quotes=(
+                SteamDTBuffPreScreenQuote(
+                    market_hash_name=first,
+                    sell_price_cny=Decimal("100"),
+                    sell_count=1,
+                    update_time="opaque",
+                ),
+            ),
+            missing_market_hash_names=tuple(names[1:]),
+            terminal_selection_failures=(),
+            diagnostics=SteamDTBatchPreScreenDiagnostics(
+                logical_requested_names=len(names),
+                unique_names=len(names),
+                duplicates_suppressed=0,
+                chunk_count=1,
+                transport_attempted_names=len(names),
+                selected_names=1,
+                missing_names=len(names) - 1,
+                terminal_selection_failures=0,
+                transport_errors=(),
+            ),
+        )
+
+    runner, listing_provider, _ = _runner(batch_provider=missing_partition)
+    result = asyncio.run(runner.run(live_validation_authorized=True))
+    assert result.classification == CLASSIFICATION_INCONCLUSIVE
+    assert result.request_state.buff_dispatched == 0
+    assert listing_provider.calls == 0
+
+
+def test_prescreen_quotes_must_be_in_exact_frozen_order() -> None:
+    async def wrong_order(
+        names: tuple[str, ...],
+    ) -> SteamDTBatchPreScreenResult:
+        reversed_names = tuple(reversed(names))
+        return SteamDTBatchPreScreenResult(
+            requested_market_hash_names=names,
+            quotes=tuple(
+                SteamDTBuffPreScreenQuote(
+                    market_hash_name=name,
+                    sell_price_cny=Decimal("100"),
+                    sell_count=1,
+                    update_time="opaque",
+                )
+                for name in reversed_names
+            ),
+            missing_market_hash_names=(),
+            terminal_selection_failures=(),
+            diagnostics=SteamDTBatchPreScreenDiagnostics(
+                logical_requested_names=len(names),
+                unique_names=len(names),
+                duplicates_suppressed=0,
+                chunk_count=1,
+                transport_attempted_names=len(names),
+                selected_names=len(names),
+                missing_names=0,
+                terminal_selection_failures=0,
+                transport_errors=(),
+            ),
+        )
+
+    runner, listing_provider, _ = _runner(batch_provider=wrong_order)
+    result = asyncio.run(runner.run(live_validation_authorized=True))
+    assert result.classification == CLASSIFICATION_CONTRACT_FAILURE
+    assert result.request_state.buff_dispatched == 0
+    assert listing_provider.calls == 0
 
 
 def test_live_single_provider_failure_includes_matching_missing_name() -> None:

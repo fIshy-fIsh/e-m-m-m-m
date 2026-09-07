@@ -101,6 +101,27 @@ def _resolve_commit_oid(*, run_git: Callable[[Sequence[str]], str]) -> str:
     return run_git(("rev-parse", "HEAD")).strip()
 
 
+def _resolve_current_head_safe() -> tuple[str | None, str]:
+    try:
+        head = subprocess.check_output(
+            ("git", "rev-parse", "HEAD"), text=True
+        ).strip()
+    except Exception as exc:
+        return None, type(exc).__name__
+    return head, ""
+
+
+def _is_tracked_tree_clean() -> bool:
+    try:
+        output = subprocess.check_output(
+            ("git", "status", "--porcelain", "--untracked-files=no"),
+            text=True,
+        )
+    except Exception:
+        return False
+    return output.strip() == ""
+
+
 def _artifact_root(*, env: Mapping[str, str]) -> Path:
     raw = env.get(ARTIFACT_DIR_ENV)
     if raw is None or not raw.strip():
@@ -330,7 +351,19 @@ async def execute_case(
     snapshot_root: Path,
     api_key: str | None,
     runner_config: RecipeFirstSteamDTLiveRunnerConfig | None = None,
+    current_head_resolver: Callable[[Sequence[str]], str] | None = None,
+    tracked_tree_clean_checker: Callable[[], bool] | None = None,
 ) -> int:
+    def _resolve_head(argv: Sequence[str]) -> str:
+        if current_head_resolver is not None:
+            return current_head_resolver(argv)
+        return subprocess.check_output(("git",) + tuple(argv), text=True)
+
+    def _is_clean() -> bool:
+        if tracked_tree_clean_checker is not None:
+            return tracked_tree_clean_checker()
+        return _is_tracked_tree_clean()
+
     gate = env.get(RUN_GATE_ENV, "").strip().lower()
     if gate not in {"1", "true", "yes", "on"}:
         _print_lines(
@@ -345,6 +378,28 @@ async def execute_case(
             printer,
             "phase16g_execute: refused",
             f"reason: api_key_missing ({API_KEY_ENV})",
+            "live_validation_executed: no",
+        )
+        return 1
+    try:
+        current_head = _resolve_head(("rev-parse", "HEAD")).strip()
+        current_head_error = ""
+    except Exception as exc:
+        current_head = None
+        current_head_error = type(exc).__name__
+    if current_head is None:
+        _print_lines(
+            printer,
+            "phase16g_execute: refused",
+            f"reason: current_head_unavailable ({current_head_error})",
+            "live_validation_executed: no",
+        )
+        return 1
+    if not _is_clean():
+        _print_lines(
+            printer,
+            "phase16g_execute: refused",
+            "reason: tracked_tree_dirty",
             "live_validation_executed: no",
         )
         return 1
@@ -365,6 +420,14 @@ async def execute_case(
             printer,
             "phase16g_execute: failed",
             f"reason: case_invalid ({exc})",
+            "live_validation_executed: no",
+        )
+        return 1
+    if case.repository_commit_oid != current_head:
+        _print_lines(
+            printer,
+            "phase16g_execute: refused",
+            "reason: repository_commit_mismatch",
             "live_validation_executed: no",
         )
         return 1
