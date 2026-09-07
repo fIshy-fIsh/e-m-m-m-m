@@ -3,22 +3,24 @@
 ## Current Position
 
 ```text
-Current completed phase:                  PHASE_16G_R7_LIVE_VALIDATED
+Current completed phase:                  PHASE_17B_OPT_IN_RECIPE_FIRST_ONE_SHOT_RUNTIME_COMPLETE
 
-Validated live authority:                 pre-live Commit F ce546730e4a34bf53e3973e5a30508361f51355e
+Latest validated live authority:          Phase16G-R7
+                                          pre-live Commit F ce546730e4a34bf53e3973e5a30508361f51355e
                                           case SHA 266bbd0f4df64bd947c4d081a0b978d51a03a221691c2e2acc8987fe890f5e68
                                           result SHA 9a0aa4ac2572018af65af3692f4f9db1e374efa2c7ad41723eaea11289a8f17e
                                           completion commit 940127ff4d8f7d6a55aba4128670c059acd7e731
                                           completion CI 34085292093 SUCCESS
 
-Current capability:                       goods-first read-only bounded one-shot scanner
-                                          plus validated recipe-first prescreen/acquisition/
-                                          concrete-search/final-valuation interface path
+Current capability:                       goods-first production one-shot unchanged
+                                          separate opt-in recipe-first one-shot composition
+                                          implemented and zero-network validated
 
-Active development line:                  feature/recipe-first-runtime-integration-design
-                                          (Phase 17A docs/design only)
+Active development line:                  feature/recipe-first-runtime-integration
+                                          (Phase 17B implementation)
 
-Next authorized phase:                    PHASE_17A_RECIPE_FIRST_RUNTIME_INTEGRATION_DESIGN_FREEZE
+Next phase:                               PHASE_17C_OFFLINE_END_TO_END_INTEGRATION
+                                          NOT STARTED / separately gated
 
 Production boundary:                      recipe-first default OFF
                                           goods-first unchanged
@@ -1191,3 +1193,29 @@ next:
   separately authorized actual-CLI bounded live run; 17E default/cutover
   decision; 17F controlled side-by-side Phase15C re-entry.
 - No production default change is authorized through Phase 17D.
+
+## Phase 17B — Opt-in recipe-first one-shot runtime composition (2026-09-07)
+
+- Implemented separate `scripts/run_recipe_first_scan_once.py`; explicit
+  `--enable-recipe-first` is mandatory. Missing enablement returns
+  `CONFIGURATION_BLOCKED` / exit 3 before snapshots, cache, HTTP clients,
+  or providers are constructed.
+- `--preview` requires explicit enablement and validates pinned snapshot/
+  family-discovery shape offline; returns `SUCCESS_PREVIEW` / exit 0 with
+  zero SteamDT, BUFF, or network-cache client construction.
+- Added immutable runtime config, discovery-budget, terminal, counter,
+  evidence, and operator-report DTOs plus a bounded coordinator. Phase17B
+  placeholder discovery bounds are 256 visited family states / 10 unique
+  prescreen names / 1 batch dispatch and remain pending Phase17C measurement.
+- Coordinator uses exact input/output names, atomic all-chunk prescreen
+  admission, strict BUFF-only prescreen selection, prescreen economics,
+  streaming Top-2 ranking, targeted plan cap <=10, and pre-BUFF-only
+  one-time fallback. Active family locks at actual BUFF dispatch start.
+- Reuses `RecipeFirstScannerOrchestrator`, family-constrained concrete
+  search, `RunScopedValuationSession`, FRESH_ONLY cache reads, strict
+  SteamDT-BUFF final valuation, EV, and risk without duplicating math.
+- Phase16G harness is not imported by runtime. Goods-first
+  `LiveScannerOrchestrator` and `scripts/run_live_scan_once.py` remain
+  byte-stable. No market HTTP occurred during Phase17B.
+- Production recipe-first remains OFF. Phase17C offline end-to-end
+  integration is next and NOT STARTED. Phase15C remains NOT STARTED.

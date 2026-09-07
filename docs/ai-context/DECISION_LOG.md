@@ -1191,3 +1191,10 @@ The two historical case digests (the v1 persisted `serialize_case(case) + b"\n"`
 
 - **Date:** 2026-09-07
 - **Decision:** Switching the production default to recipe-first requires a separate decision record, migration/rollback plan, tests, and authorization. Bounded interface validation is not sufficient to authorize a default cutover. Goods-first remains the production default until Phase 17E produces an approved change.
+
+## D-PHASE17B-COMPLETE — Opt-in recipe-first one-shot composition implemented
+
+- **Date:** 2026-09-07
+- **Decision:** Phase17B implements the separate default-disabled `scripts/run_recipe_first_scan_once.py` composition root plus immutable runtime contracts and a bounded coordinator. Explicit `--enable-recipe-first` is required; preview loads pinned structural snapshots but constructs zero SteamDT/BUFF/network-cache clients. Full composition reuses the strict batch resolver, prescreen price/economics/ranking/planner stack, `RecipeFirstScannerOrchestrator`, FRESH_ONLY cache resolver, strict SteamDT-BUFF final provider, EV, and risk.
+- **Bounds:** Phase17B placeholder discovery defaults are 256 visited family states, 10 unique prescreen names, and 1 batch dispatch. They are operational safety placeholders pending Phase17C measurement, not policy-optimal values. BUFF remains <=10 and final NEW-LIVE retains default 5 / hard 60.
+- **Boundary:** Phase16G harness is not imported. Goods-first production sources remain byte-stable and production recipe-first remains OFF. No market HTTP, scheduler, Discord, PostgreSQL mutation, auto-buy/trade, or Phase15C campaign occurred. Phase17C remains NOT STARTED.

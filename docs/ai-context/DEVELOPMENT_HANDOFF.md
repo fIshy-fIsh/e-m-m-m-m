@@ -999,3 +999,38 @@ Next: Phase 16F — ONE Bounded Read-Only Recipe-First BUFF Interface Validation
 - No Phase 16G live harness is imported by the future runtime. The
   Phase 16G harness remains the validated live-evidence boundary and is
   never the production composition path.
+
+## Phase 17B — opt-in recipe-first one-shot runtime
+
+- Branch: `feature/recipe-first-runtime-integration`; base Phase17A
+  freeze `9e7efa3ace4aba354f401bf2fbd9f039ecfa479b`.
+- New public files: `app/services/recipe_first_runtime_contract.py`,
+  `app/services/recipe_first_runtime_coordinator.py`, and
+  `scripts/run_recipe_first_scan_once.py`. No re-export module was added;
+  direct contract/coordinator imports are the clean public boundary.
+- CLI is separate, one-shot, read-only, explicit
+  `--enable-recipe-first`, and default-disabled. Missing enablement is
+  `CONFIGURATION_BLOCKED` / exit 3 before provider/client construction.
+- Explicit preview loads/validates pinned snapshots and the first bounded
+  family shape offline, then returns `SUCCESS_PREVIEW` / exit 0 with no
+  SteamDT, BUFF, or network-cache client construction.
+- Coordinator lazily visits a bounded family stream, creates exact input +
+  reachable-output prescreen names, atomically admits all names/chunks,
+  invokes strict BUFF-only batch prescreen, computes Phase16D economics,
+  streaming Top-2 ranking, and targeted plan, then invokes the real
+  `RecipeFirstScannerOrchestrator` exactly once.
+- Exactly one active family enters BUFF acquisition. Family #2 fallback is
+  permitted once before BUFF dispatch starts; actual BUFF dispatch locks
+  the family. Provider/contract failures after lock never fall back.
+- Final valuation is a fresh run-scoped session with optional existing
+  FRESH_ONLY resolver; in-memory cache default, Redis optional; no scanner
+  writeback and no prescreen-to-final reuse.
+- Phase17B conservative operational placeholders are 256 family states,
+  10 unique prescreen names, and 1 batch dispatch. They are safety bounds,
+  not policy-optimal values, and Phase17C must measure/revisit them.
+- Human/JSON render the same immutable report DTO. Normal output excludes
+  raw payload, credentials, seller/account data, listing IDs, and asset IDs.
+- Phase16G harness import is forbidden by focused and project-wide tests.
+  Goods-first production sources remain byte-stable from Phase17A.
+- Phase17B development/tests issued zero SteamDT/BUFF HTTP. Production
+  recipe-first remains OFF. Phase17C and Phase15C are NOT STARTED.

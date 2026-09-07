@@ -64,10 +64,12 @@ The bridge `market_hash_name ↔ BUFF goods_id` is the **provisional community c
 ## Git / Phase Baselines
 
 ```text
-Current phase:                              PHASE_16G_R7_LIVE_VALIDATED
-Active docs/design line:                   feature/recipe-first-runtime-integration-design
-                                              (PHASE_17A_RECIPE_FIRST_RUNTIME_INTEGRATION_DESIGN_FREEZE;
-                                              docs/design only)
+Current phase:                              PHASE_17B_OPT_IN_RECIPE_FIRST_ONE_SHOT_RUNTIME_COMPLETE
+Active implementation line:                feature/recipe-first-runtime-integration
+                                              (separate explicit recipe-first one-shot;
+                                              zero-network validated; production default OFF)
+Next phase:                                 PHASE_17C_OFFLINE_END_TO_END_INTEGRATION
+                                              NOT STARTED / separately gated
 Latest completed live attempt:              Phase 16G-R7 commit 940127f
                                               CI run 34085292093 SUCCESS
                                               result SHA 9a0aa4ac2572018af65af3692f4f9db1e374efa2c7ad41723eaea11289a8f17e
@@ -362,3 +364,15 @@ goods-first remains unchanged, and Phase 15C remains not started.
   `D-PHASE17-DEFAULT-OFF`, `D-PHASE17-FALLBACK-RULE`,
   `D-PHASE17-PRESCREEN-VS-FINAL`, `D-PHASE17A-RUNTIME-EVIDENCE`,
   `D-PHASE15C-DEFER-THROUGH-17D`, `D-PHASE17E-CUTOVER-SEPARATE`.
+
+## Phase 17B — opt-in recipe-first one-shot implementation
+
+A separate default-disabled CLI now composes the recipe-first discovery
+front half and reuses the existing downstream scanner stack. It has explicit
+enablement, zero-client preview, bounded lazy visitation, atomic prescreen
+admission, strict BUFF-only prescreen evidence, deterministic Top-2 ranking,
+pre-BUFF-only fallback, targeted BUFF cap <=10, FRESH_ONLY final cache reads,
+and immutable human/JSON report DTOs. It does not import Phase16G harness
+code. Goods-first production files remain byte-stable; production default
+remains goods-first. Phase17B development used zero market HTTP. Phase17C
+and Phase15C are NOT STARTED.

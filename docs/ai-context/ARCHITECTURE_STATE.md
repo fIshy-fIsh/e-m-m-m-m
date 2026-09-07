@@ -597,3 +597,29 @@ preserved verbatim.
 - No production default change is authorized through Phase 17D.
 - Phase 15C representative campaign remains deferred until Phase 17F
   side-by-side re-entry is separately authorized.
+
+## Phase 17B — opt-in recipe-first one-shot runtime
+
+Phase17B implements the frozen separate composition root without changing
+production default behavior:
+
+```text
+scripts/run_recipe_first_scan_once.py (explicit enable; one-shot)
+  -> bounded lazy RecipeFamily visitation
+  -> exact geometry / static feasibility
+  -> atomic strict-BUFF batch prescreen admission
+  -> prescreen economics / streaming Top-2 / targeted decision
+  -> pre-BUFF-only fallback and dispatch-time family lock
+  -> existing RecipeFirstScannerOrchestrator exactly once
+     -> ExistingRecipeFirstAcquisitionPipeline
+     -> family-constrained concrete search
+     -> RunScopedValuationSession (FRESH_ONLY reads + atomic NEW LIVE)
+     -> ValuationService -> EV -> risk
+  -> immutable operator report -> human or JSON
+```
+
+The contract/coordinator/CLI are new, isolated files. The Phase16G harness
+is not imported. Goods-first production sources remain byte-stable. Preview
+constructs no SteamDT, BUFF, or network-cache client. Phase17B tests use
+only pinned snapshots and injected fake market seams; zero market HTTP.
+Production recipe-first remains OFF. Phase17C remains NOT STARTED.
