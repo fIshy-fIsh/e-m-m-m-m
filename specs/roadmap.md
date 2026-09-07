@@ -1120,3 +1120,30 @@ next:
 - Status: `PHASE_16F_R2_FAMILY_METADATA_CONTRACT_VALIDATED`.
 - Production recipe-first remains OFF. Phase 15C campaign remains not
   started. Phase 16G is not started and requires separate authorization.
+
+## Phase 16G-R7 — Recipe-first SteamDT live path validation (2026-09-07)
+
+- Pre-live authority: branch `feature/recipe-first-steamdt-live-validation`,
+  Commit F `ce546730e4a34bf53e3973e5a30508361f51355e`, CI run
+  `34083045096` SUCCESS (`3698 passed, 23 skipped, 2 warnings`).
+- Frozen case SHA-256
+  `266bbd0f4df64bd947c4d081a0b978d51a03a221691c2e2acc8987fe890f5e68`,
+  result schema v2, family Classified/normal/Phoenix Collection x10,
+  family hash `45bfd0...52516`, prescreen 9 exact ordered names, caps
+  BUFF 1 / SteamDT batch 1 / final singles 2 / SteamDT total 3.
+- One operator-authorized attempt classified `validated`: prescreen
+  selected 9/9; one BUFF page returned 10 listings, 10 accepted and
+  metadata-resolved inputs, all 10 family-compatible; concrete search
+  explored 1 state and returned exactly 1 selection.
+- Exact concrete outputs: `AUG | Chameleon (Field-Tested)` at probability
+  0.5, float `0.20962120840946835`, wear Field-Tested; and
+  `AWP | Asiimov (Battle-Scarred)` at probability 0.5, float
+  `0.523778781791528`, wear Battle-Scarred.
+- Final strict SteamDT-BUFF quotes: CNY `524.49` and `505.77`, source
+  `steamdt:buff`; no missing/errors; structural fields preserved exactly.
+  Requests dispatched: SteamDT batch 1, BUFF 1, SteamDT singles 2.
+- Result SHA-256
+  `9a0aa4ac2572018af65af3692f4f9db1e374efa2c7ad41723eaea11289a8f17e`.
+  No retry, pagination, polling, or fallback. Production recipe-first
+  remains OFF; goods-first unchanged; no economic/risk pass is claimed;
+  Phase 15C campaign remains not started.

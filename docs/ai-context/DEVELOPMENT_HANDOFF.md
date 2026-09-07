@@ -940,3 +940,30 @@ Next: Phase 16F — ONE Bounded Read-Only Recipe-First BUFF Interface Validation
   fixture claim is superseded.
 - Production recipe-first remains OFF. Phase 15C campaign remains not
   started. Phase 16G requires separate authorization.
+
+## Phase 16G-R7 handoff
+
+- Branch: `feature/recipe-first-steamdt-live-validation`.
+- Pre-live Commit F: `ce546730e4a34bf53e3973e5a30508361f51355e`;
+  CI run `34083045096` SUCCESS (`3698 passed, 23 skipped, 2 warnings`).
+- Frozen case SHA-256:
+  `266bbd0f4df64bd947c4d081a0b978d51a03a221691c2e2acc8987fe890f5e68`;
+  result schema v2; Classified/normal/Phoenix Collection x10;
+  family hash `45bfd0...52516`; prescreen 9 exact ordered names; caps
+  BUFF 1 / SteamDT batch 1 / final singles 2 / total SteamDT 3.
+- One operator-authorized attempt classified `validated`. Prescreen 9/9;
+  one BUFF page returned 10 listings, 10 accepted and metadata-resolved,
+  10 compatible / 0 incompatible; concrete search states=1,
+  unique_candidates=1; final strict BUFF quotes complete for 2 exact
+  concrete outputs; structural fields preserved.
+- Concrete outputs: `AUG | Chameleon (Field-Tested)` probability 0.5,
+  float `0.20962120840946835`, Field-Tested; `AWP | Asiimov
+  (Battle-Scarred)` probability 0.5, float `0.523778781791528`,
+  Battle-Scarred. Final CNY sell prices: `524.49` / `505.77`, source
+  `steamdt:buff`.
+- Result SHA-256:
+  `9a0aa4ac2572018af65af3692f4f9db1e374efa2c7ad41723eaea11289a8f17e`.
+  Requests: batch 1, BUFF 1, final singles 2; no retry/pagination/polling/
+  fallback. Production recipe-first remains OFF; goods-first unchanged;
+  no economic/risk pass claimed; Phase 15C remains not started.
+- Durable detailed evidence: `docs/phase16g-r7-live-validation-evidence.md`.

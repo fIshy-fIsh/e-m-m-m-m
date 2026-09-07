@@ -303,3 +303,16 @@ HTTP, then validates enriched inputs/provenance against the family.
 The one corrected request returned 10 family-compatible enriched
 inputs and validated; SteamDT remained zero. Production recipe-first
 remains OFF and Phase 15C remains not started.
+
+## Phase 16G-R7 — Recipe-first SteamDT live path validated
+
+At pre-live Commit F `ce546730e4a34bf53e3973e5a30508361f51355e`,
+one operator-authorized bounded attempt validated the strict SteamDT
+batch prescreen, one anonymous BUFF page, real family-constrained
+concrete search, and fresh strict SteamDT-BUFF final valuation. The
+nine-name prescreen completed, BUFF returned 10 compatible inputs,
+search returned one two-output selection, and both exact outputs were
+valued from `steamdt:buff` with structural fields preserved. Result
+SHA-256: `9a0aa4ac2572018af65af3692f4f9db1e374efa2c7ad41723eaea11289a8f17e`.
+No economic/risk pass is claimed. Production recipe-first remains OFF,
+goods-first remains unchanged, and Phase 15C remains not started.

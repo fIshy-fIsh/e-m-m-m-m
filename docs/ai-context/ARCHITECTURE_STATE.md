@@ -551,3 +551,23 @@ outcomes, exact probability sum 1. One corrected anonymous GET
 returned 10 listings; all 10 enriched inputs were family-compatible;
 classification `validated`; SteamDT=0. Historical generic BUFF
 evidence remains valid; the old family fixture claim is superseded.
+
+## Phase 16G-R7 — Bounded recipe-first SteamDT live validation
+
+A single operator-authorized attempt at Commit F `ce54673` validated
+all four gated stages: strict BUFF-only SteamDT batch prescreen (9/9),
+one anonymous BUFF page (10 listings, all compatible), Phase16E
+family-constrained concrete search (one state, one selection), and a
+fresh run-scoped strict SteamDT-BUFF final valuation (two exact names).
+
+Concrete outputs were `AUG | Chameleon (Field-Tested)` and `AWP |
+Asiimov (Battle-Scarred)`, each with probability 0.5. Their output
+floats/wears were `0.20962120840946835` / Field-Tested and
+`0.523778781791528` / Battle-Scarred. Final exact BUFF sell prices were
+CNY `524.49` and `505.77`; structural identity/probability/float/wear
+was preserved exactly. Request counts matched caps: SteamDT batch 1,
+BUFF 1, SteamDT singles 2, total SteamDT 3. Result SHA-256 is
+`9a0aa4ac2572018af65af3692f4f9db1e374efa2c7ad41723eaea11289a8f17e`.
+
+This is interface evidence, not an economic/risk pass. Production
+recipe-first remains OFF and goods-first remains unchanged.
