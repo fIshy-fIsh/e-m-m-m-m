@@ -29,6 +29,7 @@ import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AsyncExitStack
+from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 from typing import cast
@@ -50,6 +51,7 @@ from app.services.price_cache_factory import (
     SteamDTPriceCacheSettings,
     create_steamdt_price_cache_runtime,
 )
+from app.services.recipe_first_acquisition import RawBuffListingPageProvider
 from app.services.recipe_first_runtime_contract import (
     EXIT_CODE_CONTRACT_OR_CONFIG,
     RecipeFirstDiscoveryBudget,
@@ -75,6 +77,7 @@ from app.services.scanner_cached_buff_price_resolver import (
     ScannerCachedBuffPriceResolver,
 )
 from app.services.skin_metadata_resolver import PinnedSkinMetadataResolver
+from app.services.steamdt_batch_prescreen import SteamDTBatchTransport
 from app.services.steamdt_buff_price_provider import SteamDTBuffPriceProvider
 from app.services.structural_output_finish import StructuralOutputFinishIndex
 from app.services.valuation_service import ValuationConfig, ValuationService
@@ -836,6 +839,85 @@ def _build_discovery_budget(args: argparse.Namespace) -> RecipeFirstDiscoveryBud
     )
 
 
+@dataclass(frozen=True, kw_only=True)
+class _RuntimeExternalSeams:
+    identity_resolver: BuffCommunityIdentityResolver
+    metadata_resolver: PinnedSkinMetadataResolver
+    finish_index: StructuralOutputFinishIndex
+    prescreen_transport: SteamDTBatchTransport
+    listing_provider: RawBuffListingPageProvider
+    valuation_service: ValuationService
+    cached_price_resolver: ScannerCachedBuffPriceResolver | None
+
+
+async def _build_live_runtime_seams(
+    *,
+    settings: _RecipeFirstScanSettings,
+    stack: AsyncExitStack,
+) -> _RuntimeExternalSeams:
+    """Construct production market/cache seams after all preflight gates."""
+
+    from app.services.steamdt_cached_price_resolver import SteamDTPriceCacheReader
+
+    identity = BuffCommunityIdentityResolver.from_snapshot_path(
+        settings.identity_snapshot
+    )
+    metadata = PinnedSkinMetadataResolver.from_snapshot_path(
+        settings.metadata_snapshot
+    )
+    finish_index = StructuralOutputFinishIndex.from_skins(metadata.skins)
+    cache_runtime = await create_steamdt_price_cache_runtime(
+        settings=cast(SteamDTPriceCacheSettings, settings)
+    )
+    stack.push_async_callback(cache_runtime.aclose)
+    cached_resolver = ScannerCachedBuffPriceResolver(
+        cast(SteamDTPriceCacheReader, cache_runtime.cache)
+    )
+    buff_http = await stack.enter_async_context(
+        httpx.AsyncClient(
+            base_url="https://buff.163.com",
+            timeout=10.0,
+            follow_redirects=False,
+            trust_env=False,
+            headers={"Accept": "application/json"},
+        )
+    )
+    steamdt_http = await stack.enter_async_context(
+        httpx.AsyncClient(
+            base_url=settings.steamdt_base_url,
+            timeout=10.0,
+            follow_redirects=False,
+            trust_env=False,
+            headers={"Accept": "application/json"},
+        )
+    )
+    steamdt = SteamDTHttpClient(
+        SteamDTClientConfig(
+            base_url=settings.steamdt_base_url,
+            api_key=settings.steamdt_api_key,
+            max_retries=0,
+            dry_run=False,
+        ),
+        steamdt_http,
+    )
+    valuation = ValuationService(
+        SteamDTBuffPriceProvider(steamdt),
+        ValuationConfig(require_all_prices=True),
+    )
+    listing_provider = BuffListingProvider(
+        BuffAnonymousListingHttpClient(buff_http)
+    )
+    return _RuntimeExternalSeams(
+        identity_resolver=identity,
+        metadata_resolver=metadata,
+        finish_index=finish_index,
+        prescreen_transport=steamdt,
+        listing_provider=listing_provider,
+        valuation_service=valuation,
+        cached_price_resolver=cached_resolver,
+    )
+
+
 async def _run_live_composition(
     *,
     args: argparse.Namespace,
@@ -848,8 +930,6 @@ async def _run_live_composition(
     exercises this exact composition rather than the Phase 16G harness.
     """
 
-    from app.services.steamdt_cached_price_resolver import SteamDTPriceCacheReader
-
     config = _build_runtime_config(
         args=args,
         preview=False,
@@ -860,13 +940,6 @@ async def _run_live_composition(
     _validate_discovery_budget(discovery_budget)
     settings.validate_live()
 
-    identity = BuffCommunityIdentityResolver.from_snapshot_path(
-        settings.identity_snapshot
-    )
-    metadata = PinnedSkinMetadataResolver.from_snapshot_path(
-        settings.metadata_snapshot
-    )
-    finish_index = StructuralOutputFinishIndex.from_skins(metadata.skins)
     risk = RiskFilterConfig(
         min_roi=settings.min_roi,
         min_expected_profit_cny=settings.min_expected_profit_cny,
@@ -876,59 +949,21 @@ async def _run_live_composition(
     )
 
     async with AsyncExitStack() as stack:
-        cache_runtime = await create_steamdt_price_cache_runtime(
-            settings=cast(SteamDTPriceCacheSettings, settings)
-        )
-        stack.push_async_callback(cache_runtime.aclose)
-        cached_resolver = ScannerCachedBuffPriceResolver(
-            cast(SteamDTPriceCacheReader, cache_runtime.cache)
-        )
-
-        buff_http = await stack.enter_async_context(
-            httpx.AsyncClient(
-                base_url="https://buff.163.com",
-                timeout=10.0,
-                follow_redirects=False,
-                trust_env=False,
-                headers={"Accept": "application/json"},
-            )
-        )
-        steamdt_http = await stack.enter_async_context(
-            httpx.AsyncClient(
-                base_url=settings.steamdt_base_url,
-                timeout=10.0,
-                follow_redirects=False,
-                trust_env=False,
-                headers={"Accept": "application/json"},
-            )
-        )
-        steamdt = SteamDTHttpClient(
-            SteamDTClientConfig(
-                base_url=settings.steamdt_base_url,
-                api_key=settings.steamdt_api_key,
-                max_retries=0,
-                dry_run=False,
-            ),
-            steamdt_http,
-        )
-        valuation = ValuationService(
-            SteamDTBuffPriceProvider(steamdt),
-            ValuationConfig(require_all_prices=True),
-        )
-        listing_provider = BuffListingProvider(
-            BuffAnonymousListingHttpClient(buff_http)
+        seams = await _build_live_runtime_seams(
+            settings=settings,
+            stack=stack,
         )
         coordinator = RecipeFirstRuntimeCoordinator(
             config=config,
             discovery_budget=discovery_budget,
-            identity_resolver=identity,
-            metadata_resolver=metadata,
-            finish_index=finish_index,
-            prescreen_transport=steamdt,
-            listing_provider=listing_provider,
-            valuation_service=valuation,
+            identity_resolver=seams.identity_resolver,
+            metadata_resolver=seams.metadata_resolver,
+            finish_index=seams.finish_index,
+            prescreen_transport=seams.prescreen_transport,
+            listing_provider=seams.listing_provider,
+            valuation_service=seams.valuation_service,
             risk_config=risk,
-            cached_price_resolver=cached_resolver,
+            cached_price_resolver=seams.cached_price_resolver,
             intrinsic_resolver=CanonicalNameIntrinsicFlagResolver(),
         )
         return await coordinator.run_once()

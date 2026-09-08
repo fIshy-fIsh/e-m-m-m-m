@@ -21,6 +21,7 @@ from app.services.buff_community_identity_resolver import (
 )
 from app.services.market_universe_builder import StatTrakMode
 from app.services.prescreen_price_book import PreScreenPriceBook
+from app.services.price_cache_codec import PriceCacheCodecError
 from app.services.recipe_family import RecipeFamily, RecipeFamilyGenerator
 from app.services.recipe_family_geometry import (
     RecipeFamilyGeometry,
@@ -61,6 +62,7 @@ from app.services.recipe_first_scanner_orchestrator import (
     RecipeFirstScannerRunResult,
 )
 from app.services.recipe_solver import RecipeSolverConfig
+from app.services.redis_price_cache import PriceCacheBackendError
 from app.services.risk_filter import RiskFilterConfig
 from app.services.scanner_cached_buff_price_resolver import (
     ScannerCachedBuffPriceResolver,
@@ -80,6 +82,10 @@ from app.services.steamdt_batch_prescreen import (
     SteamDTBatchPreScreenResult,
     SteamDTBatchTransport,
 )
+from app.services.steamdt_cached_price_resolver import (
+    SteamDTCachedPriceResolverError,
+)
+from app.services.steamdt_price_cache_adapter import SteamDTPriceCacheAdapterError
 from app.services.structural_output_finish import StructuralOutputFinishIndex
 from app.services.targeted_buff_scan_plan import (
     TargetedBuffScanDecision,
@@ -552,6 +558,23 @@ class RecipeFirstRuntimeCoordinator:
             )
         except (MemoryError, asyncio.CancelledError):
             raise
+        except (
+            PriceCacheBackendError,
+            PriceCacheCodecError,
+            SteamDTCachedPriceResolverError,
+            SteamDTPriceCacheAdapterError,
+        ) as exc:
+            safe_errors.append(type(exc).__name__)
+            return self._report(
+                code=RecipeFirstRuntimeTerminalCode.EXTERNAL_PROVIDER_FAILURE,
+                phases=phases,
+                discovery=discovery,
+                prescreen=prescreen_summary,
+                ranking=ranking,
+                decision=decision,
+                downstream=None,
+                safe_errors=safe_errors,
+            )
         except Exception as exc:
             safe_errors.append(type(exc).__name__)
             return self._report(
@@ -1197,7 +1220,9 @@ class RecipeFirstRuntimeCoordinator:
             ),
             roi=metrics.roi if metrics is not None else None,
             profit_probability=(
-                metrics.profit_probability if metrics is not None else None
+                float(metrics.profit_probability)
+                if metrics is not None
+                else None
             ),
             worst_case_loss_cny=(
                 max(Decimal("0"), -metrics.worst_case_profit_cny)
@@ -1282,7 +1307,7 @@ def _evaluation_summary(
         ),
         roi=metrics.roi if metrics is not None else None,
         profit_probability=(
-            metrics.profit_probability if metrics is not None else None
+            float(metrics.profit_probability) if metrics is not None else None
         ),
         worst_case_loss_cny=(
             max(Decimal("0"), -metrics.worst_case_profit_cny)
