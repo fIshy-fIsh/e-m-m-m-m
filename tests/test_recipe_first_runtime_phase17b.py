@@ -992,17 +992,21 @@ def test_phase16g_harness_has_no_production_runtime_importer() -> None:
 
 
 def test_goods_first_authorities_are_byte_stable_from_phase17a() -> None:
-    for relative in (
-        "app/services/scanner_orchestrator.py",
-        "scripts/run_live_scan_once.py",
-    ):
+    # Immutable Phase17A-frozen goods-first authority blobs. These exact
+    # identities keep the regression portable in depth-1 CI checkouts.
+    expected = {
+        "app/services/scanner_orchestrator.py": (
+            "06bb4fe5654c72bc3540904f6982c1e0672f276d"
+        ),
+        "scripts/run_live_scan_once.py": (
+            "e0f8773fe4b9a81c96a3b23877a07c60a6dfc871"
+        ),
+    }
+    for relative, expected_blob in expected.items():
         current = subprocess.check_output(
             ("git", "hash-object", relative), text=True
         ).strip()
-        baseline = subprocess.check_output(
-            ("git", "rev-parse", f"9e7efa3:{relative}"), text=True
-        ).strip()
-        assert current == baseline
+        assert current == expected_blob
 
 
 def test_runtime_source_has_no_loop_scheduler_or_buy_action() -> None:
