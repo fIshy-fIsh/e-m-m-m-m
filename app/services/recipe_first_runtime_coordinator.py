@@ -319,6 +319,12 @@ class RecipeFirstRuntimeCoordinator:
         self._last_prescreen_result: SteamDTBatchPreScreenResult | None = None
 
     @property
+    def discovery_budget(self) -> RecipeFirstDiscoveryBudget:
+        """Return the immutable configured in-scope discovery budget."""
+
+        return self._budget
+
+    @property
     def buff_dispatch_started(self) -> int:
         return self._raw_listing.dispatch_started
 
@@ -623,7 +629,6 @@ class RecipeFirstRuntimeCoordinator:
         visited = 0
         infeasible = 0
         contract_failed = 0
-        allow = set(self._config.collection_allowlist)
         seen_family_hashes: set[str] = set()
         exhausted = False
 
@@ -637,6 +642,8 @@ class RecipeFirstRuntimeCoordinator:
                     finish_index=self._finish_index,
                     input_rarity=rarity,
                     stattrak_mode=mode,
+                ).with_collection_allowlist(
+                    self._config.collection_allowlist
                 )
                 iterator = (
                     self._family_iterator_factory(generator)
@@ -652,10 +659,6 @@ class RecipeFirstRuntimeCoordinator:
                     if family.family_hash in seen_family_hashes:
                         continue
                     seen_family_hashes.add(family.family_hash)
-                    if allow and not {
-                        name for name, _count in family.collection_counts
-                    }.issubset(allow):
-                        continue
                     try:
                         geometry = compute_recipe_family_geometry(
                             family,

@@ -305,6 +305,46 @@ class RecipeFamilyGenerator:
 
         return count_recipe_families(len(self.stratum.eligible_collections))
 
+    def with_collection_allowlist(
+        self,
+        collection_allowlist: tuple[str, ...],
+    ) -> RecipeFamilyGenerator:
+        """Return a generator constrained before family iteration.
+
+        An empty allowlist returns this unrestricted generator unchanged.
+        A non-empty allowlist is exact and case-sensitive; the resulting
+        eligible collection tuple preserves the original sorted deterministic
+        order. Family state visitation therefore counts only states inside the
+        configured collection scope.
+        """
+
+        if type(collection_allowlist) is not tuple or any(
+            type(name) is not str or not name or name != name.strip()
+            for name in collection_allowlist
+        ):
+            raise RecipeFamilyIdentityError(
+                "collection_allowlist must be an exact tuple of names"
+            )
+        if len(set(collection_allowlist)) != len(collection_allowlist):
+            raise RecipeFamilyIdentityError(
+                "collection_allowlist must not contain duplicates"
+            )
+        if not collection_allowlist:
+            return self
+        allowed = frozenset(collection_allowlist)
+        constrained = tuple(
+            name
+            for name in self.stratum.eligible_collections
+            if name in allowed
+        )
+        return RecipeFamilyGenerator(
+            stratum=RecipeFamilyStratum(
+                input_rarity=self.stratum.input_rarity,
+                stattrak_mode=self.stratum.stattrak_mode,
+                eligible_collections=constrained,
+            )
+        )
+
     def iter_families(self) -> Iterator[RecipeFamily]:
         """Yield RecipeFamily values in deterministic lazy order.
 

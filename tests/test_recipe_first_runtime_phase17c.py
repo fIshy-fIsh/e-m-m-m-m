@@ -663,7 +663,7 @@ def test_complete_evaluation_rejected_by_risk(monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_no_concrete_selection_when_collection_disjoint() -> None:
+def test_no_concrete_selection_when_scope_has_no_eligible_family() -> None:
     identity, metadata, finish_index = _pinned()
     transport = _BatchTransport()
     listing_provider = _ListingProvider(_phoenix_listings(metadata))
@@ -671,9 +671,9 @@ def test_no_concrete_selection_when_collection_disjoint() -> None:
     config = RecipeFirstRuntimeConfig(
         enabled=True,
         preview=False,
-        input_rarities=("Classified",),
+        input_rarities=("Consumer Grade",),
         stattrak_modes=(StatTrakMode.NORMAL,),
-        collection_allowlist=("The Chroma Collection",),
+        collection_allowlist=("The Phoenix Collection",),
         max_targeted_buff_goods_ids=10,
         max_final_valuation_requests=5,
         sell_fee_rate=Decimal("0.025"),
@@ -715,7 +715,7 @@ def test_no_concrete_selection_when_collection_disjoint() -> None:
         report.terminal_code
         is RecipeFirstRuntimeTerminalCode.NO_CONCRETE_SELECTION
     )
-    assert report.counters.families_visited >= 1
+    assert report.counters.families_visited == 0
 
 
 # ---------------------------------------------------------------------------
