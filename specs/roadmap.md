@@ -3,31 +3,28 @@
 ## Current Position
 
 ```text
-Current completed phase:                  PHASE_17B_OPT_IN_RECIPE_FIRST_ONE_SHOT_RUNTIME_COMPLETE
-
-Latest validated live authority:          Phase16G-R7
-                                          pre-live Commit F ce546730e4a34bf53e3973e5a30508361f51355e
-                                          case SHA 266bbd0f4df64bd947c4d081a0b978d51a03a221691c2e2acc8987fe890f5e68
-                                          result SHA 9a0aa4ac2572018af65af3692f4f9db1e374efa2c7ad41723eaea11289a8f17e
-                                          completion commit 940127ff4d8f7d6a55aba4128670c059acd7e731
-                                          completion CI 34085292093 SUCCESS
-
-Current capability:                       goods-first production one-shot unchanged
-                                          separate opt-in recipe-first one-shot composition
-                                          implemented and zero-network validated
-
-Active development line:                  feature/recipe-first-runtime-integration
-                                          (Phase 17B implementation)
-
-Next phase:                               PHASE_17C_OFFLINE_END_TO_END_INTEGRATION
-                                          NOT STARTED / separately gated
-
-Production boundary:                      recipe-first default OFF
-                                          goods-first unchanged
-                                          no new Phase16G live run authorized
-                                          Phase16G proves path correctness, not profitability
-                                          Phase15C campaign deferred / NOT STARTED
+Current authority:                        PHASE_17D_R2_SECRET_HANDOFF_PRELIVE_FROZEN
+Branch / HEAD:                            feature/phase17d-r2-secret-handoff-prelive-freeze
+                                          a7ce9c019e3c1e6277ed29bbb58c53f4fbefe7e6
+R2 live status:                           FROZEN / AUTHORIZATION ON HOLD
+                                          authorization NOT GRANTED; child launches 0
+Recorded external case (local evidence):  C:/Users/lijie/AppData/Local/Temp/cs2-phase17d-r2/phase17d_r2_case.json
+                                          SHA c929d234e8a7f693261ac7d2d48cb9b77004cb844f8a9cfeb6a4b5ec28e386e4
+Latest actual live observation:           original Phase17D, exactly one invocation
+                                          incomplete_or_provider / EXTERNAL_PROVIDER_FAILURE
+                                          C INCONCLUSIVE_PROVIDER
+                                          authorization consumed / permanently closed
+Diagnosis:                                Phase17D-R1 EXPECTED_FAIL_CLOSED_PROVIDER_FAILURE
+                                          no deterministic runtime defect identified
+Current capability:                       goods-first production path unchanged
+                                          explicit opt-in recipe-first one-shot + case-bound launcher
+Next safe phase/task:                     offline SteamDT docs/rate-limit reconciliation
+                                          and rate-compatible prescreen design
+Production / campaign:                   recipe-first default OFF; goods-first unchanged
+                                          Phase17E NOT_STARTED
+                                          Phase15C / Phase17F NOT_STARTED / deferred
                                           D-TRADEUP-WEAR-ROW-MIGRATION-001 deferred
+
 
 Latest Phase 15 policy checkpoint:        Phase 15A df621d4 / CI 33325598811 SUCCESS
                                           Phase 15B default 5 and hard max 60 unchanged;
@@ -1217,5 +1214,53 @@ next:
 - Phase16G harness is not imported by runtime. Goods-first
   `LiveScannerOrchestrator` and `scripts/run_live_scan_once.py` remain
   byte-stable. No market HTTP occurred during Phase17B.
-- Production recipe-first remains OFF. Phase17C offline end-to-end
-  integration is next and NOT STARTED. Phase15C remains NOT STARTED.
+- Production recipe-first remains OFF. The Phase17B-era statement that
+  Phase17C was next/not started is historical.
+
+## Phase 17C / 17C-R1 — Offline integration and collection-scoped budget repair
+
+- Phase17C (`d8dafa9`) validated the actual recipe-first runtime end-to-end
+  offline with injected market seams, deterministic reports, cache matrix,
+  atomic final demand, fallback lock, and unchanged goods-first blobs.
+- Phase17C-R1 (`e2ffe97`) moved exact collection allowlist intersection before
+  family iteration/visited accounting. The Phoenix scope reaches the expected
+  family with state cap 1; no bound widening.
+
+## Phase 17D / R1 — One actual CLI observation and offline diagnosis
+
+- Pre-live commit `3824dae`; actual operator CLI invoked exactly once.
+- Terminal: `incomplete_or_provider / EXTERNAL_PROVIDER_FAILURE`; acceptance
+  class `C INCONCLUSIVE_PROVIDER`. Original authorization consumed and
+  permanently closed; no retry/second invocation.
+- Evidence commit `40af94b`; read original evidence with append-only errata:
+  observed shell exit `NOT_OBSERVED`, expected exit 2 derived from code.
+- R1 diagnosis `4fba055`: `EXPECTED_FAIL_CLOSED_PROVIDER_FAILURE`, exact
+  10-success / 9-missing / one-transport-error boundary reproduced offline;
+  no deterministic runtime defect identified.
+
+## Phase 17D-R2 — Case-bound secret handoff pre-live freeze
+
+- Authority commit: `a7ce9c019e3c1e6277ed29bbb58c53f4fbefe7e6`.
+- Launcher: `scripts/run_recipe_first_authorized_once.py`; standing contract:
+  `docs/recipe-first-one-shot-live-operator-contract.md`.
+- External case local evidence: path
+  `C:/Users/lijie/AppData/Local/Temp/cs2-phase17d-r2/phase17d_r2_case.json`,
+  recorded SHA `c929d234e8a7f693261ac7d2d48cb9b77004cb844f8a9cfeb6a4b5ec28e386e4`.
+  This SHA/path is local/operator evidence, not reproducible from Git alone.
+- Secret-free preflight recorded `PREFLIGHT_OK`; secret access 0, child launch
+  0, authorization consumed NO. No R2 live authorization has been granted.
+
+### R2 authorization hold — SteamDT batch quota reconciliation
+
+- Phoenix prescreen has 19 unique names. Project chunk size 10 creates two
+  immediate chunks (10+9).
+- Official `PRICE_BATCH` quota is 1/minute; project safety buffer is 5 seconds;
+  effective in-memory window is 65 seconds. Limiter is fail-fast and prescreen
+  has no inter-chunk wait.
+- Chunk size 10 is a cautious project/smoke policy, not a confirmed official
+  provider item limit. Official maximum names per batch is UNKNOWN.
+- Therefore R2 remains `FROZEN / AUTHORIZATION ON HOLD`. Do not authorize the
+  current case. Next work is offline provider-authority reconciliation and a
+  rate-compatible design/refreeze; do not bypass/relax quota.
+- Production recipe-first remains OFF; Phase17E, Phase15C and Phase17F remain
+  NOT_STARTED/deferred.

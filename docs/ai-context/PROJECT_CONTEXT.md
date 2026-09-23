@@ -56,7 +56,7 @@ The bridge `market_hash_name ↔ BUFF goods_id` is the **provisional community c
 5. Never treat a synthetic fixture as real market data.
 6. Never add a live API path without a disabled-by-default, one-request schema smoke first.
 7. Never invent endpoints/signatures/parameters/fields; record uncertainty as TODO in `docs/BUFF_API_NOTES.md`.
-8. All secrets come from `.env`; never print secrets/tokens/webhook URLs; never hardcode credentials.
+8. Persistent/ordinary local-development secrets follow the existing `.env` rules. Separately authorized case-bound one-shot live runs are the explicit exception governed by `docs/recipe-first-one-shot-live-operator-contract.md`: repo-external case-derived handoff file, never `.env`/argv/chat/Git/docs/history, unlink before Popen. Never print secrets/tokens/webhook URLs or hardcode credentials.
 9. Any core calculation (trade-up, float, EV, probability, ROI, risk) requires unit tests before commit.
 10. Normalize provider fields before they enter engine/service; keep raw provider shapes out of core domain.
 11. Add/update these AI context files after every significant phase.
@@ -64,25 +64,25 @@ The bridge `market_hash_name ↔ BUFF goods_id` is the **provisional community c
 ## Git / Phase Baselines
 
 ```text
-Current phase:                              PHASE_17B_OPT_IN_RECIPE_FIRST_ONE_SHOT_RUNTIME_COMPLETE
-Active implementation line:                feature/recipe-first-runtime-integration
-                                              (separate explicit recipe-first one-shot;
-                                              zero-network validated; production default OFF)
-Next phase:                                 PHASE_17C_OFFLINE_END_TO_END_INTEGRATION
-                                              NOT STARTED / separately gated
-Latest completed live attempt:              Phase 16G-R7 commit 940127f
-                                              CI run 34085292093 SUCCESS
-                                              result SHA 9a0aa4ac2572018af65af3692f4f9db1e374efa2c7ad41723eaea11289a8f17e
-                                              proves interface/path correctness, not profitability
-                                              no new Phase 16G live run is authorized
-
-Latest Phase 15 checkpoints:                Phase 15A df621d4
-                                            192 designed replays /
-                                            439 structural census records /
-                                            CI run 33325598811 SUCCESS
-                                            Phase 15B: default 5 unchanged,
-                                            hard max 60 unchanged,
-                                            representative snapshot gate required
+Current authority:                          PHASE_17D_R2_SECRET_HANDOFF_PRELIVE_FROZEN
+Branch / HEAD:                              feature/phase17d-r2-secret-handoff-prelive-freeze
+                                            a7ce9c019e3c1e6277ed29bbb58c53f4fbefe7e6
+R2 live status:                             FROZEN / AUTHORIZATION ON HOLD
+                                            authorization NOT GRANTED; child launches 0
+External case (local evidence):             C:/Users/lijie/AppData/Local/Temp/cs2-phase17d-r2/phase17d_r2_case.json
+                                            recorded SHA c929d234e8a7f693261ac7d2d48cb9b77004cb844f8a9cfeb6a4b5ec28e386e4
+Latest actual live attempt:                 original Phase17D actual CLI, exactly once
+                                            terminal incomplete_or_provider / EXTERNAL_PROVIDER_FAILURE
+                                            acceptance C INCONCLUSIVE_PROVIDER
+                                            authorization consumed / permanently closed
+Diagnosis:                                  Phase17D-R1 EXPECTED_FAIL_CLOSED_PROVIDER_FAILURE
+                                            no deterministic runtime defect identified
+Production / campaign:                     recipe-first default OFF; goods-first unchanged
+                                            Phase17E NOT_STARTED
+                                            Phase15C / Phase17F NOT_STARTED / deferred
+Next safe task:                             offline SteamDT docs/rate-limit reconciliation
+                                            and rate-compatible prescreen design
+```
 
 Post-Phase-13T AI-context synchronization
 baseline:                                    bb09068
@@ -374,5 +374,27 @@ admission, strict BUFF-only prescreen evidence, deterministic Top-2 ranking,
 pre-BUFF-only fallback, targeted BUFF cap <=10, FRESH_ONLY final cache reads,
 and immutable human/JSON report DTOs. It does not import Phase16G harness
 code. Goods-first production files remain byte-stable; production default
-remains goods-first. Phase17B development used zero market HTTP. Phase17C
-and Phase15C are NOT STARTED.
+remains goods-first. Phase17B development used zero market HTTP. The statement
+that Phase17C was not started is historical; current continuation follows.
+
+## Phase 17C through Phase 17D-R2 — current reconciliation
+
+- Phase17C offline E2E and Phase17C-R1 collection-scoped discovery repair are
+  complete (`d8dafa9`, `e2ffe97`).
+- Original Phase17D actual CLI ran exactly once and ended class C,
+  `incomplete_or_provider / EXTERNAL_PROVIDER_FAILURE`; its authorization is
+  consumed and permanently closed. Read
+  `phase17d-bounded-live-validation-evidence.md` together with its errata:
+  observed shell exit is `NOT_OBSERVED`; code-derived expected exit is `2`.
+- Phase17D-R1 reproduced the boundary offline and classified it
+  `EXPECTED_FAIL_CLOSED_PROVIDER_FAILURE`; no deterministic runtime defect was
+  identified (`4fba055`).
+- Phase17D-R2 freezes the generic case-bound launcher and standing operator
+  contract at `a7ce9c019e3c1e6277ed29bbb58c53f4fbefe7e6`. The external case path
+  and recorded SHA are local evidence, not reproducible from Git alone.
+- R2 authorization is NOT GRANTED; child launches=0. R2 live is ON HOLD because
+  19 names require project chunks 10+9 while official `PRICE_BATCH` is 1/min,
+  the project effective window is 65s, limiter behavior is fail-fast, and no
+  inter-chunk pacing exists. Official provider batch item maximum is UNKNOWN.
+- Production recipe-first remains OFF; Phase17E and Phase15C/Phase17F remain
+  NOT_STARTED/deferred.

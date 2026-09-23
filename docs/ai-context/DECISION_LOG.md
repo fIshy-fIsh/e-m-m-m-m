@@ -1197,4 +1197,32 @@ The two historical case digests (the v1 persisted `serialize_case(case) + b"\n"`
 - **Date:** 2026-09-07
 - **Decision:** Phase17B implements the separate default-disabled `scripts/run_recipe_first_scan_once.py` composition root plus immutable runtime contracts and a bounded coordinator. Explicit `--enable-recipe-first` is required; preview loads pinned structural snapshots but constructs zero SteamDT/BUFF/network-cache clients. Full composition reuses the strict batch resolver, prescreen price/economics/ranking/planner stack, `RecipeFirstScannerOrchestrator`, FRESH_ONLY cache resolver, strict SteamDT-BUFF final provider, EV, and risk.
 - **Bounds:** Phase17B placeholder discovery defaults are 256 visited family states, 10 unique prescreen names, and 1 batch dispatch. They are operational safety placeholders pending Phase17C measurement, not policy-optimal values. BUFF remains <=10 and final NEW-LIVE retains default 5 / hard 60.
-- **Boundary:** Phase16G harness is not imported. Goods-first production sources remain byte-stable and production recipe-first remains OFF. No market HTTP, scheduler, Discord, PostgreSQL mutation, auto-buy/trade, or Phase15C campaign occurred. Phase17C remains NOT STARTED.
+- **Boundary:** Phase16G harness is not imported. Goods-first production sources remain byte-stable and production recipe-first remains OFF. No market HTTP, scheduler, Discord, PostgreSQL mutation, auto-buy/trade, or Phase15C campaign occurred. The statement that Phase17C remained not started is historical.
+
+## D-PHASE17D-CLASS-C-CONSUMED-001 — Original actual-CLI observation is Class C and non-reusable
+
+- **Date:** 2026-09-23 (reconciles Phase17D evidence commit `40af94b`)
+- **Decision:** The original Phase17D actual operator CLI launched exactly once and ended `incomplete_or_provider / EXTERNAL_PROVIDER_FAILURE`, acceptance class `C INCONCLUSIVE_PROVIDER`. Its authorization is consumed and permanently closed. No retry or second invocation is authorized. The original shell exit code is `NOT_OBSERVED`; expected exit `2` is derived from code only. Read the original evidence with its append-only errata.
+- **Boundary:** This observation proves bounded discovery and fail-closed provider handling, not complete valuation, profitability, or cutover readiness.
+
+## D-PHASE17D-R1-EXPECTED-FAIL-CLOSED-001 — Prescreen boundary is expected fail-closed behavior
+
+- **Date:** 2026-09-23 (reconciles diagnosis commit `4fba055`)
+- **Decision:** Offline fakes reproduced 19 names, chunks 10+9, first-chunk selection 10, second-chunk exception, 9 missing, one transport error, and zero BUFF/final/evaluations. The current coordinator correctly emits `PRESCREEN_PROVIDER_FAILURE / EXTERNAL_PROVIDER_FAILURE` and stops. No deterministic runtime defect was identified. Historical transport subtype remains `NOT_OBSERVED`.
+
+## D-PHASE17D-R2-ONE-SHOT-HANDOFF-001 — Case-bound secret-file launcher is the only future live wrapper
+
+- **Date:** 2026-09-23 (reconciles R2 authority `a7ce9c0`)
+- **Decision:** Future separately authorized live cases use `scripts/run_recipe_first_authorized_once.py` and `docs/recipe-first-one-shot-live-operator-contract.md`. A secret file is not authorization. Exact case SHA + repository authority + green preflight are required; secret path derives from case SHA; unlink occurs before Popen; successful process creation consumes authorization regardless of later result; no retry/second invocation/repair-rerun. Exact child return code is observed from Popen and evidence distinguishes `OBSERVED / DERIVED_FROM_CODE / NOT_OBSERVED`.
+- **Status:** R2 repository authority frozen; external case recorded locally at SHA `c929d234e8a7f693261ac7d2d48cb9b77004cb844f8a9cfeb6a4b5ec28e386e4`. R2 authorization NOT GRANTED; child launches 0.
+
+## D-PHASE17D-R2-BATCH-RATE-HOLD-001 — R2 live authorization held for batch-rate reconciliation
+
+- **Date:** 2026-09-23
+- **Decision:** R2 live is `FROZEN / AUTHORIZATION ON HOLD`. Phoenix prescreen has 19 unique names and the current project chunk size 10 creates immediate chunks 10+9. Official `PRICE_BATCH` quota is 1/minute; project safety buffer is 5 seconds; the in-memory limiter fails fast over an effective 65-second window and current prescreen has no inter-chunk wait. `max_prescreen_batch_dispatches=2` is a project cap, not provider quota.
+- **Authority boundary:** `PRESCREEN_BATCH_CHUNK_SIZE=10` is a cautious project/smoke policy based on prior <=10 observations, not a confirmed official batch item maximum. Official max names per batch remains UNKNOWN. Do not authorize R2 until either official >=19-name one-call support is established and frozen, or endpoint-aware pacing is separately designed/tested and a new case is frozen. Do not bypass/relax the quota.
+
+## D-PHASE17-CURRENT-BOUNDARY-001 — Production cutover and campaign remain deferred
+
+- **Date:** 2026-09-23
+- **Decision:** Production recipe-first remains OFF and goods-first remains the default. Phase17E cutover is NOT_STARTED and still requires the separate decision/rollback/test authorization recorded by `D-PHASE17E-CUTOVER-SEPARATE`. Phase15C/Phase17F side-by-side campaign remains NOT_STARTED/deferred; this reconciles and supersedes any earlier wording suggesting Phase15C could begin merely after Phase16F.

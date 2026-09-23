@@ -27,7 +27,18 @@
   - `Content-Type: application/json` appears in curl examples
 
 ### rate limit
-- TODO: Not confirmed yet.
+- Confirmed official quotas reviewed for the current endpoint set:
+  - price single: 60 requests / minute
+  - price batch: 1 request / minute
+  - base: 1 request / day
+  - kline: 120 requests / minute
+  - wear: 36,000 requests / hour
+- Project-only controls (not official provider quotas):
+  - price avg limiter: 10 requests / minute
+  - price batch safety buffer: 5 seconds
+  - `PRESCREEN_BATCH_CHUNK_SIZE = 10`
+- Official maximum `marketHashNames` items per batch request: **UNKNOWN**.
+- See "Current SteamDT authority reconciliation / Phase17D-R2 hold" below.
 
 ### price single endpoint
 - Confirmed endpoint name: `通过 marketHashName 查询饰品价格`
@@ -239,6 +250,8 @@
 
 ### Body
 - `marketHashNames: list[str]`
+- Official maximum number of names per batch request: **UNKNOWN**.
+- The project's 10-name chunk/smoke cap is not provider authority.
 
 ### Purpose
 - 批量查询饰品价格、求购等数据。
@@ -265,7 +278,7 @@
   - choose lowest positive `sellPrice`
   - or choose platform-weighted / liquidity-aware `sellPrice`
   - or use avg endpoint for sanity check
-- Selection strategy remains TODO until PriceProvider phase.
+- Historical note: these were Phase 5/6 candidate strategies. Current recipe-first prescreen and final valuation use the implemented strict exact-BUFF sell-only policy; currency/timestamp/provider semantics remain open where noted.
 
 ## Item Kline Endpoint
 
@@ -443,7 +456,7 @@ Potential future mapping:
   - from batch response `marketHashName`
   - from single response request `marketHashName`
 - `price_cny`
-  - TODO: exact selection rule among `sellPrice` / `avgPrice` / platform records is not confirmed yet.
+  - Historical Phase 5 mapping question. Current scanner paths use the implemented strict exact-BUFF positive sell-price policy; provider currency guarantee remains UNKNOWN.
 - `source`
   - internal constant recommendation: `"steamdt"`
 - `raw`
@@ -491,6 +504,13 @@ Potential future mapping:
   - preserve full raw payload
 
 ## Parser Status
+
+> **Historical implementation-state section.** The statements below describe
+> the Phase 5/6 state and are retained as chronology. Current client status:
+> price single, price batch, and price avg are implemented; base/kline/wear
+> public client methods remain unavailable/unconfirmed. Current strict BUFF
+> selection and rate-limit authority are documented in later sections and in
+> the current reconciliation section below.
 
 当前已新增 parser skeleton：
 - `parse_price_single_response`
@@ -658,7 +678,7 @@ Before running any real smoke request manually:
 4. Confirm only official endpoint is used.
 5. Confirm request is read-only.
 6. Confirm market hash names are manually selected.
-7. Confirm batch size is `<= 10`.
+7. Confirm the manual smoke uses the project smoke cap `<= 10`; this is not a documented official provider item limit.
 8. Confirm output redacts API key and Authorization header.
 9. Confirm smoke script is not called by scheduler / pipeline.
 10. Confirm no non-official evasion techniques are used.
@@ -726,6 +746,47 @@ Notes:
 - Phase 12C is reserved for Redis/shared limiter behavior across processes.
 - No raw payload, API key, Authorization header, or secret is stored by the limiter.
 - No Redis connection, price cache, pipeline integration, scheduler integration, automatic purchase, automatic login, browser automation, cookie scraping, captcha bypass, risk-control bypass, hidden endpoint, or non-official evasion technique is added in this phase.
+
+## Current SteamDT Authority Reconciliation / Phase17D-R2 Hold
+
+Current code and frozen R2 shape must be read together:
+
+- `SteamDTEndpoint.PRICE_BATCH` policy is 1 request per 60 seconds plus a
+  5-second project safety buffer (effective 65 seconds).
+- `InMemorySteamDTRateLimiter.acquire` fails fast; it does not wait for the
+  next window.
+- `SteamDTHttpClient._request_json` acquires endpoint budget before every
+  outbound request/retry attempt.
+- Recipe-first prescreen deduplicates names and chunks sequentially at project
+  `PRESCREEN_BATCH_CHUNK_SIZE = 10` with no inter-chunk wait.
+- The frozen Phoenix R2 shape has 19 unique names, so it plans chunks 10+9.
+- Therefore the second immediate chunk is not quota-feasible with the current
+  one-process limiter under normal timing. A dispatch-start counter may
+  increment before the limiter rejects; this does not prove a second HTTP call.
+
+`PRESCREEN_BATCH_CHUNK_SIZE = 10` originated as a cautious project/smoke bound
+based on prior calls using <=10 names. It is **not** a confirmed provider
+maximum. SteamDT documentation confirms a list body but the official maximum
+number of names per batch remains UNKNOWN.
+
+**Current Phase17D-R2 status:** `FROZEN / AUTHORIZATION ON HOLD`. Do not
+authorize the frozen two-chunk case until one of these is separately reviewed,
+offline-tested, and refrozen:
+
+1. official evidence confirms at least 19 names in one batch and the runtime is
+   changed to one request; or
+2. endpoint-aware pacing waits at least the effective window between chunks.
+
+Do not bypass or relax the official quota merely to run the case.
+
+### Open documentation review
+
+The complete current official SteamDT documentation review is not finished.
+Open items include the official batch item maximum, currency guarantee,
+timestamp semantics/unit, precision guarantees, complete kline schema/enums,
+exact average-price semantics, remaining base/wear semantics, MCP integration,
+and broad-index schema/details. Until source-backed, these remain UNKNOWN and
+must not be inferred from code or smoke limits.
 
 ## Phase 12C1 Redis Shared Rate Limiter Core
 

@@ -622,4 +622,51 @@ The contract/coordinator/CLI are new, isolated files. The Phase16G harness
 is not imported. Goods-first production sources remain byte-stable. Preview
 constructs no SteamDT, BUFF, or network-cache client. Phase17B tests use
 only pinned snapshots and injected fake market seams; zero market HTTP.
-Production recipe-first remains OFF. Phase17C remains NOT STARTED.
+Production recipe-first remains OFF. The final sentence that Phase17C remained
+not started is historical; Phase17C/R1/D/R1/R2 are reconciled below.
+
+## Phase 17C / 17D technical state (current)
+
+- Phase17C validated the actual CLI/coordinator offline end-to-end with injected
+  market seams; Phase17C-R1 constrains collection allowlists before family
+  iteration and in-scope visited-budget accounting.
+- Original Phase17D used the actual CLI once. Discovery succeeded; strict batch
+  prescreen produced 10 selected / 9 missing over two dispatch starts and one
+  transport error; coordinator returned `EXTERNAL_PROVIDER_FAILURE` before
+  ranking/BUFF/concrete/final/EV/risk. Acceptance class C; authorization
+  consumed/non-reusable.
+- Original Phase17D evidence is append-only: read
+  `docs/phase17d-bounded-live-validation-evidence.md` together with
+  `docs/phase17d-bounded-live-validation-evidence-errata.md`.
+- Phase17D-R1 reproduced this exact shape with fakes and confirmed expected
+  fail-closed provider behavior; the safe artifact did not expose the transport
+  subtype, so rate limit remained `NOT_OBSERVED` for that historical run.
+- Phase17D-R2 adds `scripts/run_recipe_first_authorized_once.py` and the
+  case-bound one-shot contract. Authorization remains unconsumed until Popen
+  returns a process handle; secret unlink precedes spawn; consumed/reserved
+  marker blocks reuse; no automatic retry.
+- R2 external case is frozen locally at recorded SHA
+  `c929d234e8a7f693261ac7d2d48cb9b77004cb844f8a9cfeb6a4b5ec28e386e4`,
+  bound to `a7ce9c019e3c1e6277ed29bbb58c53f4fbefe7e6`; R2 authorization is not
+  granted and child launches=0.
+
+### SteamDT batch-rate reconciliation hold
+
+```text
+19 unique prescreen names
+  -> PRESCREEN_BATCH_CHUNK_SIZE=10 (project policy, not provider maximum)
+  -> chunks 10 + 9, issued sequentially
+  -> SteamDT PRICE_BATCH quota 1 per 60s
+  -> project safety buffer +5s (effective 65s)
+  -> InMemorySteamDTRateLimiter.acquire fails fast; no wait
+```
+
+The frozen two-chunk R2 shape is therefore ON HOLD. Admission currently checks
+name/chunk caps, not endpoint time-window feasibility. Official maximum names
+per batch is UNKNOWN. Before a new case authorization, either prove official
+support for at least 19 names in one batch and refreeze one-call behavior, or
+implement separately reviewed endpoint-aware pacing with deterministic clock
+coverage. Do not bypass/relax the quota.
+
+Production recipe-first remains OFF; goods-first remains default; Phase17E,
+Phase15C, and Phase17F are NOT_STARTED/deferred.

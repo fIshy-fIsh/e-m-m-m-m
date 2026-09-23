@@ -2,12 +2,13 @@
 
 ## Current Git State (verify live)
 
-- **Branch:** `feature/scanner-valuation-integration` (Phase 14C functional branch). Tracked canonical `main` remains P3 (`24c95c029f583d5cc0b0a67986e48c06d0ef7957`) and is unchanged.
-- **HEAD:** Phase 14C checkpoint commit `add scanner fresh-only price cache reads` (verify exact SHA from Git).
-- **HEAD message:** `add scanner fresh-only price cache reads`.
-- **Phase:** `PHASE_14C_COMPLETE`.
-- **R0-A / R0-B / R0-C / post-R0-C docs checkpoint / R0-D:** COMPLETE. R0-D completion documentation checkpoint PR #3 merged on `main` at P3 (`24c95c029f583d5cc0b0a67986e48c06d0ef7957`); final-main push CI green (`CI` / run `33240760167`, conclusion `success`).
-- **Uncommitted implementation work:** none after the Phase 14C checkpoint commit. The two protected research JSON files remain local/untracked and untouched.
+- **Branch:** `feature/phase17d-r2-secret-handoff-prelive-freeze`.
+- **HEAD:** `a7ce9c019e3c1e6277ed29bbb58c53f4fbefe7e6`.
+- **HEAD message:** `freeze phase17d r2 secret handoff live case`.
+- **Current phase:** Phase17D-R2 pre-live authority frozen; R2 live authorization is NOT GRANTED and child launches=0.
+- **Live hold:** `FROZEN / AUTHORIZATION ON HOLD` pending SteamDT batch-rate/chunk reconciliation.
+- **Tracked tree:** expected clean. The two protected research JSON files remain local/untracked and must remain unopened/untouched.
+- **Historical note:** the former Phase14C current-state block is superseded by this section; detailed history below remains append-only.
 
 Recent push history (oldest → newest) on canonical main includes:
 
@@ -1033,4 +1034,75 @@ Next: Phase 16F — ONE Bounded Read-Only Recipe-First BUFF Interface Validation
 - Phase16G harness import is forbidden by focused and project-wide tests.
   Goods-first production sources remain byte-stable from Phase17A.
 - Phase17B development/tests issued zero SteamDT/BUFF HTTP. Production
-  recipe-first remains OFF. Phase17C and Phase15C are NOT STARTED.
+  recipe-first remains OFF. The claim that Phase17C was not started is
+  historical; use the bootstrap below.
+
+## Phase17 R2 — Current continuation bootstrap
+
+```text
+REPOSITORY
+- repo: fIshy-fIsh/e-m-m-m-m
+- branch: feature/phase17d-r2-secret-handoff-prelive-freeze
+- HEAD/upstream: a7ce9c019e3c1e6277ed29bbb58c53f4fbefe7e6
+- subject: freeze phase17d r2 secret handoff live case
+- expected tracked tree: clean
+
+PHASE HISTORY
+- Phase16A-F: complete
+- Phase16G: bounded live path validated
+- Phase17A: runtime design freeze complete
+- Phase17B: opt-in runtime/CLI complete
+- Phase17C: offline E2E complete
+- Phase17C-R1: collection-scoped discovery-budget repair complete
+- Original Phase17D: actual CLI launched exactly once; class C
+  incomplete_or_provider / EXTERNAL_PROVIDER_FAILURE
+- Original Phase17D authorization: CONSUMED / permanently closed
+- Phase17D-R1: EXPECTED_FAIL_CLOSED_PROVIDER_FAILURE; no deterministic defect
+- Phase17D-R2: generic case-bound launcher/operator contract frozen
+
+R2 LOCAL CASE EVIDENCE (NOT REPRODUCIBLE FROM GIT ALONE)
+- path: C:/Users/lijie/AppData/Local/Temp/cs2-phase17d-r2/phase17d_r2_case.json
+- recorded SHA: c929d234e8a7f693261ac7d2d48cb9b77004cb844f8a9cfeb6a4b5ec28e386e4
+- family key: 45bfd0f0d3e7405588acdcf7
+- family hash: 45bfd0f0d3e7405588acdcf742d980577eed4963382c2fde31632fc43db52516
+- launcher: scripts/run_recipe_first_authorized_once.py
+- operator contract: docs/recipe-first-one-shot-live-operator-contract.md
+- preflight recorded PREFLIGHT_OK; secret accessed NO; child spawned NO
+- R2 authorization: NOT GRANTED; R2 child launches: 0
+- never inspect/create/consume a secret without new exact-case authorization
+
+R2 BOUNDS
+- family states 1; prescreen names 20; prescreen batch dispatches 2
+- targeted BUFF goods 10; final requests 2; total upper bound 14
+- concrete candidates/states 1/256; cache inmemory; output json
+
+CRITICAL HOLD
+- R2 live is FROZEN / AUTHORIZATION ON HOLD
+- Phoenix prescreen: 19 unique names -> project chunks 10+9
+- official PRICE_BATCH: 1/minute; project buffer +5s => effective 65s
+- in-memory limiter fails fast; current prescreen has no inter-chunk wait
+- chunk 10 is project/smoke policy, NOT official provider maximum
+- official maximum names per batch remains UNKNOWN
+- do not authorize current R2 case until rate-compatible design is reviewed,
+  tested offline, and refrozen
+
+EVIDENCE / ERRATA
+- docs/phase17d-bounded-live-validation-evidence.md
+- docs/phase17d-bounded-live-validation-evidence-errata.md
+- docs/phase17d-r1-prescreen-provider-failure-offline-diagnosis.md
+- docs/phase17d-r2-secret-handoff-prelive-freeze.md
+- original exit-code 0 claim unsupported: observed exit NOT_OBSERVED;
+  expected exit 2 is DERIVED_FROM_CODE only
+
+PRODUCTION / CAMPAIGN
+- recipe-first production default OFF; goods-first unchanged
+- Phase17E cutover NOT_STARTED
+- Phase15C / Phase17F side-by-side campaign NOT_STARTED / deferred
+
+NEXT SAFE TASK
+- offline SteamDT authority/rate-limit documentation reconciliation
+- choose one-call >=19-name design only with official evidence OR design
+  endpoint-aware pacing with deterministic clock tests
+- then freeze a NEW case; zero provider request / zero secret access /
+  zero live authorization in the reconciliation task
+```
